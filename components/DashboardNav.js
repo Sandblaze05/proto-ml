@@ -3,6 +3,7 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { SidebarClose, Menu } from 'lucide-react'
 import gsap from 'gsap'
+import NodePalette from './NodePalette'
 
 const DashboardNav = () => {
 
@@ -56,6 +57,9 @@ const DashboardNav = () => {
         </button>
       </span>
       <div className='mx-5 w-full bg-foreground h-px' />
+      <div className={`nowheel w-full px-4 overflow-y-auto transition-opacity duration-200 ${navOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
+        <NodePalette />
+      </div>
     </div>
   )
 }

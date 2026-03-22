@@ -1,19 +1,18 @@
-'use client'
+'use client';
 
-import React, { useCallback, useMemo, useRef } from 'react'
-import ReactFlow, {
-  Background,
-  useReactFlow,
-  useNodesState,
-  useEdgesState,
-  addEdge,
-} from 'reactflow'
-import dagre from 'dagre'
-import { View, Minus, Plus } from 'lucide-react'
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import ReactFlow, { Background, useReactFlow, ReactFlowProvider, Handle, Position } from 'reactflow';
+import 'reactflow/dist/style.css';
+import dagre from 'dagre';
+import { View, Minus, Plus } from 'lucide-react';
+import { useDroppable } from '@dnd-kit/core';
 
+import { useUIStore } from '../store/useUIStore';
+import { useExecutionStore } from '../store/useExecutionStore';
+import DatasetNode from './nodes/DatasetNode';
 
 function ZoomControls() {
-  const { zoomIn, zoomOut, fitView } = useReactFlow()
+  const { zoomIn, zoomOut, fitView } = useReactFlow();
 
   const containerStyle = {
     position: 'absolute',
@@ -23,21 +22,21 @@ function ZoomControls() {
     flexDirection: 'column',
     gap: 8,
     zIndex: 10,
-  }
+  };
 
   const buttonStyle = {
     width: 44,
     height: 44,
     borderRadius: 8,
-    border: 'none',
-    background: 'var(--color-foreground)',
-    color: 'var(--color-background)',
+    border: '1px solid var(--color-foreground)',
+    background: 'var(--color-background)',
+    color: 'var(--color-foreground)',
     boxShadow: '0 6px 18px rgba(0,0,0,0.35)',
     cursor: 'pointer',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-  }
+  };
 
   return (
     <div style={containerStyle}>
@@ -51,174 +50,167 @@ function ZoomControls() {
         <View size={20} />
       </button>
     </div>
-  )
+  );
 }
 
-const edgeTypes = {};
-const nodeTypes = {};
+// Generic CustomNode for non-dataset nodes (Process / Model / Optimize)
+function CustomNode({ data, id }) {
+  const { type, inputs, outputs, params } = data.nodeModel;
 
-export default function InfiniteCanvas() {
-  // Node visual size used for layout calculations
-  const NODE_WIDTH = 200
-  const NODE_HEIGHT = 80
-
-  // --- Custom node model (user-specified schema) ---
-  const customNodes = useRef([
-    // Data nodes
-    {
-      id: 'dataset',
-      type: 'Dataset',
-      inputs: [],
-      outputs: ['images', 'labels'],
-      params: { path: '/data/images' },
-      execution_code: "function(){ return {images: [], labels: []} }",
-    },
-    {
-      id: 'csv',
-      type: 'CSV',
-      inputs: [],
-      outputs: ['rows'],
-      params: { path: '/data/table.csv' },
-      execution_code: "function(){ return {rows: []} }",
-    },
-
-    // Processing nodes
-    {
-      id: 'resize',
-      type: 'Resize',
-      inputs: ['images'],
-      outputs: ['images_resized'],
-      params: { width: 224, height: 224 },
-      execution_code: "function(images){ return images.map(...) }",
-    },
-    {
-      id: 'tokenize',
-      type: 'Tokenize',
-      inputs: ['text'],
-      outputs: ['tokens'],
-      params: { vocab: 'default' },
-      execution_code: "function(text){ return text.split(' ') }",
-    },
-
-    // Model nodes
-    {
-      id: 'cnn',
-      type: 'CNN',
-      inputs: ['images'],
-      outputs: ['model'],
-      params: { layers: [32,64,128] },
-      execution_code: "function(images){ return {model: {}} }",
-    },
-    {
-      id: 'transformer',
-      type: 'Transformer',
-      inputs: ['tokens'],
-      outputs: ['model'],
-      params: { heads: 8 },
-      execution_code: "function(tokens){ return {model: {}} }",
-    },
-
-    // Training nodes
-    {
-      id: 'optimizer',
-      type: 'Optimizer',
-      inputs: ['model'],
-      outputs: ['trained_model'],
-      params: { type: 'adam', lr: 0.001 },
-      execution_code: "function(model,data){ return {trained_model: model} }",
-    },
-
-    // Evaluation nodes
-    {
-      id: 'accuracy',
-      type: 'Accuracy',
-      inputs: ['trained_model', 'labels'],
-      outputs: ['accuracy_score'],
-      params: {},
-      execution_code: "function(model,labels){ return {accuracy: 0} }",
-    },
-  ])
-
-  // custom edges linking nodes by id (simple directional graph)
-  const customEdges = useRef([
-    { source: 'dataset', target: 'resize' },
-    { source: 'resize', target: 'cnn' },
-    { source: 'cnn', target: 'optimizer' },
-    { source: 'optimizer', target: 'accuracy' },
-    { source: 'csv', target: 'tokenize' },
-    { source: 'tokenize', target: 'transformer' },
-  ])
-
-  // Convert custom node schema to React Flow nodes
-  const convertToReactFlow = (cNodes) =>
-    cNodes.map((n) => ({
-      id: n.id,
-      type: 'default',
-      data: {
-        label: (
-          <div style={{ padding: 8 }}>
-            <strong>{n.type}</strong>
-            <div style={{ fontSize: 12, marginTop: 6 }}>
-              <div>in: {n.inputs.join(', ') || '—'}</div>
-              <div>out: {n.outputs.join(', ') || '—'}</div>
-            </div>
-            <div style={{ marginTop: 6, fontSize: 11, color: '#666' }}>{n.params && Object.keys(n.params).length ? JSON.stringify(n.params) : ''}</div>
-          </div>
-        ),
-        // keep full node data so UI or execution engine can read the fields
-        nodeModel: n,
-      },
-      position: { x: 0, y: 0 },
-      style: { width: NODE_WIDTH, padding: 10 },
-    }))
-
-  const convertEdgesToRF = (cEdges) =>
-    cEdges.map((e) => ({ id: `e-${e.source}-${e.target}`, source: e.source, target: e.target }))
-
-  // layout using dagre
-  const dagreLayout = (rfNodes, rfEdges) => {
-    const g = new dagre.graphlib.Graph()
-    g.setDefaultEdgeLabel(() => ({}))
-    g.setGraph({ rankdir: 'LR' })
-
-    rfNodes.forEach((n) => g.setNode(n.id, { width: NODE_WIDTH, height: NODE_HEIGHT }))
-    rfEdges.forEach((e) => g.setEdge(e.source, e.target))
-
-    dagre.layout(g)
-
-    return rfNodes.map((n) => {
-      const nodeWithPos = g.node(n.id)
-      return {
-        ...n,
-        position: { x: nodeWithPos.x - NODE_WIDTH / 2, y: nodeWithPos.y - NODE_HEIGHT / 2 },
-      }
-    })
-  }
-
-  const rfInitial = useMemo(() => {
-    const rfNodes = convertToReactFlow(customNodes.current)
-    const rfEdges = convertEdgesToRF(customEdges.current)
-    const laidOut = dagreLayout(rfNodes, rfEdges)
-    return { nodes: laidOut, edges: rfEdges }
-  }, [])
-
-  const initialNodes = useRef(rfInitial.nodes)
-  const initialEdges = useRef(rfInitial.edges)
-
-  const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes.current)
-  const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges.current)
-
-
-  const onConnect = useCallback((params) => setEdges((eds) => addEdge(params, eds)), [setEdges])
+  let bgClass = "bg-[#1f1f1f]";
+  if (["Resize", "Tokenize"].includes(type)) bgClass = "bg-[#212121]";
+  else if (["CNN", "Transformer"].includes(type)) bgClass = "bg-[#282828]";
+  else if (["Optimizer", "Accuracy"].includes(type)) bgClass = "bg-[#2f2f2f]";
 
   return (
-    <div style={{ width: '100%', height: '100vh' }}>
+    <div className={`p-3 rounded-lg border border-[#faebd7]/30 text-[#faebd7] font-mono shadow-xl ${bgClass}`} style={{ minWidth: 180 }}>
+      {/* Input Handles */}
+      {inputs.map((inp, idx) => (
+        <Handle
+          key={`in-${inp}`}
+          type="target"
+          position={Position.Left}
+          id={inp}
+          style={{ top: 20 + idx * 15, background: '#faebd7', border: 'none', width: 6, height: 6 }}
+        />
+      ))}
+
+      <div className="font-bold border-b border-[#faebd7]/20 pb-1 mb-2 text-sm">{type}</div>
+
+      <div className="text-xs text-[#faebd7]/70 space-y-1">
+        {inputs.length > 0 && <div><span className="opacity-50">in:</span> {inputs.join(', ')}</div>}
+        {outputs.length > 0 && <div><span className="opacity-50">out:</span> {outputs.join(', ')}</div>}
+      </div>
+
+      {params && Object.keys(params).length > 0 && (
+        <div className="mt-2 text-[10px] bg-black/40 p-1 rounded text-[#faebd7]/50 overflow-hidden text-ellipsis">
+          {JSON.stringify(params)}
+        </div>
+      )}
+
+      {/* Output Handles */}
+      {outputs.map((out, idx) => (
+        <Handle
+          key={`out-${out}`}
+          type="source"
+          position={Position.Right}
+          id={out}
+          style={{ top: 20 + idx * 15, background: '#faebd7', border: 'none', width: 6, height: 6 }}
+        />
+      ))}
+    </div>
+  );
+}
+
+const nodeTypes = { custom: CustomNode, datasetNode: DatasetNode };
+const edgeTypes = {};
+
+// Hardcoded initial data from previous setup
+const initialCustomNodes = [
+];
+
+const initialCustomEdges = [
+
+];
+
+function InteractiveCanvas() {
+  const { nodes, edges, onNodesChange, onEdgesChange, setNodes, setEdges, addNode, addEdge, removeNode } = useUIStore();
+  const { addExecutionNode, addExecutionEdge, canConnect, removeExecutionNode } = useExecutionStore();
+  const { setNodeRef } = useDroppable({ id: 'canvas-droppable' });
+  const { project } = useReactFlow();
+
+  const initialized = useRef(false);
+  const [menu, setMenu] = useState(null);
+
+  useEffect(() => {
+    if (initialized.current) return;
+    initialized.current = true;
+
+    // Layout and Init
+    const rfNodes = initialCustomNodes.map(n => ({
+      id: n.id,
+      type: 'custom',
+      data: { nodeModel: n },
+      position: { x: 0, y: 0 },
+    }));
+
+    const rfEdges = initialCustomEdges.map(e => ({
+      id: `e-${e.source}-${e.target}`,
+      source: e.source,
+      target: e.target,
+      sourceHandle: e.sourceHandle,
+      targetHandle: e.targetHandle,
+    }));
+
+    const g = new dagre.graphlib.Graph();
+    g.setDefaultEdgeLabel(() => ({}));
+    g.setGraph({ rankdir: 'LR' });
+    rfNodes.forEach((n) => g.setNode(n.id, { width: 220, height: 100 }));
+    rfEdges.forEach((e) => g.setEdge(e.source, e.target));
+    dagre.layout(g);
+
+    const laidOut = rfNodes.map((n) => {
+      const nodeWithPos = g.node(n.id);
+      return {
+        ...n,
+        position: { x: nodeWithPos.x - 110, y: nodeWithPos.y - 50 },
+      };
+    });
+
+    setNodes(laidOut);
+    setEdges(rfEdges);
+
+    initialCustomNodes.forEach(n => {
+      useExecutionStore.getState().addExecutionNode(n.id, { type: n.type, inputs: n.inputs, outputs: n.outputs, params: n.params, execution_code: n.execution_code });
+    });
+
+  }, [setNodes, setEdges]);
+
+  const onConnect = useCallback((connection) => {
+    // 1. Verify in Execution Store
+    if (canConnect(connection.source, connection.target)) {
+      // 2. Add to UI
+      addEdge(connection);
+      // 3. Add to Execution Graph
+      addExecutionEdge(connection);
+    } else {
+      console.warn("Invalid connection discarded.");
+      // Could trigger a toast notification here
+    }
+  }, [addEdge, addExecutionEdge, canConnect]);
+
+  const onNodeContextMenu = useCallback(
+    (event, node) => {
+      event.preventDefault();
+      setMenu({
+        id: node.id,
+        top: event.clientY,
+        left: event.clientX,
+      });
+    },
+    [setMenu]
+  );
+
+  const onPaneClick = useCallback(() => setMenu(null), [setMenu]);
+
+  const handleDeleteNode = () => {
+    if (menu?.id) {
+      removeNode(menu.id);
+      removeExecutionNode(menu.id);
+      setMenu(null);
+    }
+  };
+
+  return (
+    <div ref={setNodeRef} style={{ width: '100%', height: '100%', position: 'relative' }}>
       <ReactFlow
         nodes={nodes}
         edges={edges}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onConnect={onConnect}
+        onNodeContextMenu={onNodeContextMenu}
+        onPaneClick={onPaneClick}
         fitView
         fitViewOptions={{ padding: 0.2 }}
         panOnScroll={true}
@@ -231,9 +223,33 @@ export default function InfiniteCanvas() {
         maxZoom={2}
         style={{ background: 'transparent' }}
       >
-        <Background gap={16} size={1} />
+        <Background gap={16} size={1} color="#faebd7" opacity={0.1} />
         <ZoomControls />
       </ReactFlow>
+
+      {menu && (
+        <div
+          style={{ top: menu.top, left: menu.left }}
+          className="fixed z-[100] bg-[#1a1a1a] border border-[#faebd7]/30 rounded-lg shadow-2xl flex flex-col py-2 w-36"
+        >
+          <button
+            onClick={handleDeleteNode}
+            className="px-4 py-2 text-red-400 hover:bg-[#faebd7]/10 text-sm font-mono text-left transition-colors"
+          >
+            Delete Node
+          </button>
+        </div>
+      )}
     </div>
-  )
+  );
+}
+
+export default function InfiniteCanvas() {
+  return (
+    <div style={{ width: '100%', height: '100vh', position: 'relative' }}>
+      <ReactFlowProvider>
+        <InteractiveCanvas />
+      </ReactFlowProvider>
+    </div>
+  );
 }
