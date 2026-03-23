@@ -9,20 +9,25 @@ import { TextDatasetDef }        from './datasets/TextDataset';
 import { JSONDatasetDef }        from './datasets/JSONDataset';
 import { DatabaseDatasetDef }    from './datasets/DatabaseDataset';
 import { APIDatasetDef }         from './datasets/APIDataset';
+import { TRANSFORM_NODES }       from './transforms/transformRegistry';
+import { LIFECYCLE_NODES }       from './lifecycle/lifecycleRegistry';
 
 // --- Dataset Nodes ---
 export const DATASET_NODES = [
-  ImageFolderDatasetDef,
-  CSVDatasetDef,
-  TextDatasetDef,
-  JSONDatasetDef,
-  DatabaseDatasetDef,
-  APIDatasetDef,
+  { ...ImageFolderDatasetDef, kind: 'dataset', accepts: [], produces: ['image'] },
+  { ...CSVDatasetDef, kind: 'dataset', accepts: [], produces: ['tabular'] },
+  { ...TextDatasetDef, kind: 'dataset', accepts: [], produces: ['text'] },
+  { ...JSONDatasetDef, kind: 'dataset', accepts: [], produces: ['tabular'] },
+  { ...DatabaseDatasetDef, kind: 'dataset', accepts: [], produces: ['tabular'] },
+  { ...APIDatasetDef, kind: 'dataset', accepts: [], produces: ['tabular'] },
 ];
+
+export { TRANSFORM_NODES };
+export { LIFECYCLE_NODES };
 
 // --- Full registry map: type → definition ---
 export const NODE_REGISTRY = Object.fromEntries(
-  [...DATASET_NODES].map(def => [def.type, def])
+  [...DATASET_NODES, ...TRANSFORM_NODES, ...LIFECYCLE_NODES].map(def => [def.type, def])
 );
 
 /**

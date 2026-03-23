@@ -9,17 +9,12 @@ export const CSVDatasetDef = {
   icon: 'TableIcon',
   color: '#34d399', // emerald
 
-  inputs: [
-    { name: 'transform', datatype: 'transform', shape: [], optional: true },
-  ],
+  inputs: [],
 
   outputs: [
     { name: 'features',     datatype: 'tensor',     shape: ['B', 'num_features'] },
     { name: 'targets',      datatype: 'tensor',     shape: ['B'] },
     { name: 'columns',      datatype: 'list',        shape: ['num_columns'] },
-    { name: 'train_loader', datatype: 'dataloader', shape: [] },
-    { name: 'val_loader',   datatype: 'dataloader', shape: [] },
-    { name: 'test_loader',  datatype: 'dataloader', shape: [] },
   ],
 
   schema: {
@@ -38,24 +33,8 @@ export const CSVDatasetDef = {
     skip_rows: 0,
     encoding: 'utf-8',
 
-    // Loading
-    batch_size: 64,
-    shuffle: true,
-    workers: 2,
-
-    // Preprocessing
-    normalize: 'standard',   // 'standard' | 'minmax' | 'none'
-    handle_missing: 'drop',  // 'drop' | 'mean' | 'median' | 'zero'
-    categorical_encoding: 'onehot', // 'onehot' | 'label' | 'none'
-
-    // Splits
-    train_split: 0.7,
-    val_split: 0.15,
-    test_split: 0.15,
-
-    // Advanced
-    cache: 'none',
-    streaming: false,
+    normalize: 'standard',
+    handle_missing: 'drop',
   },
 
   metadata: {

@@ -15,9 +15,6 @@ export const DatabaseDatasetDef = {
     { name: 'features',     datatype: 'tensor',     shape: ['B', 'num_features'] },
     { name: 'targets',      datatype: 'tensor',     shape: ['B'] },
     { name: 'columns',      datatype: 'list',        shape: ['num_columns'] },
-    { name: 'train_loader', datatype: 'dataloader', shape: [] },
-    { name: 'val_loader',   datatype: 'dataloader', shape: [] },
-    { name: 'test_loader',  datatype: 'dataloader', shape: [] },
   ],
 
   schema: {
@@ -41,24 +38,9 @@ export const DatabaseDatasetDef = {
     target_column: '',
     feature_columns: [],
 
-    // Loading
-    batch_size: 64,
-    shuffle: true,
-    workers: 2,
-    chunk_size: 10000,            // Rows fetched per chunk
-
-    // Preprocessing
+    chunk_size: 10000,
     normalize: 'standard',
     handle_missing: 'drop',
-
-    // Splits
-    train_split: 0.7,
-    val_split: 0.15,
-    test_split: 0.15,
-
-    // Advanced
-    cache: 'disk',
-    streaming: true,
   },
 
   metadata: {

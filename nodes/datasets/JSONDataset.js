@@ -9,17 +9,12 @@ export const JSONDatasetDef = {
   icon: 'BracesIcon',
   color: '#fbbf24', // amber
 
-  inputs: [
-    { name: 'transform', datatype: 'transform', shape: [], optional: true },
-  ],
+  inputs: [],
 
   outputs: [
     { name: 'data',         datatype: 'tensor',     shape: ['B', 'feature_dim'] },
     { name: 'labels',       datatype: 'tensor',     shape: ['B'] },
     { name: 'schema',       datatype: 'dict',        shape: [] },
-    { name: 'train_loader', datatype: 'dataloader', shape: [] },
-    { name: 'val_loader',   datatype: 'dataloader', shape: [] },
-    { name: 'test_loader',  datatype: 'dataloader', shape: [] },
   ],
 
   schema: {
@@ -36,25 +31,10 @@ export const JSONDatasetDef = {
     label_key: 'label',
     feature_keys: [],       // [] = infer all numeric keys
 
-    // Loading
-    batch_size: 32,
-    shuffle: true,
-    workers: 2,
-
-    // Preprocessing
+    // Lightweight source normalization only
     flatten: true,
     normalize: 'none',
     handle_missing: 'drop',
-
-    // Splits
-    train_split: 0.7,
-    val_split: 0.15,
-    test_split: 0.15,
-
-    // Advanced
-    cache: 'none',
-    streaming: false,
-    lazy_loading: true,
   },
 
   metadata: {

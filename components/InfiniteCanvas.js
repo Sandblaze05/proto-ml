@@ -10,6 +10,7 @@ import { useDroppable } from '@dnd-kit/core';
 import { useUIStore } from '../store/useUIStore';
 import { useExecutionStore } from '../store/useExecutionStore';
 import DatasetNode from './nodes/DatasetNode';
+import TransformNode from './nodes/TransformNode';
 
 function ZoomControls() {
   const { zoomIn, zoomOut, fitView } = useReactFlow();
@@ -55,7 +56,7 @@ function ZoomControls() {
 
 // Generic CustomNode for non-dataset nodes (Process / Model / Optimize)
 function CustomNode({ data, id }) {
-  const { type, inputs, outputs, params } = data.nodeModel;
+  const { type, inputs, outputs, params, pythonCode } = data.nodeModel;
 
   let bgClass = "bg-[#1f1f1f]";
   if (["Resize", "Tokenize"].includes(type)) bgClass = "bg-[#212121]";
@@ -88,6 +89,12 @@ function CustomNode({ data, id }) {
         </div>
       )}
 
+      {pythonCode && (
+        <div className="mt-2 text-[9px] bg-black/40 p-1 rounded text-[#faebd7]/65 font-mono whitespace-pre-wrap max-h-20 overflow-auto">
+          {pythonCode.split('\n').slice(0, 4).join('\n')}
+        </div>
+      )}
+
       {/* Output Handles */}
       {outputs.map((out, idx) => (
         <Handle
@@ -102,7 +109,7 @@ function CustomNode({ data, id }) {
   );
 }
 
-const nodeTypes = { custom: CustomNode, datasetNode: DatasetNode };
+const nodeTypes = { custom: CustomNode, datasetNode: DatasetNode, transformNode: TransformNode };
 const edgeTypes = {};
 
 // Hardcoded initial data from previous setup
@@ -168,7 +175,7 @@ function InteractiveCanvas() {
 
   const onConnect = useCallback((connection) => {
     // 1. Verify in Execution Store
-    if (canConnect(connection.source, connection.target)) {
+    if (canConnect(connection.source, connection.target, connection.sourceHandle, connection.targetHandle)) {
       // 2. Add to UI
       addEdge(connection);
       // 3. Add to Execution Graph
@@ -230,7 +237,7 @@ function InteractiveCanvas() {
       {menu && (
         <div
           style={{ top: menu.top, left: menu.left }}
-          className="fixed z-[100] bg-[#1a1a1a] border border-[#faebd7]/30 rounded-lg shadow-2xl flex flex-col py-2 w-36"
+          className="fixed z-100 bg-[#1a1a1a] border border-[#faebd7]/30 rounded-lg shadow-2xl flex flex-col py-2 w-36"
         >
           <button
             onClick={handleDeleteNode}

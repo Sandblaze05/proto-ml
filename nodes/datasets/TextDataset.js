@@ -9,19 +9,13 @@ export const TextDatasetDef = {
   icon: 'FileTextIcon',
   color: '#60a5fa', // blue
 
-  inputs: [
-    { name: 'tokenizer',  datatype: 'tokenizer', shape: [], optional: true },
-    { name: 'transform',  datatype: 'transform', shape: [], optional: true },
-  ],
+  inputs: [],
 
   outputs: [
     { name: 'input_ids',     datatype: 'sequence',   shape: ['B', 'max_length'] },
     { name: 'attention_mask', datatype: 'sequence',  shape: ['B', 'max_length'] },
     { name: 'labels',        datatype: 'tensor',     shape: ['B'] },
     { name: 'vocab',         datatype: 'list',        shape: ['vocab_size'] },
-    { name: 'train_loader',  datatype: 'dataloader', shape: [] },
-    { name: 'val_loader',    datatype: 'dataloader', shape: [] },
-    { name: 'test_loader',   datatype: 'dataloader', shape: [] },
   ],
 
   schema: {
@@ -44,19 +38,6 @@ export const TextDatasetDef = {
     padding: 'max_length',
     truncation: true,
 
-    // Loading
-    batch_size: 32,
-    shuffle: true,
-    workers: 4,
-
-    // Splits
-    train_split: 0.8,
-    val_split: 0.1,
-    test_split: 0.1,
-
-    // Advanced
-    cache: 'none',
-    streaming: false,
   },
 
   metadata: {

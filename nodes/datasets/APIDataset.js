@@ -15,9 +15,6 @@ export const APIDatasetDef = {
     { name: 'data',         datatype: 'tensor',     shape: ['B', 'feature_dim'] },
     { name: 'labels',       datatype: 'tensor',     shape: ['B'] },
     { name: 'raw',          datatype: 'dict',        shape: [] },
-    { name: 'train_loader', datatype: 'dataloader', shape: [] },
-    { name: 'val_loader',   datatype: 'dataloader', shape: [] },
-    { name: 'test_loader',  datatype: 'dataloader', shape: [] },
   ],
 
   schema: {
@@ -48,21 +45,9 @@ export const APIDatasetDef = {
     page_size: 100,
     max_pages: 10,
 
-    // Loading
-    batch_size: 32,
-    shuffle: false,
-    workers: 1,
-
-    // Splits
-    train_split: 0.7,
-    val_split: 0.15,
-    test_split: 0.15,
-
     // Advanced
-    cache: 'disk',
     retry_attempts: 3,
     timeout_seconds: 30,
-    streaming: false,
   },
 
   metadata: {

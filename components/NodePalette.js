@@ -2,13 +2,16 @@
 import React, { useState } from 'react';
 import {
   Database, ImageIcon, FileText, Braces, Globe, Table,
-  ToyBrick, MonitorPlay, Zap, Activity,
+  ToyBrick, Activity, GitBranchPlus, PackageOpen, BrainCircuit,
   Plus, ChevronDown, ChevronRight,
 } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 import { useUIStore } from '@/store/useUIStore';
 import { useExecutionStore } from '@/store/useExecutionStore';
-import { DATASET_NODES } from '@/nodes/nodeRegistry';
+import { DATASET_NODES, TRANSFORM_NODES, LIFECYCLE_NODES } from '@/nodes/nodeRegistry';
+import { generateDatasetPythonCode } from '@/lib/pythonTemplates/datasetNodeTemplate';
+import { generateTransformPythonCode } from '@/lib/pythonTemplates/transformNodeTemplate';
+import { generateLifecyclePythonCode } from '@/lib/pythonTemplates/lifecycleNodeTemplate';
 
 // ── Icon map for dataset node types ──────────────────────────────────────────
 const TYPE_ICON_MAP = {
@@ -29,6 +32,22 @@ const TYPE_COLOR_MAP = {
   'dataset.api':      '#a78bfa',
 };
 
+const TRANSFORM_ICON_MAP = {
+  image: ImageIcon,
+  tabular: Table,
+  text: FileText,
+  control: Activity,
+  pipeline: ToyBrick,
+  'data-ops': Database,
+};
+
+const LIFECYCLE_ICON_MAP = {
+  'data-control': GitBranchPlus,
+  modeling: BrainCircuit,
+  'training-config': PackageOpen,
+  'training-execution': Activity,
+};
+
 // ── Build palette categories ──────────────────────────────────────────────────
 export const CATEGORIES = [
   {
@@ -44,25 +63,41 @@ export const CATEGORIES = [
     })),
   },
   {
-    name: 'Process',
-    nodes: [
-      { id: 'resize',   type: 'Resize',    label: 'Resize',    icon: ImageIcon,    color: '#faebd7' },
-      { id: 'tokenize', type: 'Tokenize',  label: 'Tokenize',  icon: ToyBrick,     color: '#faebd7' },
-    ],
+    name: 'Transform Basic',
+    nodes: TRANSFORM_NODES
+      .filter(def => def.level === 1)
+      .map(def => ({
+        id: def.type,
+        type: def.type,
+        label: def.label,
+        icon: TRANSFORM_ICON_MAP[def.metadata?.domain] ?? ToyBrick,
+        color: '#67e8f9',
+        def,
+      })),
   },
   {
-    name: 'Model',
-    nodes: [
-      { id: 'cnn',         type: 'CNN',         label: 'CNN',         icon: MonitorPlay, color: '#faebd7' },
-      { id: 'transformer', type: 'Transformer', label: 'Transformer', icon: MonitorPlay, color: '#faebd7' },
-    ],
+    name: 'Transform Advanced',
+    nodes: TRANSFORM_NODES
+      .filter(def => def.level === 2)
+      .map(def => ({
+        id: def.type,
+        type: def.type,
+        label: def.label,
+        icon: TRANSFORM_ICON_MAP[def.category] ?? TRANSFORM_ICON_MAP[def.metadata?.domain] ?? ToyBrick,
+        color: '#38bdf8',
+        def,
+      })),
   },
   {
-    name: 'Optimize',
-    nodes: [
-      { id: 'optimizer', type: 'Optimizer', label: 'Optimizer', icon: Zap,      color: '#faebd7' },
-      { id: 'accuracy',  type: 'Accuracy',  label: 'Accuracy',  icon: Activity, color: '#faebd7' },
-    ],
+    name: 'Lifecycle',
+    nodes: LIFECYCLE_NODES.map(def => ({
+      id: def.type,
+      type: def.type,
+      label: def.label,
+      icon: LIFECYCLE_ICON_MAP[def.category] ?? Activity,
+      color: '#f59e0b',
+      def,
+    })),
   },
 ];
 
@@ -74,9 +109,13 @@ function PaletteItem({ node }) {
   const handleAdd = () => {
     const newId = `${node.id}-${uuidv4().slice(0, 6)}`;
     const isDataset = node.id.startsWith('dataset.');
+    const isTransform = node.id.startsWith('transform.');
+    const isLifecycle = node.id.startsWith('lifecycle.');
 
     if (isDataset && node.def) {
       const def = node.def;
+      const initialConfig = { ...def.defaultConfig };
+      const pythonCode = generateDatasetPythonCode(def.type, initialConfig);
 
       // UI node — use 'datasetNode' type so InfiniteCanvas routes it to DatasetNode component
       addNode({
@@ -89,9 +128,10 @@ function PaletteItem({ node }) {
             label: def.label,
             inputs:  def.inputs,
             outputs: def.outputs,
-            config:  { ...def.defaultConfig },
+            config:  initialConfig,
             schema:  { ...def.schema },
             metadata: { ...def.metadata },
+            pythonCode,
           },
         },
       });
@@ -106,15 +146,62 @@ function PaletteItem({ node }) {
           inputs:  Object.fromEntries(def.inputs.map(p  => [p.name, p])),
           outputs: Object.fromEntries(def.outputs.map(p => [p.name, p])),
         },
-        config:   { ...def.defaultConfig },
+        config:   initialConfig,
         schema:   { ...def.schema },
         metadata: { ...def.metadata },
+        pythonCode,
+      });
+
+    } else if ((isTransform || isLifecycle) && node.def) {
+      const def = node.def;
+      const initialConfig = { ...(def.defaultConfig || {}) };
+      const pythonCode = isLifecycle
+        ? generateLifecyclePythonCode(def.type, initialConfig)
+        : generateTransformPythonCode(def.type, initialConfig);
+
+      const inputs = (def.inputs || []).map(p => p.name);
+      const outputs = (def.outputs || []).map(p => p.name);
+
+      const newNodeModel = {
+        type: def.type,
+        label: def.label,
+        inputs,
+        outputs,
+        params: initialConfig,
+        config: initialConfig,
+        uiSchema: { ...(def.uiSchema || {}) },
+        accepts: def.accepts || [],
+        produces: def.produces || [],
+        kind: isLifecycle ? 'lifecycle' : 'transform',
+        category: def.category,
+        pythonCode,
+      };
+
+      addNode({
+        id: newId,
+        type: 'transformNode',
+        position: { x: 250, y: 200 + Math.random() * 60 },
+        data: { nodeModel: newNodeModel },
+      });
+
+      addExecutionNode(newId, {
+        type: def.type,
+        label: def.label,
+        inputs,
+        outputs,
+        config: initialConfig,
+        uiSchema: { ...(def.uiSchema || {}) },
+        accepts: def.accepts || [],
+        produces: def.produces || [],
+        kind: isLifecycle ? 'lifecycle' : 'transform',
+        category: def.category,
+        pythonCode,
       });
 
     } else {
       // Generic non-dataset node (Process / Model / Optimize)
       let inputs = [], outputs = [];
-      if (['resize', 'tokenize', 'cnn', 'transformer', 'optimizer'].includes(node.id)) {
+      if (['cnn', 'transformer', 'optimizer'].includes(node.id)) {
         inputs = ['data']; outputs = ['data_out'];
       }
       if (node.id === 'accuracy') { inputs = ['data']; outputs = ['score']; }

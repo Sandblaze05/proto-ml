@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { getOutputPort, getInputPort, arePortsCompatible } from '../nodes/nodeRegistry';
+import { getOutputPort, getInputPort, arePortsCompatible, getNodeDef } from '../nodes/nodeRegistry';
 
 export const useExecutionStore = create((set, get) => ({
   // Dictionary of node_id → full execution node model
@@ -126,6 +126,24 @@ export const useExecutionStore = create((set, get) => ({
     if (tgtInputs.length === 0) {
       console.warn('[ExecutionStore] canConnect: target has no inputs.', targetId);
       return false;
+    }
+
+    // ── Capability validation (domain-level): source.produces must intersect target.accepts ──
+    const srcDef = getNodeDef(sourceNode.type);
+    const tgtDef = getNodeDef(targetNode.type);
+    const srcProduces = sourceNode.produces ?? srcDef?.produces;
+    const tgtAccepts = targetNode.accepts ?? tgtDef?.accepts;
+    if (Array.isArray(srcProduces) && srcProduces.length > 0 && Array.isArray(tgtAccepts) && tgtAccepts.length > 0) {
+      const hasCompatibleDomain = srcProduces.some((d) => tgtAccepts.includes(d));
+      if (!hasCompatibleDomain) {
+        console.warn('[ExecutionStore] canConnect: capability mismatch.', {
+          sourceType: sourceNode.type,
+          targetType: targetNode.type,
+          srcProduces,
+          tgtAccepts,
+        });
+        return false;
+      }
     }
 
     // ── Typed validation (when handles are known) ──
