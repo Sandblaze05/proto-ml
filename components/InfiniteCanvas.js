@@ -1,13 +1,21 @@
 'use client';
 
 import React, { useCallback, useEffect, useRef, useState, useMemo } from 'react';
-import ReactFlow, { Background, useReactFlow, ReactFlowProvider, Handle, Position, useStore, useOnSelectionChange } from 'reactflow';
+import ReactFlow, { 
+  Background, 
+  useReactFlow, 
+  ReactFlowProvider, 
+  Handle, 
+  Position, 
+  useStore, 
+  useOnSelectionChange
+} from 'reactflow';
 import 'reactflow/dist/style.css';
 import dagre from 'dagre';
 import { View, Minus, Plus, Maximize, Minimize2, Trash2, 
   AlignCenterHorizontal, AlignCenterVertical,
   CheckCircle2, AlertCircle, Info, X, Wand2,
-  MousePointer2, Pencil, Type, Undo2, Redo2, ChevronLeft, ChevronRight
+  MousePointer2, Pencil, Eraser, Type, Undo2, Redo2, ChevronLeft, ChevronRight
 } from 'lucide-react';
 import gsap from 'gsap';
 import { useDroppable } from '@dnd-kit/core';
@@ -24,7 +32,8 @@ import { generateTransformPythonCode } from '@/lib/pythonTemplates/transformNode
 import { generateLifecyclePythonCode } from '@/lib/pythonTemplates/lifecycleNodeTemplate';
 
 function ZoomControls() {
-  const { zoomIn, zoomOut, fitView, getNodes, getEdges, setNodes } = useReactFlow();
+  const { zoomIn, zoomOut, fitView, getNodes, getEdges } = useReactFlow();
+  const setCanvasNodes = useUIStore(s => s.setNodes);
   const addToast = useUIStore(s => s.addToast);
 
   const containerStyle = {
@@ -55,50 +64,77 @@ function ZoomControls() {
   const onLayout = () => {
     const nodes = getNodes();
     const edges = getEdges();
-    
+
+    if (nodes.length < 2) {
+      addToast('Need at least 2 nodes to tidy layout', 'info');
+      return;
+    }
+
+    // Keep free-form annotation notes where they are.
+    const layoutNodes = nodes.filter((n) => n.type !== 'annotationNode');
+    const stickyNodes = nodes.filter((n) => n.type === 'annotationNode');
+
+    if (layoutNodes.length < 2) {
+      addToast('No connected graph nodes to tidy', 'info');
+      return;
+    }
+
     const g = new dagre.graphlib.Graph();
-    g.setGraph({ rankdir: 'LR', nodesep: 100, ranksep: 200 });
+    g.setGraph({
+      rankdir: 'LR',
+      align: 'UL',
+      nodesep: 120,
+      ranksep: 220,
+      marginx: 40,
+      marginy: 40,
+    });
     g.setDefaultEdgeLabel(() => ({}));
 
-    nodes.forEach((n) => {
-      g.setNode(n.id, { width: n.width || 200, height: n.height || 100 });
+    const nodeSize = (node) => {
+      const measuredW = node.measured?.width;
+      const measuredH = node.measured?.height;
+      const fallbackW = node.type === 'datasetNode' ? 320 : 260;
+      const fallbackH = node.type === 'datasetNode' ? 260 : 180;
+      return {
+        width: measuredW || node.width || fallbackW,
+        height: measuredH || node.height || fallbackH,
+      };
+    };
+
+    const layoutNodeIds = new Set(layoutNodes.map((n) => n.id));
+
+    layoutNodes.forEach((n) => {
+      const { width, height } = nodeSize(n);
+      g.setNode(n.id, { width, height });
     });
 
     edges.forEach((e) => {
-      g.setEdge(e.source, e.target);
+      if (layoutNodeIds.has(e.source) && layoutNodeIds.has(e.target)) {
+        g.setEdge(e.source, e.target);
+      }
     });
 
     dagre.layout(g);
 
-    const laidOutNodes = nodes.map((n) => {
-      const nodeWithPos = g.node(n.id);
+    const laidOut = layoutNodes.map((n) => {
+      const pos = g.node(n.id);
+      const { width, height } = nodeSize(n);
+      if (!pos) return n;
       return {
         ...n,
-        targetPosition: {
-          x: nodeWithPos.x - (n.width || 200) / 2,
-          y: nodeWithPos.y - (n.height || 100) / 2,
+        position: {
+          x: pos.x - width / 2,
+          y: pos.y - height / 2,
         },
       };
     });
 
-    // Animate with GSAP
-    laidOutNodes.forEach((n) => {
-      const el = document.querySelector(`[data-id="${n.id}"]`);
-      if (el) {
-        gsap.to(n.position, {
-          x: n.targetPosition.x,
-          y: n.targetPosition.y,
-          duration: 0.8,
-          ease: 'power3.inOut',
-          onUpdate: () => {
-            // Update the actual node state to force React Flow to re-render edges
-            setNodes((nds) => nds.map((node) => node.id === n.id ? { ...node, position: { ...n.position } } : node));
-          }
-        });
-      }
-    });
-    
-    addToast('Layout tidied up successfully!', 'success');
+    // Single store update keeps controlled ReactFlow state consistent.
+    setCanvasNodes([...laidOut, ...stickyNodes]);
+
+    // Refit viewport after node positions settle.
+    requestAnimationFrame(() => fitView({ padding: 0.2, duration: 350 }));
+    addToast('Layout tidied', 'success');
   };
 
   return (
@@ -235,9 +271,11 @@ function CustomNode({ data }) {
   );
 }
 
-const nodeTypes = { custom: CustomNode,  datasetNode: DatasetNode,
+const nodeTypes = { 
+  custom: CustomNode,  
+  datasetNode: DatasetNode,
   transformNode: TransformNode,
-  annotationNode: AnnotationNode,
+  annotationNode: AnnotationNode
 };
 const edgeTypes = {};
 
@@ -271,22 +309,13 @@ function EdgeAwareMiniMap() {
     };
   };
 
-  const getNodeMiniSize = (node) => {
-    const { width, height } = getNodeSize(node);
-    const scale = node.type === 'annotationNode' ? 0.55 : 0.42;
-    return {
-      width: Math.max(38, width * scale),
-      height: Math.max(24, height * scale),
-    };
-  };
-
   let minX = Infinity;
   let minY = Infinity;
   let maxX = -Infinity;
   let maxY = -Infinity;
 
   nodes.forEach(n => {
-    const { width: w, height: h } = getNodeMiniSize(n);
+    const { width: w, height: h } = getNodeSize(n);
     if (n.position.x < minX) minX = n.position.x;
     if (n.position.y < minY) minY = n.position.y;
     if (n.position.x + w > maxX) maxX = n.position.x + w;
@@ -303,6 +332,22 @@ function EdgeAwareMiniMap() {
     minY -= padY;
     maxX += padX;
     maxY += padY;
+
+    // Keep minimap scale stable so a single node does not become oversized.
+    const minExtentW = 1200;
+    const minExtentH = 800;
+    const curW = maxX - minX;
+    const curH = maxY - minY;
+    if (curW < minExtentW) {
+      const d = (minExtentW - curW) / 2;
+      minX -= d;
+      maxX += d;
+    }
+    if (curH < minExtentH) {
+      const d = (minExtentH - curH) / 2;
+      minY -= d;
+      maxY += d;
+    }
   } else {
     minX = 0;
     minY = 0;
@@ -325,9 +370,26 @@ function EdgeAwareMiniMap() {
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
 
-    // Convert pixel click to SVG coordinates
-    const clickX = minX + (x / rect.width) * mapW;
-    const clickY = minY + (y / rect.height) * mapH;
+    // Convert pixel click to SVG coordinates while accounting for letterboxing.
+    const rectAspect = rect.width / rect.height;
+    const mapAspect = mapW / mapH;
+    let drawX = 0;
+    let drawY = 0;
+    let drawW = rect.width;
+    let drawH = rect.height;
+
+    if (rectAspect > mapAspect) {
+      drawW = rect.height * mapAspect;
+      drawX = (rect.width - drawW) / 2;
+    } else if (rectAspect < mapAspect) {
+      drawH = rect.width / mapAspect;
+      drawY = (rect.height - drawH) / 2;
+    }
+
+    const nx = Math.max(0, Math.min(1, (x - drawX) / drawW));
+    const ny = Math.max(0, Math.min(1, (y - drawY) / drawH));
+    const clickX = minX + nx * mapW;
+    const clickY = minY + ny * mapH;
 
     setViewport({
       x: -clickX * zoom + rfWidth / 2,
@@ -352,8 +414,8 @@ function EdgeAwareMiniMap() {
           const target = nodes.find(n => n.id === e.target);
           if (!source || !target) return null;
 
-          const { width: sW, height: sH } = getNodeMiniSize(source);
-          const { height: tH } = getNodeMiniSize(target);
+          const { width: sW, height: sH } = getNodeSize(source);
+          const { height: tH } = getNodeSize(target);
 
           const x1 = source.position.x + sW;
           const y1 = source.position.y + sH / 2;
@@ -421,8 +483,8 @@ function EdgeAwareMiniMap() {
               key={node.id}
               x={node.position.x}
               y={node.position.y}
-              width={getNodeMiniSize(node).width}
-              height={getNodeMiniSize(node).height}
+              width={getNodeSize(node).width}
+              height={getNodeSize(node).height}
               rx={6}
               fill={fillColor}
               opacity={0.8}
@@ -668,7 +730,7 @@ function FloatingToolbar() {
       <div
         onMouseDown={onStartDrag}
         style={{ left: pos.x, top: pos.y }}
-        className={`fixed z-1100 p-4 bg-background/90 backdrop-blur-2xl border border-foreground/20 rounded-full shadow-2xl transition-all cursor-grab active:cursor-grabbing hover:scale-110 ${isDragging ? 'scale-105 shadow-3xl' : ''} text-foreground/50 hover:text-foreground`}
+        className={`fixed z-1100 p-4 bg-background/90 backdrop-blur-2xl border border-foreground/20 rounded-full shadow-2xl cursor-grab active:cursor-grabbing ${isDragging ? 'scale-105 shadow-3xl' : 'hover:scale-110 transition-transform duration-150'} text-foreground/50 hover:text-foreground`}
       >
         <Pencil size={20} />
       </div>
@@ -709,6 +771,13 @@ function FloatingToolbar() {
               title="Draw Mode (D)"
             >
               <Pencil size={18} />
+            </button>
+            <button 
+              onClick={() => setActiveTool('erase')}
+              className={`p-2 rounded-lg transition-all ${activeTool === 'erase' ? 'bg-background shadow-sm text-foreground' : 'text-foreground/40 hover:text-foreground hover:bg-foreground/5'}`}
+              title="Eraser (E)"
+            >
+              <Eraser size={18} />
             </button>
             <button 
               onClick={() => {
@@ -768,70 +837,233 @@ function FloatingToolbar() {
   );
 }
 
+function parsePathPoints(path = '') {
+  const nums = (String(path).match(/-?\d*\.?\d+/g) || []).map(Number);
+  const points = [];
+  for (let i = 0; i < nums.length - 1; i += 2) {
+    points.push({ x: nums[i], y: nums[i + 1] });
+  }
+  return points;
+}
+
+function buildPathFromPoints(points = []) {
+  if (!Array.isArray(points) || points.length === 0) return '';
+  const [first, ...rest] = points;
+  return `M ${first.x} ${first.y}${rest.map((p) => ` L ${p.x} ${p.y}`).join('')}`;
+}
+
+function translatePath(path, dx, dy) {
+  const points = parsePathPoints(path).map((p) => ({ x: p.x + dx, y: p.y + dy }));
+  return buildPathFromPoints(points);
+}
+
+function distancePointToSegment(px, py, ax, ay, bx, by) {
+  const abx = bx - ax;
+  const aby = by - ay;
+  const apx = px - ax;
+  const apy = py - ay;
+  const abLenSq = abx * abx + aby * aby;
+  const t = abLenSq === 0 ? 0 : Math.max(0, Math.min(1, (apx * abx + apy * aby) / abLenSq));
+  const cx = ax + abx * t;
+  const cy = ay + aby * t;
+  return Math.hypot(px - cx, py - cy);
+}
+
+function pointHitsPath(path, x, y, tolerance) {
+  const points = parsePathPoints(path);
+  if (points.length < 2) return false;
+  for (let i = 1; i < points.length; i += 1) {
+    const p0 = points[i - 1];
+    const p1 = points[i];
+    if (distancePointToSegment(x, y, p0.x, p0.y, p1.x, p1.y) <= tolerance) {
+      return true;
+    }
+  }
+  return false;
+}
+
 function DrawingLayer() {
-  const { drawings, addDrawing, activeTool, annotationColor, saveToHistory } = useUIStore();
+  const { drawings, addDrawing, setDrawings, activeTool, annotationColor, saveToHistory } = useUIStore();
   const transform = useStore(s => s.transform);
   const [tx, ty, zoom] = transform;
-  
+
   const [currentPath, setCurrentPath] = useState(null);
+  const [selectedDrawingIndex, setSelectedDrawingIndex] = useState(null);
+  const [isErasing, setIsErasing] = useState(false);
   const svgRef = useRef(null);
+  const dragRef = useRef(null);
 
-  const onMouseDown = (e) => {
+  const toCanvasPoint = useCallback((event) => {
+    const rect = svgRef.current?.getBoundingClientRect();
+    if (!rect) return null;
+    return {
+      x: (event.clientX - rect.left - tx) / zoom,
+      y: (event.clientY - rect.top - ty) / zoom,
+    };
+  }, [tx, ty, zoom]);
+
+  const eraseAtPoint = useCallback((x, y, shouldSaveHistory = false) => {
+    const tolerance = 8 / zoom;
+    const before = useUIStore.getState().drawings;
+    const next = before.filter((draw) => !pointHitsPath(draw.path, x, y, tolerance));
+    if (next.length !== before.length) {
+      if (shouldSaveHistory) saveToHistory();
+      setDrawings(next);
+      return true;
+    }
+    return false;
+  }, [zoom, saveToHistory, setDrawings]);
+
+  const finishDrag = useCallback(() => {
+    dragRef.current = null;
+    window.removeEventListener('mousemove', onDragMove);
+    window.removeEventListener('mouseup', finishDrag);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const onDragMove = useCallback((event) => {
+    const drag = dragRef.current;
+    if (!drag) return;
+    const point = toCanvasPoint(event);
+    if (!point) return;
+
+    const dx = point.x - drag.startX;
+    const dy = point.y - drag.startY;
+    const moved = Math.abs(dx) > 0.25 || Math.abs(dy) > 0.25;
+    if (!drag.historySaved && moved) {
+      saveToHistory();
+      drag.historySaved = true;
+    }
+
+    const currentDrawings = useUIStore.getState().drawings;
+    if (!currentDrawings[drag.index]) return;
+    const next = [...currentDrawings];
+    next[drag.index] = {
+      ...next[drag.index],
+      path: translatePath(drag.originalPath, dx, dy),
+    };
+    setDrawings(next);
+  }, [toCanvasPoint, saveToHistory, setDrawings]);
+
+  useEffect(() => {
+    if (activeTool !== 'select') {
+      setSelectedDrawingIndex(null);
+      finishDrag();
+    }
+    if (activeTool !== 'erase') {
+      setIsErasing(false);
+    }
+  }, [activeTool, finishDrag]);
+
+  const onDrawDown = (event) => {
     if (activeTool !== 'draw') return;
-    
-    // Stop event propagation to prevent React Flow from panning
-    e.stopPropagation();
-    
+    event.stopPropagation();
+    const point = toCanvasPoint(event);
+    if (!point) return;
     saveToHistory();
-    const rect = svgRef.current.getBoundingClientRect();
-    const x = (e.clientX - rect.left - tx) / zoom;
-    const y = (e.clientY - rect.top - ty) / zoom;
-    setCurrentPath(`M ${x} ${y}`);
+    setCurrentPath(`M ${point.x} ${point.y}`);
   };
 
-  const onMouseMove = (e) => {
+  const onDrawMove = (event) => {
     if (!currentPath || activeTool !== 'draw') return;
-    const rect = svgRef.current.getBoundingClientRect();
-    const x = (e.clientX - rect.left - tx) / zoom;
-    const y = (e.clientY - rect.top - ty) / zoom;
-    setCurrentPath(prev => `${prev} L ${x} ${y}`);
+    const point = toCanvasPoint(event);
+    if (!point) return;
+    setCurrentPath((prev) => `${prev} L ${point.x} ${point.y}`);
   };
 
-  const onMouseUp = () => {
+  const onDrawUp = () => {
     if (!currentPath) return;
     addDrawing({ path: currentPath, color: annotationColor });
     setCurrentPath(null);
   };
 
+  const onEraseDown = (event) => {
+    if (activeTool !== 'erase') return;
+    event.stopPropagation();
+    const point = toCanvasPoint(event);
+    if (!point) return;
+    setIsErasing(true);
+    eraseAtPoint(point.x, point.y, true);
+  };
+
+  const onEraseMove = (event) => {
+    if (!isErasing || activeTool !== 'erase') return;
+    const point = toCanvasPoint(event);
+    if (!point) return;
+    eraseAtPoint(point.x, point.y, false);
+  };
+
+  const onEraseUp = () => {
+    if (!isErasing) return;
+    setIsErasing(false);
+  };
+
+  const onDrawingPointerDown = (index, event) => {
+    if (activeTool !== 'select') return;
+    event.stopPropagation();
+    const point = toCanvasPoint(event);
+    if (!point || !drawings[index]) return;
+    setSelectedDrawingIndex(index);
+    dragRef.current = {
+      index,
+      startX: point.x,
+      startY: point.y,
+      originalPath: drawings[index].path,
+      historySaved: false,
+    };
+    window.addEventListener('mousemove', onDragMove);
+    window.addEventListener('mouseup', finishDrag);
+  };
+
   return (
-    <svg 
+    <svg
       ref={svgRef}
-      className={`absolute inset-0 w-full h-full z-10 ${activeTool === 'draw' ? 'pointer-events-auto cursor-crosshair' : 'pointer-events-none'}`}
-      onMouseDown={onMouseDown}
-      onMouseMove={onMouseMove}
-      onMouseUp={onMouseUp}
-      onMouseLeave={onMouseUp}
+      className="absolute inset-0 w-full h-full z-10 pointer-events-none"
+      onMouseMove={activeTool === 'draw' ? onDrawMove : undefined}
+      onMouseUp={activeTool === 'draw' ? onDrawUp : undefined}
+      onMouseLeave={activeTool === 'draw' ? onDrawUp : undefined}
     >
+      {(activeTool === 'draw' || activeTool === 'erase') && (
+        <rect
+          x="0"
+          y="0"
+          width="100%"
+          height="100%"
+          className={`pointer-events-auto ${activeTool === 'erase' ? 'cursor-cell' : 'cursor-crosshair'}`}
+          fill="transparent"
+          onMouseDown={activeTool === 'draw' ? onDrawDown : onEraseDown}
+          onMouseMove={activeTool === 'draw' ? onDrawMove : onEraseMove}
+          onMouseUp={activeTool === 'draw' ? onDrawUp : onEraseUp}
+          onMouseLeave={activeTool === 'draw' ? onDrawUp : onEraseUp}
+        />
+      )}
+
       <g transform={`translate(${tx}, ${ty}) scale(${zoom})`}>
-        {drawings.map((draw, i) => (
-          <path 
-            key={i} 
-            d={draw.path} 
-            stroke={draw.color} 
-            strokeWidth={2 / zoom} 
-            fill="none" 
-            strokeLinecap="round" 
-            strokeLinejoin="round" 
-          />
-        ))}
+        {drawings.map((draw, i) => {
+          const isSelected = i === selectedDrawingIndex;
+          return (
+            <path
+              key={`${i}-${draw.path.length}`}
+              d={draw.path}
+              stroke={draw.color}
+              strokeWidth={(isSelected ? 3 : 2) / zoom}
+              fill="none"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className={activeTool === 'select' ? 'pointer-events-auto cursor-move' : 'pointer-events-none'}
+              style={{ filter: isSelected ? 'drop-shadow(0 0 4px rgba(250,235,215,0.6))' : undefined }}
+              onMouseDown={(e) => onDrawingPointerDown(i, e)}
+            />
+          );
+        })}
         {currentPath && (
-          <path 
-            d={currentPath} 
-            stroke={annotationColor} 
-            strokeWidth={2 / zoom} 
-            fill="none" 
-            strokeLinecap="round" 
-            strokeLinejoin="round" 
+          <path
+            d={currentPath}
+            stroke={annotationColor}
+            strokeWidth={2 / zoom}
+            fill="none"
+            strokeLinecap="round"
+            strokeLinejoin="round"
             className="opacity-60"
           />
         )}
@@ -844,29 +1076,47 @@ function InteractiveCanvas() {
   const { 
     nodes, edges, drawings,  
     setNodes, setEdges, addNode, addEdge, removeNode, addToast, showMinimap,
-    activeTool, setActiveTool, undo, redo, saveToHistory
+    activeTool, setActiveTool, undo, redo, saveToHistory, setCanvasViewport
   } = useUIStore();
 
   const { addExecutionNode, addExecutionEdge, canConnect, removeExecutionNode } = useExecutionStore();
   const { setNodeRef } = useDroppable({ id: 'canvas-droppable' });
   const { project, screenToFlowPosition } = useReactFlow();
+  const transform = useStore((s) => s.transform);
+  const rfWidth = useStore((s) => s.width);
+  const rfHeight = useStore((s) => s.height);
 
   const [selectedNodes, setSelectedNodes] = useState([]);
   const [menu, setMenu] = useState(null);
   const [isSpotlightOpen, setIsSpotlightOpen] = useState(false);
   const initialized = useRef(false);
+
+  useEffect(() => {
+    const [x, y, zoom] = transform || [0, 0, 1];
+    setCanvasViewport({ x, y, zoom, width: rfWidth, height: rfHeight });
+  }, [transform, rfWidth, rfHeight, setCanvasViewport]);
   
   useEffect(() => {
     const handleKeys = (e) => {
+      const isTyping = ['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName);
+
       // Spotlight
       if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
         e.preventDefault();
         setIsSpotlightOpen(prev => !prev);
       } else if (e.key === '/') {
-        if (document.activeElement.tagName !== 'INPUT' && document.activeElement.tagName !== 'TEXTAREA') {
+        if (!isTyping) {
           e.preventDefault();
           setIsSpotlightOpen(true);
         }
+      }
+
+      if (!isTyping && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        const key = e.key.toLowerCase();
+        if (key === 'v') setActiveTool('select');
+        if (key === 'd') setActiveTool('draw');
+        if (key === 'e') setActiveTool('erase');
+        if (key === 't') setActiveTool('text');
       }
       
       // Undo / Redo
@@ -881,7 +1131,7 @@ function InteractiveCanvas() {
     };
     window.addEventListener('keydown', handleKeys);
     return () => window.removeEventListener('keydown', handleKeys);
-  }, [undo, redo]);
+  }, [undo, redo, setActiveTool]);
 
   const onNodesChange = useCallback((changes) => {
     // Save to history when dragging or significant changes happen
@@ -942,6 +1192,8 @@ function InteractiveCanvas() {
 
   }, [setNodes, setEdges]);
 
+  const [isConnecting, setIsConnecting] = useState(false);
+
   const onConnect = useCallback((connection) => {
     // 1. Verify in Execution Store
     if (canConnect(connection.source, connection.target, connection.sourceHandle, connection.targetHandle)) {
@@ -949,33 +1201,67 @@ function InteractiveCanvas() {
       addEdge(connection);
       // 3. Add to Execution Graph
       addExecutionEdge(connection);
+      
+      // Haptic-like feedback
+      const targetEl = document.querySelector(`[data-id="${connection.target}"]`);
+      if (targetEl) {
+        gsap.fromTo(targetEl, 
+          { scale: 1 }, 
+          { scale: 1.05, duration: 0.1, yoyo: true, repeat: 1, ease: 'power2.out' }
+        );
+      }
     } else {
-      console.warn("Invalid connection discarded.");
-      // Could trigger a toast notification here
+      addToast('Incompatible connection', 'error');
     }
-  }, [addEdge, addExecutionEdge, canConnect]);
+  }, [addEdge, addExecutionEdge, canConnect, addToast]);
+
+  const onConnectStart = useCallback(() => setIsConnecting(true), []);
+  const onConnectEnd = useCallback(() => setIsConnecting(false), []);
 
   const onNodesDelete = useCallback((deleted) => {
     deleted.forEach(n => {
       removeExecutionNode(n.id);
     });
-    addToast(`Removed ${deleted.length} nodes`, 'error');
-  }, [removeExecutionNode, addToast]);
+  }, [removeExecutionNode]);
 
   const onNodeContextMenu = useCallback(
     (event, node) => {
       event.preventDefault();
-      
-      const isSelected = selectedNodes.some(n => n.id === node.id);
-      
       setMenu({
+        type: 'node',
         id: node.id,
-        isGroup: isSelected && selectedNodes.length > 1,
         top: event.clientY,
         left: event.clientX,
+        data: node
       });
     },
-    [setMenu, selectedNodes]
+    [setMenu]
+  );
+
+  const onEdgeContextMenu = useCallback(
+    (event, edge) => {
+      event.preventDefault();
+      setMenu({
+        type: 'edge',
+        id: edge.id,
+        top: event.clientY,
+        left: event.clientX,
+        data: edge
+      });
+    },
+    [setMenu]
+  );
+
+  const onPaneContextMenu = useCallback(
+    (event) => {
+      event.preventDefault();
+      setMenu({
+        type: 'canvas',
+        top: event.clientY,
+        left: event.clientX
+      });
+    },
+    [setMenu]
   );
 
   const onPaneClick = useCallback((event) => {
@@ -1002,11 +1288,9 @@ function InteractiveCanvas() {
           removeNode(n.id);
           removeExecutionNode(n.id);
         });
-        addToast(`Deleted ${selectedNodes.length} nodes`, 'error');
       } else {
         removeNode(menu.id);
         removeExecutionNode(menu.id);
-        addToast(`Deleted node`, 'error');
       }
       setMenu(null);
     }
@@ -1020,7 +1304,11 @@ function InteractiveCanvas() {
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onConnect={onConnect}
+        onConnectStart={onConnectStart}
+        onConnectEnd={onConnectEnd}
         onNodeContextMenu={onNodeContextMenu}
+        onEdgeContextMenu={onEdgeContextMenu}
+        onPaneContextMenu={onPaneContextMenu}
         onPaneClick={onPaneClick}
         fitView
         fitViewOptions={{ padding: 0.2 }}
@@ -1061,25 +1349,143 @@ function InteractiveCanvas() {
       )}
 
       {menu && (
-        <div
-          style={{ top: menu.top, left: menu.left }}
-          className="fixed z-200 bg-background/90 backdrop-blur-2xl border border-foreground/30 rounded-2xl shadow-2xl flex flex-col py-2 w-48 overflow-hidden"
-        >
-          <div className="px-4 py-1 pb-2 border-b border-foreground/10 mb-1">
-            <span className="text-[10px] font-bold font-mono text-foreground/40 uppercase tracking-widest leading-none">
-              {menu.isGroup ? `Selection (${selectedNodes.length})` : 'Node Actions'}
-            </span>
-          </div>
-          <button
-            onClick={handleDeleteNode}
-            className="flex items-center gap-3 px-4 py-2.5 text-red-500 hover:bg-red-500/10 text-sm font-mono text-left transition-colors"
-          >
-            <Trash2 size={16} />
-            {menu.isGroup ? `Delete ${selectedNodes.length} items` : 'Delete Node'}
-          </button>
-        </div>
+        <ContextMenu 
+          menu={menu} 
+          onClose={() => setMenu(null)} 
+          screenToFlowPosition={screenToFlowPosition}
+        />
       )}
     </div>
+  );
+}
+
+function ContextMenu({ menu, onClose, screenToFlowPosition }) {
+  const { 
+    nodes, edges, removeNode, addNode, addToast, 
+    duplicateNode, clearCanvas, updateEdgeStyle, toggleNodeCollapse 
+  } = useUIStore();
+  const { removeExecutionNode } = useExecutionStore();
+  
+  const containerRef = useRef(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (containerRef.current && !containerRef.current.contains(e.target)) onClose();
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [onClose]);
+
+  const handleAction = (action) => {
+    switch (action) {
+      case 'delete-node':
+        removeNode(menu.id);
+        removeExecutionNode(menu.id);
+        break;
+      case 'duplicate-node':
+        duplicateNode(menu.id);
+        break;
+      case 'copy-id':
+        navigator.clipboard.writeText(menu.id);
+        addToast('ID copied to clipboard', 'success');
+        break;
+      case 'collapse-node':
+        toggleNodeCollapse(menu.id);
+        break;
+      case 'delete-edge':
+        useUIStore.getState().setEdges(edges.filter(e => e.id !== menu.id));
+        addToast('Edge removed', 'error');
+        break;
+      case 'edge-style-straight':
+        updateEdgeStyle(menu.id, 'straight');
+        break;
+      case 'edge-style-curved':
+        updateEdgeStyle(menu.id, 'default');
+        break;
+      case 'add-note':
+        const pos = screenToFlowPosition({ x: menu.left, y: menu.top });
+        addNode({
+          id: `note-${uuidv4().slice(0, 6)}`,
+          type: 'annotationNode',
+          position: pos,
+          data: { label: 'New sticky note', color: '#faebd7' }
+        });
+        break;
+      case 'clear-canvas':
+        if (confirm('Are you sure you want to clear the entire canvas?')) {
+          clearCanvas();
+        }
+        break;
+    }
+    onClose();
+  };
+
+  const renderContent = () => {
+    if (menu.type === 'node') {
+      return (
+        <>
+          <MenuHeader label="Node Actions" />
+          <MenuButton icon={Maximize} label="Duplicate" onClick={() => handleAction('duplicate-node')} />
+          <MenuButton icon={Minimize2} label="Collapse/Expand" onClick={() => handleAction('collapse-node')} />
+          <MenuButton icon={Wand2} label="Copy ID" onClick={() => handleAction('copy-id')} />
+          <div className="h-px bg-foreground/10 my-1" />
+          <MenuButton icon={Trash2} label="Delete Node" color="text-red-500" onClick={() => handleAction('delete-node')} />
+        </>
+      );
+    }
+    if (menu.type === 'edge') {
+      return (
+        <>
+          <MenuHeader label="Edge Actions" />
+          <MenuButton icon={AlignCenterHorizontal} label="Straighten" onClick={() => handleAction('edge-style-straight')} />
+          <MenuButton icon={AlignCenterVertical} label="Curved" onClick={() => handleAction('edge-style-curved')} />
+          <div className="h-px bg-foreground/10 my-1" />
+          <MenuButton icon={Trash2} label="Disconnect" color="text-red-500" onClick={() => handleAction('delete-edge')} />
+        </>
+      );
+    }
+    return (
+      <>
+        <MenuHeader label="Canvas Actions" />
+        <MenuButton icon={Pencil} label="Add Note" onClick={() => handleAction('add-note')} />
+        <MenuButton icon={Wand2} label="Tidy Layout" onClick={() => { useUIStore.getState().onLayout?.(); onClose(); }} disabled />
+        <div className="h-px bg-foreground/10 my-1" />
+        <MenuButton icon={Trash2} label="Clear Canvas" color="text-red-500" onClick={() => handleAction('clear-canvas')} />
+      </>
+    );
+  };
+
+  return (
+    <div
+      ref={containerRef}
+      style={{ top: menu.top, left: menu.left }}
+      className="fixed z-5000 bg-background/90 backdrop-blur-3xl border border-foreground/30 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.5)] flex flex-col py-2 w-56 overflow-hidden animate-in fade-in zoom-in duration-200"
+    >
+      {renderContent()}
+    </div>
+  );
+}
+
+function MenuHeader({ label }) {
+  return (
+    <div className="px-4 py-1 pb-2 border-b border-foreground/10 mb-1">
+      <span className="text-[10px] font-bold font-mono text-foreground/40 uppercase tracking-widest leading-none">
+        {label}
+      </span>
+    </div>
+  );
+}
+
+function MenuButton({ icon: Icon, label, onClick, color = "text-foreground/80", disabled = false }) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      className={`flex items-center gap-3 px-4 py-2.5 hover:bg-foreground/5 text-sm font-mono text-left transition-colors ${color} ${disabled ? 'opacity-30 cursor-not-allowed' : ''}`}
+    >
+      <Icon size={16} />
+      {label}
+    </button>
   );
 }
 

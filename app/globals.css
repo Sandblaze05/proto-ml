@@ -112,3 +112,33 @@ body {
   scrollbar-width: thin;
   scrollbar-color: rgba(255, 255, 255, 0.1) transparent;
 }
+
+/* React Flow Handle Glows */
+.react-flow__handle-connecting {
+  background-color: var(--color-foreground) !important;
+  box-shadow: 0 0 5px 1px var(--color-foreground);
+  scale: 1.05;
+  transition: all 0.2s ease-out;
+}
+
+.react-flow__handle-valid {
+  background-color: var(--color-foreground) !important;
+  box-shadow: 0 0 8px 2px var(--color-foreground);
+  scale: 1.1;
+  animation: pulse-glow 2s infinite alternate ease-in-out;
+}
+
+@keyframes pulse-glow {
+  from { scale: 1.08; opacity: 0.9; }
+  to { scale: 1.12; opacity: 1; }
+}
+
+.react-flow__edge-path {
+  stroke-width: 2.5;
+  transition: stroke 0.3s ease;
+}
+
+.react-flow__edge.selected .react-flow__edge-path {
+  stroke: var(--color-foreground);
+  filter: drop-shadow(0 0 8px var(--color-foreground));
+}

@@ -8,7 +8,8 @@ import { useExecutionStore } from '@/store/useExecutionStore'
 import { AVAILABLE_NODES } from '@/components/NodePalette'
 
 export default function CanvasProvider({ children }) {
-  const { addNode } = useUIStore();
+  const addNode = useUIStore(s => s.addNode);
+  const getVisibleCenterPosition = useUIStore(s => s.getVisibleCenterPosition);
 
   const handleDragEnd = (event) => {
     const { over, active, delta } = event;
@@ -32,10 +33,16 @@ export default function CanvasProvider({ children }) {
         execution_code: "function() { return {} }"
       };
 
+      const center = getVisibleCenterPosition();
+      const spawnPosition = {
+        x: center.x + (Math.random() - 0.5) * 40,
+        y: center.y + (Math.random() - 0.5) * 40,
+      };
+
       addNode({
         id: newNodeId,
         type: 'custom',
-        position: { x: delta.x > 0 ? delta.x : 200, y: delta.y > 0 ? delta.y : 200 },
+        position: spawnPosition,
         data: { nodeModel: newNodeModel },
       });
 

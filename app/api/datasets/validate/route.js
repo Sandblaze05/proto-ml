@@ -2,11 +2,11 @@ import { NextResponse } from 'next/server';
 import fs from 'fs/promises';
 import path from 'path';
 
-async function collectFilesRecursive(baseDir, maxFiles = 50) {
+async function collectFilesRecursive(baseDir) {
   const files = [];
   const queue = [baseDir];
 
-  while (queue.length && files.length < maxFiles) {
+  while (queue.length) {
     const cur = queue.shift();
     let entries = [];
     try {
@@ -16,7 +16,6 @@ async function collectFilesRecursive(baseDir, maxFiles = 50) {
     }
 
     for (const entry of entries) {
-      if (files.length >= maxFiles) break;
       const full = path.join(cur, entry.name);
       if (entry.isDirectory()) {
         queue.push(full);
@@ -55,8 +54,8 @@ export async function POST(request) {
       return NextResponse.json({ ok: true, exists: true, isDirectory: false, isFile: true }, { status: 200 });
     }
 
-    // list up to 50 files recursively for folder-based datasets (e.g. class subfolders)
-    const files = await collectFilesRecursive(resolved, 50);
+    // list files recursively for folder-based datasets (e.g. class subfolders)
+    const files = await collectFilesRecursive(resolved);
     return NextResponse.json({ ok: true, exists: true, isDirectory: true, isFile: false, files, count: files.length });
   } catch (err) {
     return NextResponse.json({ error: String(err) }, { status: 500 });

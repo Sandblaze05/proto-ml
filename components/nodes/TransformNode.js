@@ -4,6 +4,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Handle, Position } from 'reactflow';
 import { Wrench, Settings2, Code2, ChevronDown, ChevronUp } from 'lucide-react';
 import { useExecutionStore } from '../../store/useExecutionStore';
+import { useUIStore } from '../../store/useUIStore';
 import { generateTransformPythonCode } from '../../lib/pythonTemplates/transformNodeTemplate';
 import MonacoCodeEditor from './MonacoCodeEditor';
 
@@ -119,7 +120,7 @@ function ConfigField({ label, value, onChange, schema = {} }) {
 }
 
 export default function TransformNode({ data, id, selected }) {
-  const { nodeModel } = data;
+  const { nodeModel, collapsed: storeCollapsed } = data;
   const {
     type,
     label,
@@ -132,12 +133,45 @@ export default function TransformNode({ data, id, selected }) {
   } = nodeModel;
 
   const [activeTab, setActiveTab] = useState('Config');
-  const [collapsed, setCollapsed] = useState(false);
+  const toggleNodeCollapse = useUIStore((s) => s.toggleNodeCollapse);
+  const collapsed = !!storeCollapsed;
   const [localConfig, setLocalConfig] = useState(config);
   const [pythonCode, setPythonCode] = useState(() => initialPythonCode || generateTransformPythonCode(type, config));
   const [manualCodeOverride, setManualCodeOverride] = useState(false);
+  const [codeViewNodeId, setCodeViewNodeId] = useState(id);
 
   const updateExecutionNode = useExecutionStore(s => s.updateExecutionNode);
+  const execNodes = useExecutionStore(s => s.nodes);
+
+  useEffect(() => {
+    if (codeViewNodeId !== id && !execNodes[codeViewNodeId]) {
+      setCodeViewNodeId(id);
+    }
+  }, [codeViewNodeId, execNodes, id]);
+
+  const dockItems = useMemo(() => {
+    const items = Object.entries(execNodes || {})
+      .filter(([, node]) => typeof node?.pythonCode === 'string' && node.pythonCode.length > 0)
+      .map(([nodeId, node]) => ({
+        id: nodeId,
+        label: node?.label || node?.type || nodeId,
+        subtitle: node?.type || '',
+      }));
+
+    const uniq = [];
+    const seen = new Set();
+    for (const item of items) {
+      if (seen.has(item.id)) continue;
+      seen.add(item.id);
+      uniq.push(item);
+    }
+    return uniq;
+  }, [execNodes]);
+
+  const displayedCode = codeViewNodeId === id
+    ? pythonCode
+    : (execNodes?.[codeViewNodeId]?.pythonCode || '');
+  const isDockReadOnly = codeViewNodeId !== id;
 
   const applyNodeUpdates = useCallback((patch) => {
     updateExecutionNode(id, patch);
@@ -201,7 +235,7 @@ export default function TransformNode({ data, id, selected }) {
       <div
         className="flex items-center justify-between px-2.5 py-2 cursor-grab active:cursor-grabbing"
         style={{ background: '#67e8f922', borderBottom: '1px solid #67e8f944' }}
-        onClick={() => setCollapsed((c) => !c)}
+        onClick={() => toggleNodeCollapse(id)}
       >
         <div className="flex items-center gap-2">
           <div className="w-5.5 h-5.5 rounded-[5px] flex items-center justify-center shrink-0 bg-cyan-500/20">
@@ -236,33 +270,35 @@ export default function TransformNode({ data, id, selected }) {
           </div>
 
           <div className="nowheel h-55 overflow-y-auto px-2.5 pt-2 pb-2 scrollbar-thin scrollbar-track-transparent scrollbar-thumb-[#faebd7]/10">
-            {activeTab === 'Config' && (
-              <>
-                {configKeys.length === 0 && (
-                  <div className="text-[10px] text-[#faebd7]/40">No editable parameters for this transform.</div>
-                )}
-                {configKeys.map((k) => (
-                  <ConfigField
-                    key={k}
-                    label={k}
-                    value={localConfig?.[k]}
-                    schema={uiSchema?.[k]}
-                    onChange={(next) => updateConfig(k, next)}
-                  />
-                ))}
-              </>
-            )}
+            <div className={activeTab === 'Config' ? '' : 'hidden'}>
+              {configKeys.length === 0 && (
+                <div className="text-[10px] text-[#faebd7]/40">No editable parameters for this transform.</div>
+              )}
+              {configKeys.map((k) => (
+                <ConfigField
+                  key={k}
+                  label={k}
+                  value={localConfig?.[k]}
+                  schema={uiSchema?.[k]}
+                  onChange={(next) => updateConfig(k, next)}
+                />
+              ))}
+            </div>
 
-            {activeTab === 'Code' && (
+            <div className={activeTab === 'Code' ? '' : 'hidden'}>
               <MonacoCodeEditor
                 title="Generated Python Transform"
                 language="python"
-                value={pythonCode}
-                onChange={handleCodeChange}
+                value={displayedCode}
+                onChange={isDockReadOnly ? undefined : handleCodeChange}
                 onReset={resetCodeFromTemplate}
+                readOnly={isDockReadOnly}
                 height={180}
+                dockItems={dockItems}
+                activeDockId={codeViewNodeId}
+                onDockSelect={(nodeId) => setCodeViewNodeId(String(nodeId))}
               />
-            )}
+            </div>
           </div>
         </div>
       )}

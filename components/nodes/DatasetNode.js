@@ -1,11 +1,26 @@
 'use client';
 
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Handle, Position } from 'reactflow';
-import { FolderOpen, Eye, Code2, ChevronDown, ChevronUp, ImageIcon, Database, FileText, Braces, Globe, Table2 } from 'lucide-react';
+import { FolderOpen, Eye, Code2, ChevronDown, ChevronUp, ImageIcon, Database, FileText, Braces, Globe, Table2, Upload, ShieldCheck, List, Search, Link2, Trash2 } from 'lucide-react';
 import { useExecutionStore } from '../../store/useExecutionStore';
+import { useUIStore } from '../../store/useUIStore';
 import { previewNode } from '../../lib/executionClient';
-import { validatePath as apiValidatePath, deleteUpload as apiDeleteUpload } from '../../lib/datasetClient';
+import {
+  validatePath as apiValidatePath,
+  deleteUpload as apiDeleteUpload,
+  listUploads as apiListUploads,
+  inspectCsv as apiInspectCsv,
+  validateCsvJoins as apiValidateCsvJoins,
+} from '../../lib/datasetClient';
+import {
+  createClientUpload,
+  inspectClientUpload,
+  listClientUploads,
+  previewClientUpload,
+  validateClientUpload,
+  validateClientUploadJoins,
+} from '../../lib/clientUploadStore';
 import { generateDatasetPythonCode } from '../../lib/pythonTemplates/datasetNodeTemplate';
 import MonacoCodeEditor from './MonacoCodeEditor';
 
@@ -72,15 +87,79 @@ function NodeInput({ value, onChange, type = 'text', placeholder = '' }) {
   );
 }
 
-function NodeSelect({ value, onChange, options }) {
+function NodeSelect({ value, onChange, options, disabled = false }) {
   return (
     <select
       value={value ?? ''}
       onChange={(e) => onChange(e.target.value)}
-      className="w-full bg-black/60 border border-[#faebd7]/10 rounded text-[#faebd7] text-[10px] font-mono px-1.5 py-1 outline-none focus:border-[#faebd7]/30"
+      disabled={disabled}
+      className="w-full bg-black/60 border border-[#faebd7]/10 rounded text-[#faebd7] text-[10px] font-mono px-1.5 py-1 outline-none focus:border-[#faebd7]/30 disabled:opacity-50"
     >
       {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
     </select>
+  );
+}
+
+function MultiCheckboxDropdown({ options, value = [], onChange, disabled = false, placeholder = 'Select columns...' }) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDocDown = (e) => {
+      if (!rootRef.current) return;
+      if (!rootRef.current.contains(e.target)) setOpen(false);
+    };
+    document.addEventListener('mousedown', onDocDown);
+    return () => document.removeEventListener('mousedown', onDocDown);
+  }, [open]);
+
+  const selected = Array.isArray(value) ? value : [];
+
+  const toggleOne = (item) => {
+    if (selected.includes(item)) {
+      onChange(selected.filter((s) => s !== item));
+    } else {
+      onChange([...selected, item]);
+    }
+  };
+
+  const summary = selected.length === 0
+    ? placeholder
+    : `${selected.length} selected`;
+
+  return (
+    <div ref={rootRef} className="relative" onClick={(e) => e.stopPropagation()}>
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={() => setOpen((v) => !v)}
+        className="w-full bg-black/60 border border-[#faebd7]/10 rounded text-[#faebd7] text-[10px] font-mono px-2 py-1.5 outline-none focus:border-[#faebd7]/30 disabled:opacity-50 flex items-center justify-between"
+      >
+        <span className="truncate text-left">{summary}</span>
+        {open ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+      </button>
+
+      {open && !disabled && (
+        <div className="absolute left-0 right-0 top-full mt-1 z-20 bg-[#0f0f12] border border-[#faebd7]/15 rounded max-h-36 overflow-auto p-1">
+          {options.length === 0 && <div className="text-[10px] text-[#faebd7]/45 px-1.5 py-1">No columns detected</div>}
+          {options.map((opt) => {
+            const checked = selected.includes(opt);
+            return (
+              <label key={opt} className="flex items-center gap-2 px-1.5 py-1 rounded hover:bg-[#faebd7]/7 cursor-pointer text-[10px] text-[#faebd7] font-mono">
+                <input
+                  type="checkbox"
+                  checked={checked}
+                  onChange={() => toggleOne(opt)}
+                  className="accent-[#faebd7]"
+                />
+                <span className="truncate">{opt}</span>
+              </label>
+            );
+          })}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -98,7 +177,46 @@ function Toggle({ label, value, onChange }) {
   );
 }
 
-function SourceTab({ nodeType, config, onChange, onValidate, onList, onDelete, validation, filesList, busy, onUpload }) {
+function IconHoverAction({ icon: Icon, label, onClick, disabled = false, tone = 'neutral' }) {
+  const toneClass = tone === 'danger'
+    ? 'bg-red-700/30 hover:bg-red-700/45'
+    : tone === 'accent'
+      ? 'bg-indigo-700/30 hover:bg-indigo-700/45'
+      : tone === 'success'
+        ? 'bg-emerald-600/20 border border-emerald-600/20 hover:bg-emerald-600/30'
+        : 'bg-slate-700/40 hover:bg-slate-700/50';
+
+  return (
+    <button
+      onClick={(e) => { e.stopPropagation(); onClick?.(); }}
+      disabled={disabled}
+      title={label}
+      className={`group relative inline-flex items-center px-2 py-1 text-[10px] rounded transition-colors disabled:opacity-50 ${toneClass}`}
+    >
+      <Icon size={12} />
+      <span className="pointer-events-none absolute left-0 top-full mt-1 whitespace-nowrap rounded-md border border-[#faebd7]/15 bg-[#101014] px-2 py-1 text-[10px] text-[#faebd7] opacity-0 shadow-lg transition-opacity duration-150 group-hover:opacity-100">
+        {label}
+      </span>
+    </button>
+  );
+}
+
+function SourceTab({
+  nodeType,
+  config,
+  onChange,
+  onValidate,
+  onList,
+  onDelete,
+  validation,
+  filesList,
+  busy,
+  onUpload,
+  onInspect,
+  inspectResult,
+  onValidateJoins,
+  uploadsList,
+}) {
   const fileRef = useRef(null);
   const [uploading, setUploading] = useState(false);
 
@@ -129,13 +247,14 @@ function SourceTab({ nodeType, config, onChange, onValidate, onList, onDelete, v
     }
   }, [onUpload]);
 
-  const renderPathStatus = (expectDirectory) => {
+  const renderPathStatus = (mode = 'either') => {
     if (!validation) return null;
     if (validation.error) return <div className="text-[10px] text-red-400 mt-1">{validation.error}</div>;
+    if (validation.uploaded) return <div className="text-[10px] text-emerald-400 mt-1">Upload complete.</div>;
     if (validation.deleted) return <div className="text-[10px] text-emerald-400 mt-1">Uploaded folder deleted.</div>;
     if (validation.exists === false) return <div className="text-[10px] text-red-400 mt-1">Path does not exist</div>;
-    if (expectDirectory && validation.exists && validation.isDirectory === false) return <div className="text-[10px] text-red-400 mt-1">Path is not a directory</div>;
-    if (!expectDirectory && validation.exists && validation.isDirectory === true) return <div className="text-[10px] text-red-400 mt-1">Path is a directory, expected a file</div>;
+    if (mode === 'directory' && validation.exists && validation.isDirectory === false) return <div className="text-[10px] text-red-400 mt-1">Path is not a directory</div>;
+    if (mode === 'file' && validation.exists && validation.isDirectory === true) return <div className="text-[10px] text-red-400 mt-1">Path is a directory, expected a file</div>;
     return <div className="text-[10px] text-emerald-400 mt-1">Path looks valid.</div>;
   };
 
@@ -144,18 +263,20 @@ function SourceTab({ nodeType, config, onChange, onValidate, onList, onDelete, v
       <>
         <Field label="Folder Path">
           <NodeInput value={config.path} onChange={(v) => onChange('path', v)} placeholder="./data/uploads/... or /data/images" />
-          <div className="mt-2 flex flex-wrap gap-1.5">
-            <button onClick={(e) => { e.stopPropagation(); triggerUpload(); }} disabled={uploading || busy} className="px-2 py-1 text-[10px] bg-emerald-600/20 hover:bg-emerald-600/30 rounded border border-emerald-600/20 disabled:opacity-50">{uploading ? 'Uploading...' : 'Upload Folder'}</button>
-            <button onClick={(e) => { e.stopPropagation(); onValidate && onValidate(); }} disabled={busy || uploading} className="px-2 py-1 text-[10px] bg-slate-700/40 hover:bg-slate-700/50 rounded disabled:opacity-50">Validate</button>
-            <button onClick={(e) => { e.stopPropagation(); onList && onList(); }} disabled={busy || uploading} className="px-2 py-1 text-[10px] bg-slate-700/40 hover:bg-slate-700/50 rounded disabled:opacity-50">List</button>
-            <button onClick={(e) => { e.stopPropagation(); onDelete && onDelete(); }} disabled={busy || uploading} className="px-2 py-1 text-[10px] bg-red-700/30 hover:bg-red-700/40 rounded disabled:opacity-50">Delete</button>
-            <input ref={fileRef} type="file" multiple onChange={handleFiles} className="hidden" />
+          <div className="mt-2 flex flex-wrap items-center gap-1.5">
+            <IconHoverAction icon={Upload} label="Upload Folder" onClick={triggerUpload} disabled={uploading || busy} tone="success" />
+            <IconHoverAction icon={ShieldCheck} label="Validate" onClick={onValidate} disabled={busy} tone="accent" />
+            <IconHoverAction icon={Search} label="Inspect" onClick={onInspect} disabled={busy} tone="accent" />
+            <IconHoverAction icon={List} label="List" onClick={() => onList && onList()} disabled={busy} />
+            <IconHoverAction icon={Trash2} label="Delete" onClick={onDelete} disabled={busy} tone="danger" />
+            {uploading && <span className="text-[10px] text-[#faebd7]/50">Uploading...</span>}
+            {busy && !uploading && <span className="text-[10px] text-[#faebd7]/50">Working...</span>}
           </div>
-          {renderPathStatus(true)}
-          {busy && <div className="text-[10px] text-[#faebd7]/50 mt-1">Working...</div>}
+          <input ref={fileRef} type="file" multiple onChange={handleFiles} className="hidden" />
+          {renderPathStatus('directory')}
           {filesList && filesList.length > 0 && (
             <div className="mt-2 bg-black/40 px-2 py-1 rounded text-[9px] font-mono max-h-40 overflow-auto">
-              {filesList.slice(0, 50).map((f, i) => <div key={i}>{f}</div>)}
+              {filesList.map((f, i) => <div key={i}>{f}</div>)}
             </div>
           )}
         </Field>
@@ -171,19 +292,315 @@ function SourceTab({ nodeType, config, onChange, onValidate, onList, onDelete, v
   }
 
   if (nodeType === 'dataset.csv') {
+    const mode = config.source_mode || 'folder';
+    const files = Array.isArray(config.files) ? config.files : [];
+    const features = Array.isArray(config.features) && config.features.length > 0
+      ? config.features
+      : (Array.isArray(config.feature_columns) ? config.feature_columns : []);
+    const relations = Array.isArray(config.relations) ? config.relations : [];
+
+    const tableNameFromEntry = (entry) => {
+      const base = String(entry || '').split(/[\\/]/).pop() || '';
+      return base.replace(/\.csv$/i, '').trim();
+    };
+
+    const discoveredFromInspect = inspectResult?.tables ? Object.keys(inspectResult.tables) : [];
+    const discoveredFromValidation = Array.isArray(filesList) ? filesList.map((f) => tableNameFromEntry(f)) : [];
+    const discoveredFromConfig = files.map((f) => tableNameFromEntry(f));
+    const tableNames = Array.from(new Set([
+      ...discoveredFromInspect,
+      ...discoveredFromValidation,
+      ...discoveredFromConfig,
+    ].filter(Boolean)));
+    if (config.primary && !tableNames.includes(config.primary)) tableNames.unshift(config.primary);
+
+    const primaryOptions = [
+      { value: '', label: tableNames.length > 0 ? 'Select table...' : 'No files detected' },
+      ...tableNames.map((name) => ({ value: name, label: name })),
+    ];
+
+    const inspectColumns = Array.isArray(inspectResult?.columns) ? inspectResult.columns : [];
+    const previewColumns = Array.isArray(inspectResult?.preview) && inspectResult.preview.length > 0
+      ? Object.keys(inspectResult.preview[0] || {})
+      : [];
+    const profileColumns = inspectResult?.profile ? Object.keys(inspectResult.profile) : [];
+    const targetColumns = Array.from(new Set([
+      ...inspectColumns,
+      ...previewColumns,
+      ...profileColumns,
+    ].filter(Boolean)));
+    if (config.target_column && !targetColumns.includes(config.target_column)) targetColumns.unshift(config.target_column);
+
+    const targetOptions = [
+      { value: '', label: targetColumns.length > 0 ? 'None' : 'No columns detected' },
+      ...targetColumns.map((name) => ({ value: name, label: name })),
+    ];
+
+    const effectiveDatasetPath = config.client_upload_id
+      ? `client://${config.client_upload_id}`
+      : (config.path || '');
+
+    const tableColumnsByName = inspectResult?.tables
+      ? Object.fromEntries(Object.entries(inspectResult.tables).map(([name, tbl]) => [name, Array.isArray(tbl?.columns) ? tbl.columns : []]))
+      : {};
+
+    const allTableColumns = inspectResult?.tables
+      ? Object.values(inspectResult.tables).flatMap((t) => (Array.isArray(t?.columns) ? t.columns : []))
+      : [];
+    const featureOptions = Array.from(new Set([
+      ...allTableColumns,
+      ...targetColumns,
+      ...features,
+    ].filter(Boolean)));
+
+    const updateRelation = (idx, key, value) => {
+      const next = relations.map((rel, i) => {
+        if (i !== idx) return rel;
+        const nextRel = { ...rel, [key]: value };
+        if (key === 'left' || key === 'right') nextRel.on = '';
+        return nextRel;
+      });
+      onChange('relations', next);
+    };
+
+    const removeRelation = (idx) => {
+      const next = relations.filter((_, i) => i !== idx);
+      onChange('relations', next);
+    };
+
+    const addRelation = () => {
+      const next = [...relations, { left: config.primary || '', right: '', on: '', type: 'left' }];
+      onChange('relations', next);
+    };
+
+    const applySuggestedRelations = () => {
+      const suggestions = Array.isArray(inspectResult?.joinSuggestions) ? inspectResult.joinSuggestions : [];
+      if (suggestions.length === 0) return;
+
+      const chosenPrimary = config.primary || inspectResult?.primary || suggestions[0]?.left || suggestions[0]?.right || '';
+      if (!config.primary && chosenPrimary) onChange('primary', chosenPrimary);
+
+      const normalized = suggestions.map((s) => {
+        const left = String(s?.left || '').trim();
+        const right = String(s?.right || '').trim();
+        const on = String(s?.on || '').trim();
+        const type = String(s?.type || 'left').trim() || 'left';
+        if (!on) return null;
+
+        if (chosenPrimary) {
+          if (left === chosenPrimary) return { left: chosenPrimary, right, on, type };
+          if (right === chosenPrimary) return { left: chosenPrimary, right: left, on, type: 'left' };
+        }
+
+        return left && right ? { left, right, on, type } : null;
+      }).filter(Boolean);
+
+      const unique = [];
+      const seen = new Set();
+      for (const rel of normalized) {
+        const key = `${rel.left}|${rel.right}|${rel.on}|${rel.type}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        unique.push(rel);
+      }
+
+      if (unique.length > 0) onChange('relations', unique);
+    };
+
+    const quickResult = (() => {
+      if (validation?.error) return { tone: 'text-red-300', text: validation.error };
+      if (validation?.joinValid === true) return { tone: 'text-emerald-300', text: 'Join validation passed.' };
+      if (validation?.joinValid === false) return { tone: 'text-amber-300', text: 'Join validation has issues.' };
+      if (inspectResult?.columns?.length > 0) return { tone: 'text-emerald-300', text: `Inspected ${inspectResult.columns.length} columns.` };
+      if (filesList?.length > 0) return { tone: 'text-emerald-300', text: `Detected ${filesList.length} files.` };
+      if (validation?.exists && validation?.isDirectory) return { tone: 'text-emerald-300', text: 'Path exists and is readable.' };
+      return { tone: 'text-[#faebd7]/60', text: 'Run an action to see results here.' };
+    })();
+
     return (
       <>
-        <Field label="File Path">
-          <NodeInput value={config.path} onChange={(v) => onChange('path', v)} placeholder="/data/data.csv" />
-          <div className="mt-2 flex items-center gap-1.5">
-            <button onClick={(e) => { e.stopPropagation(); onValidate && onValidate(); }} disabled={busy} className="px-2 py-1 text-[10px] bg-slate-700/40 hover:bg-slate-700/50 rounded disabled:opacity-50">Validate</button>
+        <Field label="Source Mode">
+          <NodeSelect
+            value={mode}
+            onChange={(v) => onChange('source_mode', v)}
+            options={[{ value: 'folder', label: 'Folder' }, { value: 'files', label: 'Explicit Files' }]}
+          />
+        </Field>
+
+        <Field label="Dataset Path">
+          <NodeInput
+            value={effectiveDatasetPath}
+            onChange={(v) => {
+              if (config.client_upload_id) onChange('client_upload_id', '');
+              onChange('path', v);
+            }}
+            placeholder="./data/uploads/... or ./data/chocolate-sales"
+          />
+          <div className="mt-2 flex flex-wrap items-center gap-1.5">
+            <IconHoverAction icon={Upload} label={uploading ? 'Uploading...' : 'Upload'} onClick={triggerUpload} disabled={uploading || busy} tone="success" />
+            <IconHoverAction icon={ShieldCheck} label="Validate" onClick={onValidate} disabled={busy} tone="accent" />
+            <IconHoverAction icon={List} label="List" onClick={() => onList && onList()} disabled={busy} />
+            <IconHoverAction icon={Search} label="Inspect" onClick={onInspect} disabled={busy} tone="accent" />
+            <IconHoverAction icon={Link2} label="Joins" onClick={onValidateJoins} disabled={busy} tone="accent" />
+            <IconHoverAction icon={Trash2} label="Delete" onClick={onDelete} disabled={busy} tone="danger" />
             {busy && <span className="text-[10px] text-[#faebd7]/50">Working...</span>}
           </div>
-          {renderPathStatus(false)}
+          <input ref={fileRef} type="file" multiple onChange={handleFiles} className="hidden" />
+          {renderPathStatus('either')}
         </Field>
-        <Field label="Target Column"><NodeInput value={config.target_column} onChange={(v) => onChange('target_column', v)} placeholder="label" /></Field>
+
+        <Field label="Latest Result">
+          <div className={`text-[10px] font-mono bg-black/40 px-2 py-1 rounded ${quickResult.tone}`}>{quickResult.text}</div>
+        </Field>
+
+        {mode === 'files' && (
+          <Field label="Files (one per line)">
+            <textarea
+              value={files.join('\n')}
+              onChange={(e) => onChange('files', e.target.value.split(/\r?\n/).map((s) => s.trim()).filter(Boolean))}
+              className="w-full h-16 bg-black/60 border border-[#faebd7]/10 rounded text-[#faebd7] text-[10px] font-mono px-1.5 py-1 outline-none focus:border-[#faebd7]/30 placeholder:text-[#faebd7]/20"
+              placeholder="sales.csv&#10;products.csv&#10;customers.csv"
+            />
+          </Field>
+        )}
+
+        {(inspectResult?.columns?.length > 0 || inspectResult?.joinSuggestions?.length > 0 || inspectResult?.correlations?.length > 0 || inspectResult?.outliers?.length > 0 || (filesList && filesList.length > 0)) && (
+          <Field label="Analysis Results">
+            <div className="space-y-1.5">
+              {inspectResult?.columns?.length > 0 && (
+                <div className="text-[9px] bg-black/40 px-2 py-1 rounded font-mono text-[#faebd7]/70 max-h-24 overflow-auto">
+                  <div>Primary: {inspectResult.primary || '—'}</div>
+                  <div>Rows(sample): {inspectResult.metadata?.rows ?? '—'} | Columns: {inspectResult.metadata?.columns ?? '—'}</div>
+                  <div>Task Suggestion: {inspectResult.metadata?.taskSuggestion || '—'}</div>
+                </div>
+              )}
+
+              {inspectResult?.joinSuggestions?.length > 0 && (
+                <div className="text-[9px] bg-black/40 px-2 py-1 rounded font-mono text-[#faebd7]/70 max-h-20 overflow-auto">
+                  {inspectResult.joinSuggestions.slice(0, 12).map((j, idx) => (
+                    <div key={`${j.left}-${j.right}-${j.on}-${idx}`}>{j.left}.{j.on} {'->'} {j.right}.{j.on}</div>
+                  ))}
+                </div>
+              )}
+
+              {inspectResult?.correlations?.length > 0 && (
+                <div className="text-[9px] bg-black/40 px-2 py-1 rounded font-mono text-[#faebd7]/70 max-h-20 overflow-auto">
+                  {inspectResult.correlations.slice(0, 8).map((c, idx) => (
+                    <div key={`${c.left}-${c.right}-${idx}`}>{c.left} vs {c.right}: {Number(c.value).toFixed(3)}</div>
+                  ))}
+                </div>
+              )}
+
+              {inspectResult?.outliers?.length > 0 && (
+                <div className="text-[9px] bg-black/40 px-2 py-1 rounded font-mono text-[#faebd7]/70 max-h-20 overflow-auto">
+                  {inspectResult.outliers.slice(0, 8).map((o, idx) => (
+                    <div key={`${o.column}-${idx}`}>{o.column}: {o.count} ({(o.ratio * 100).toFixed(1)}%)</div>
+                  ))}
+                </div>
+              )}
+
+              {filesList && filesList.length > 0 && (
+                <div className="text-[9px] bg-black/40 px-2 py-1 rounded font-mono text-[#faebd7]/70 max-h-20 overflow-auto">
+                  {filesList.map((f, i) => <div key={i}>{f}</div>)}
+                </div>
+              )}
+            </div>
+          </Field>
+        )}
+
+        <Field label="Primary Table">
+          <NodeSelect
+            value={config.primary || ''}
+            onChange={(v) => {
+              onChange('primary', v);
+              onChange('target_column', '');
+            }}
+            options={primaryOptions}
+            disabled={tableNames.length === 0}
+          />
+        </Field>
+        <Field label="Target Column">
+          <NodeSelect
+            value={config.target_column || ''}
+            onChange={(v) => onChange('target_column', v)}
+            options={targetOptions}
+            disabled={targetColumns.length === 0}
+          />
+        </Field>
+        <Field label="Features">
+          <MultiCheckboxDropdown
+            options={featureOptions}
+            value={features}
+            onChange={(selected) => onChange('features', selected)}
+            disabled={featureOptions.length === 0}
+            placeholder="Select features..."
+          />
+        </Field>
         <Field label="Delimiter"><NodeSelect value={config.delimiter} onChange={(v) => onChange('delimiter', v)} options={[{ value: ',', label: 'Comma' }, { value: '\t', label: 'Tab' }, { value: ';', label: 'Semicolon' }]} /></Field>
+        <Field label="Missing Strategy"><NodeSelect value={(config.missing && config.missing.strategy) || config.handle_missing || 'drop'} onChange={(v) => { onChange('handle_missing', v); onChange('missing', { ...(config.missing || {}), strategy: v }); }} options={[{ value: 'drop', label: 'Drop Rows' }, { value: 'mean', label: 'Fill Numeric Mean' }]} /></Field>
         <Toggle label="Has Header" value={config.header} onChange={(v) => onChange('header', v)} />
+
+        <Field label="Relations (joins)">
+          <div className="flex flex-col gap-1.5">
+            <div className="flex items-center gap-1.5">
+              <button
+                onClick={(e) => { e.stopPropagation(); applySuggestedRelations(); }}
+                disabled={!Array.isArray(inspectResult?.joinSuggestions) || inspectResult.joinSuggestions.length === 0}
+                className="px-2 py-1 text-[10px] bg-indigo-700/30 hover:bg-indigo-700/45 rounded disabled:opacity-45"
+              >
+                Use Suggested Joins
+              </button>
+            </div>
+
+            {relations.map((rel, idx) => (
+              <div key={`${idx}-${rel.right || ''}-${rel.on || ''}`} className="rounded border border-[#faebd7]/10 bg-black/35 p-1.5">
+                <div className="grid grid-cols-2 gap-1.5 mb-1.5">
+                  <NodeSelect
+                    value={rel.left || config.primary || ''}
+                    onChange={(v) => updateRelation(idx, 'left', v)}
+                    options={[
+                      { value: '', label: tableNames.length > 0 ? 'Left table...' : 'No tables' },
+                      ...tableNames.map((name) => ({ value: name, label: name })),
+                    ]}
+                    disabled={tableNames.length === 0}
+                  />
+                  <NodeSelect
+                    value={rel.right || ''}
+                    onChange={(v) => updateRelation(idx, 'right', v)}
+                    options={[
+                      { value: '', label: tableNames.length > 0 ? 'Right table...' : 'No tables' },
+                      ...tableNames.filter((name) => name !== (rel.left || config.primary || '')).map((name) => ({ value: name, label: name })),
+                    ]}
+                    disabled={tableNames.length === 0}
+                  />
+                </div>
+
+                <div className="grid grid-cols-[1fr_auto_auto] gap-1.5 items-center">
+                  <NodeSelect
+                    value={rel.on || ''}
+                    onChange={(v) => updateRelation(idx, 'on', v)}
+                    options={(() => {
+                      const leftCols = tableColumnsByName[rel.left || config.primary || ''] || [];
+                      const rightCols = tableColumnsByName[rel.right || ''] || [];
+                      const shared = leftCols.length > 0 && rightCols.length > 0
+                        ? leftCols.filter((c) => rightCols.includes(c))
+                        : Array.from(new Set([...(leftCols || []), ...(rightCols || [])]));
+                      const items = shared.length > 0 ? shared : targetColumns;
+                      return [
+                        { value: '', label: items.length > 0 ? 'Join column...' : 'No columns' },
+                        ...items.map((name) => ({ value: name, label: name })),
+                      ];
+                    })()}
+                    disabled={targetColumns.length === 0}
+                  />
+                  <NodeSelect value={rel.type || 'left'} onChange={(v) => updateRelation(idx, 'type', v)} options={[{ value: 'left', label: 'left' }, { value: 'inner', label: 'inner' }, { value: 'outer', label: 'outer' }]} />
+                  <button onClick={(e) => { e.stopPropagation(); removeRelation(idx); }} className="px-2 py-1 text-[9px] bg-red-700/30 hover:bg-red-700/40 rounded text-[#faebd7]">x</button>
+                </div>
+              </div>
+            ))}
+            <button onClick={(e) => { e.stopPropagation(); addRelation(); }} className="px-2 py-1 text-[10px] bg-slate-700/40 hover:bg-slate-700/50 rounded self-start">+ Add Join</button>
+          </div>
+        </Field>
       </>
     );
   }
@@ -192,15 +609,27 @@ function SourceTab({ nodeType, config, onChange, onValidate, onList, onDelete, v
     return (
       <>
         <Field label="File Path">
-          <NodeInput value={config.path} onChange={(v) => onChange('path', v)} placeholder="/data/corpus.txt" />
-          <div className="mt-2 flex items-center gap-1.5">
-            <button onClick={(e) => { e.stopPropagation(); onValidate && onValidate(); }} disabled={busy} className="px-2 py-1 text-[10px] bg-slate-700/40 hover:bg-slate-700/50 rounded disabled:opacity-50">Validate</button>
-            {busy && <span className="text-[10px] text-[#faebd7]/50">Working...</span>}
+          <NodeInput value={config.path} onChange={(v) => onChange('path', v)} placeholder="/data/corpus.txt or client://upload_..." />
+          <div className="mt-2 flex flex-wrap items-center gap-1.5">
+            <IconHoverAction icon={Upload} label="Upload" onClick={triggerUpload} disabled={uploading || busy} tone="success" />
+            <IconHoverAction icon={ShieldCheck} label="Validate" onClick={onValidate} disabled={busy} tone="accent" />
+            <IconHoverAction icon={Search} label="Inspect" onClick={onInspect} disabled={busy} tone="accent" />
+            <IconHoverAction icon={List} label="List Files" onClick={() => onList && onList()} disabled={busy} />
+            <IconHoverAction icon={Trash2} label="Delete" onClick={onDelete} disabled={busy} tone="danger" />
+            {uploading && <span className="text-[10px] text-[#faebd7]/50">Uploading...</span>}
+            {busy && !uploading && <span className="text-[10px] text-[#faebd7]/50">Working...</span>}
           </div>
-          {renderPathStatus(false)}
+          <input ref={fileRef} type="file" multiple onChange={handleFiles} className="hidden" />
+          {renderPathStatus('file')}
+          {filesList && filesList.length > 0 && (
+            <div className="mt-2 bg-black/40 px-2 py-1 rounded text-[9px] font-mono max-h-40 overflow-auto">
+              {filesList.map((f, i) => <div key={i}>{f}</div>)}
+            </div>
+          )}
         </Field>
         <Field label="Format"><NodeSelect value={config.file_format} onChange={(v) => onChange('file_format', v)} options={[{ value: 'txt', label: 'TXT' }, { value: 'csv', label: 'CSV' }, { value: 'jsonl', label: 'JSONL' }]} /></Field>
         <Field label="Text Column"><NodeInput value={config.text_column} onChange={(v) => onChange('text_column', v)} placeholder="text" /></Field>
+        <Field label="Label Column"><NodeInput value={config.label_column} onChange={(v) => onChange('label_column', v)} placeholder="label" /></Field>
         <Field label="Tokenizer"><NodeSelect value={config.tokenizer} onChange={(v) => onChange('tokenizer', v)} options={[{ value: 'whitespace', label: 'Whitespace' }, { value: 'bpe', label: 'BPE' }, { value: 'wordpiece', label: 'WordPiece' }, { value: 'custom', label: 'Custom' }]} /></Field>
         <Field label="Max Length"><NodeInput type="number" value={config.max_length} onChange={(v) => onChange('max_length', Number(v))} /></Field>
       </>
@@ -211,12 +640,23 @@ function SourceTab({ nodeType, config, onChange, onValidate, onList, onDelete, v
     return (
       <>
         <Field label="File Path">
-          <NodeInput value={config.path} onChange={(v) => onChange('path', v)} placeholder="/data/data.json" />
-          <div className="mt-2 flex items-center gap-1.5">
-            <button onClick={(e) => { e.stopPropagation(); onValidate && onValidate(); }} disabled={busy} className="px-2 py-1 text-[10px] bg-slate-700/40 hover:bg-slate-700/50 rounded disabled:opacity-50">Validate</button>
-            {busy && <span className="text-[10px] text-[#faebd7]/50">Working...</span>}
+          <NodeInput value={config.path} onChange={(v) => onChange('path', v)} placeholder="/data/data.json or client://upload_..." />
+          <div className="mt-2 flex flex-wrap items-center gap-1.5">
+            <IconHoverAction icon={Upload} label="Upload" onClick={triggerUpload} disabled={uploading || busy} tone="success" />
+            <IconHoverAction icon={ShieldCheck} label="Validate" onClick={onValidate} disabled={busy} tone="accent" />
+            <IconHoverAction icon={Search} label="Inspect" onClick={onInspect} disabled={busy} tone="accent" />
+            <IconHoverAction icon={List} label="List Files" onClick={() => onList && onList()} disabled={busy} />
+            <IconHoverAction icon={Trash2} label="Delete" onClick={onDelete} disabled={busy} tone="danger" />
+            {uploading && <span className="text-[10px] text-[#faebd7]/50">Uploading...</span>}
+            {busy && !uploading && <span className="text-[10px] text-[#faebd7]/50">Working...</span>}
           </div>
-          {renderPathStatus(false)}
+          <input ref={fileRef} type="file" multiple onChange={handleFiles} className="hidden" />
+          {renderPathStatus('file')}
+          {filesList && filesList.length > 0 && (
+            <div className="mt-2 bg-black/40 px-2 py-1 rounded text-[9px] font-mono max-h-40 overflow-auto">
+              {filesList.map((f, i) => <div key={i}>{f}</div>)}
+            </div>
+          )}
         </Field>
         <Field label="Format"><NodeSelect value={config.file_format} onChange={(v) => onChange('file_format', v)} options={[{ value: 'json', label: 'JSON' }, { value: 'jsonl', label: 'JSONL' }]} /></Field>
         <Field label="Data Key"><NodeInput value={config.data_key} onChange={(v) => onChange('data_key', v)} placeholder="data.records" /></Field>
@@ -268,9 +708,32 @@ function PreviewTab({ config, nodeType, previewing, onRunPreview, previewResult 
     if (!previewResult) return '';
     if (previewResult.error) return `Error: ${previewResult.error}`;
     if (previewResult.uploaded) return `Uploaded: ${previewResult.uploaded}`;
+    if (previewResult.type === 'image') return `📷 ${previewResult.count} images`;
+    if (previewResult.type === 'text') return `📄 ${previewResult.count} text records`;
+    if (previewResult.type === 'json') return `📋 ${previewResult.count} records ${previewResult.is_tabular ? `• ${previewResult.columns?.length || 0} cols` : ''}`;
     if (Array.isArray(previewResult)) return `Items: ${previewResult.length}`;
+    if (Array.isArray(previewResult.rows)) return `Rows: ${previewResult.rows.length}`;
     if (typeof previewResult === 'object') return 'Preview ready';
     return String(previewResult);
+  })();
+
+  const csvRunSummary = (() => {
+    if (nodeType !== 'dataset.csv' || !previewResult || previewResult.error) return null;
+
+    const rows = Array.isArray(previewResult.rows) ? previewResult.rows : [];
+    const metadata = previewResult.metadata || {};
+    const target = metadata.target || config.target_column || null;
+    const columns = Array.isArray(metadata.columnsList)
+      ? metadata.columnsList
+      : Object.keys(rows[0] || {}).filter((c) => c !== '_target');
+
+    let features = Array.isArray(metadata.features) ? metadata.features : [];
+    if (features.length === 0) {
+      const configured = Array.isArray(config.features) ? config.features : (Array.isArray(config.feature_columns) ? config.feature_columns : []);
+      features = configured.length > 0 ? configured.filter((c) => columns.includes(c) && c !== target) : columns.filter((c) => c !== target);
+    }
+
+    return { columns, features, target };
   })();
 
   return (
@@ -289,47 +752,191 @@ function PreviewTab({ config, nodeType, previewing, onRunPreview, previewResult 
         <div className="text-[10px] text-[#faebd7]/50">{previewSummary}</div>
       </div>
 
+      {csvRunSummary && (
+        <div className="mt-2 space-y-1">
+          <div className="text-[9px] bg-black/40 px-2 py-1 rounded font-mono text-[#faebd7]/75">
+            <span className="text-[#faebd7]/45">Target:</span> {csvRunSummary.target || 'None'}
+          </div>
+          <div className="text-[9px] bg-black/40 px-2 py-1 rounded font-mono text-[#faebd7]/75 max-h-16 overflow-auto">
+            <div className="text-[#faebd7]/45 mb-0.5">Features in run:</div>
+            {csvRunSummary.features.length > 0 ? csvRunSummary.features.join(', ') : 'None'}
+          </div>
+          <div className="text-[9px] bg-black/40 px-2 py-1 rounded font-mono text-[#faebd7]/75 max-h-16 overflow-auto">
+            <div className="text-[#faebd7]/45 mb-0.5">Result columns:</div>
+            {csvRunSummary.columns.length > 0 ? csvRunSummary.columns.join(', ') : 'None'}
+          </div>
+        </div>
+      )}
+
       {previewResult && Array.isArray(previewResult) && (
-        <div className="mt-2 grid grid-cols-1 gap-1">
-          {previewResult.slice(0, 5).map((it, i) => (
-            <div key={i} className="text-[9px] bg-black/40 px-2 py-1 rounded font-mono text-[#faebd7]/70">
-              {it.path ? it.path : JSON.stringify(it)} {it.label ? ` - ${it.label}` : ''}
+        <div className="mt-2">
+          <div className="text-[9px] text-[#faebd7]/50 mb-1 font-mono uppercase">Items ({previewResult.length} total)</div>
+          <div className="space-y-0.5">
+            {previewResult.slice(0, 5).map((it, i) => (
+              <div key={i} className="text-[8px] bg-black/40 border border-[#faebd7]/10 px-2 py-1 rounded font-mono text-[#faebd7]/70">
+                {it.path && <span className="text-[#faebd7]/90">{it.path}</span>}
+                {it.label && <span className="text-[#faebd7]/50"> ({it.label})</span>}
+                {!it.path && !it.label && <span>{JSON.stringify(it).substring(0, 60)}…</span>}
+              </div>
+            ))}
+          </div>
+          {previewResult.length > 5 && (
+            <div className="text-[8px] text-[#faebd7]/40 mt-1 font-mono">
+              … and {previewResult.length - 5} more items
             </div>
-          ))}
+          )}
+        </div>
+      )}
+
+      {previewResult && Array.isArray(previewResult.rows) && previewResult.rows.length > 0 && (
+        <div className="mt-3">
+          <div className="text-[9px] text-[#faebd7]/50 mb-1 font-mono uppercase">Data Preview (first 5 rows)</div>
+          <div className="border border-[#faebd7]/20 rounded overflow-hidden bg-black/60">
+            {/* Table Header */}
+            <div className="grid gap-px bg-[#faebd7]/10 border-b border-[#faebd7]/20" style={{ gridTemplateColumns: `repeat(${Math.min(Object.keys(previewResult.rows[0] || {}).length, 8)}, minmax(60px, 1fr))` }}>
+              {Object.keys(previewResult.rows[0] || {}).slice(0, 8).map((col) => (
+                <div key={col} className="px-2 py-1 text-[8px] font-mono font-semibold text-[#faebd7]/80 bg-black/40 whitespace-nowrap overflow-hidden text-ellipsis">
+                  {col}
+                </div>
+              ))}
+            </div>
+            {/* Table Rows */}
+            {previewResult.rows.slice(0, 5).map((row, idx) => (
+              <div key={idx} className="grid gap-px border-t border-[#faebd7]/10" style={{ gridTemplateColumns: `repeat(${Math.min(Object.keys(row || {}).length, 8)}, minmax(60px, 1fr))` }}>
+                {Object.keys(row || {}).slice(0, 8).map((col) => {
+                  const val = row[col];
+                  const displayVal = val === null ? '∅' : val === undefined ? '—' : String(val).length > 20 ? String(val).substring(0, 17) + '…' : String(val);
+                  return (
+                    <div key={col} className="px-2 py-1 text-[8px] font-mono text-[#faebd7]/70 bg-black/20 whitespace-nowrap overflow-hidden text-ellipsis" title={String(val)}>
+                      {displayVal}
+                    </div>
+                  );
+                })}
+              </div>
+            ))}
+          </div>
+          {Object.keys(previewResult.rows[0] || {}).length > 8 && (
+            <div className="text-[8px] text-[#faebd7]/40 mt-1 font-mono">
+              ... and {Object.keys(previewResult.rows[0] || {}).length - 8} more columns
+            </div>
+          )}
         </div>
       )}
 
       {previewResult && !Array.isArray(previewResult) && !previewResult.error && (
-        <div className="mt-2 text-[9px] bg-black/40 px-2 py-1 rounded font-mono text-[#faebd7]/70 whitespace-pre-wrap break-all">
-          {JSON.stringify(previewResult, null, 2)}
+        <div className="mt-2">
+          <div className="text-[9px] text-[#faebd7]/50 mb-1 font-mono uppercase">Result</div>
+          {previewResult.type === 'image' && previewResult.files && (
+            <div className="bg-black/40 border border-[#faebd7]/10 rounded overflow-hidden">
+              <div className="grid grid-cols-1 gap-px">
+                <div className="px-2 py-1 text-[8px] font-mono text-[#faebd7]/70 bg-[#faebd7]/5">
+                  📷 {previewResult.count} images found
+                </div>
+                {previewResult.files.slice(0, 8).map((img, idx) => (
+                  <div key={idx} className="px-2 py-1 text-[8px] font-mono text-[#faebd7]/70 bg-black/20 border-t border-[#faebd7]/10 whitespace-nowrap overflow-hidden text-ellipsis" title={img.path}>
+                    {img.path.split('/').pop()} <span className="text-[#faebd7]/40">({(img.size / 1024).toFixed(1)} KB)</span>
+                  </div>
+                ))}
+                {previewResult.count > 8 && (
+                  <div className="px-2 py-1 text-[8px] text-[#faebd7]/40 bg-black/20 border-t border-[#faebd7]/10">
+                    … and {previewResult.count - 8} more
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+          {previewResult.type === 'text' && previewResult.records && (
+            <div className="bg-black/40 border border-[#faebd7]/10 rounded overflow-hidden">
+              <div className="grid grid-cols-1 gap-px">
+                <div className="px-2 py-1 text-[8px] font-mono text-[#faebd7]/70 bg-[#faebd7]/5">
+                  📄 {previewResult.count} text records from {previewResult.file_count} file(s)
+                </div>
+                {previewResult.records.slice(0, 5).map((record, idx) => (
+                  <div key={idx} className="px-2 py-1 text-[8px] font-mono text-[#faebd7]/70 bg-black/20 border-t border-[#faebd7]/10">
+                    <div className="truncate text-[#faebd7]/80">
+                      {String(record.text || record.label || '—').substring(0, 80)}
+                      {String(record.text || record.label || '—').length > 80 ? '…' : ''}
+                    </div>
+                    {record.source && <div className="text-[#faebd7]/40 text-[7px]">{record.source}</div>}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          {previewResult.type === 'json' && previewResult.records && (
+            <div className="bg-black/40 border border-[#faebd7]/10 rounded overflow-hidden">
+              <div className="grid grid-cols-1 gap-px">
+                <div className="px-2 py-1 text-[8px] font-mono text-[#faebd7]/70 bg-[#faebd7]/5">
+                  {previewResult.is_tabular ? '📊' : '📋'} {previewResult.count} records {previewResult.is_tabular && `• ${previewResult.columns.length} columns`}
+                </div>
+                {previewResult.is_tabular && previewResult.columns.length > 0 && (
+                  <div className="px-2 py-0.5 text-[7px] font-mono text-[#faebd7]/50 bg-black/20 border-t border-[#faebd7]/10 max-h-10 overflow-auto">
+                    Columns: {previewResult.columns.join(', ')}
+                  </div>
+                )}
+                {previewResult.records.slice(0, 4).map((record, idx) => (
+                  <div key={idx} className="px-2 py-1 text-[8px] font-mono text-[#faebd7]/70 bg-black/20 border-t border-[#faebd7]/10 max-h-12 overflow-auto">
+                    {typeof record === 'object' ? (
+                      <div className="text-[7px] space-y-0.5">
+                        {Object.entries(record)
+                          .slice(0, 3)
+                          .map(([k, v]) => (
+                            <div key={k} className="flex gap-1">
+                              <span className="text-[#faebd7]/50 flex-shrink-0">{k}:</span>
+                              <span className="truncate text-[#faebd7]/80">{String(v).substring(0, 40)}</span>
+                            </div>
+                          ))}
+                        {Object.keys(record).length > 3 && <div className="text-[#faebd7]/40">…</div>}
+                      </div>
+                    ) : (
+                      String(record).substring(0, 60)
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          {!previewResult.type && (
+            <div className="bg-black/40 border border-[#faebd7]/10 rounded px-2 py-1.5 text-[8px] font-mono text-[#faebd7]/70 max-h-32 overflow-auto whitespace-pre-wrap break-words">
+              {typeof previewResult === 'object' ? JSON.stringify(previewResult, null, 2) : String(previewResult)}
+            </div>
+          )}
         </div>
       )}
     </div>
   );
 }
 
-function CodeTab({ pythonCode, onCodeChange, onResetCode }) {
+function CodeTab({ pythonCode, onCodeChange, onResetCode, readOnly = false, dockItems = [], activeDockId = '', onDockSelect, onExpandedChange }) {
   return (
     <MonacoCodeEditor
       title="Generated Python Template"
       language="python"
       value={pythonCode}
-      onChange={onCodeChange}
+      onChange={readOnly ? undefined : onCodeChange}
       onReset={onResetCode}
+      readOnly={readOnly}
       height={180}
+      dockItems={dockItems}
+      activeDockId={activeDockId}
+      onDockSelect={onDockSelect}
+      onExpandedChange={onExpandedChange}
     />
   );
 }
 
 export default function DatasetNode({ data, id, selected }) {
-  const { nodeModel } = data;
+  const { nodeModel, collapsed: storeCollapsed } = data;
   const { type, inputs = [], outputs = [], config = {}, label } = nodeModel;
 
   const [activeTab, setActiveTab] = useState('Source');
-  const [collapsed, setCollapsed] = useState(false);
+  const toggleNodeCollapse = useUIStore((s) => s.toggleNodeCollapse);
+  const collapsed = !!storeCollapsed;
   const [localConfig, setLocalConfig] = useState(config);
+  const localConfigRef = useRef(config);
   const [pythonCode, setPythonCode] = useState(() => nodeModel.pythonCode || generateDatasetPythonCode(type, config));
   const [manualCodeOverride, setManualCodeOverride] = useState(false);
+  const [codeViewNodeId, setCodeViewNodeId] = useState(id);
 
   const updateNodeConfig = useExecutionStore((s) => s.updateNodeConfig);
   const updateExecutionNode = useExecutionStore((s) => s.updateExecutionNode);
@@ -340,15 +947,53 @@ export default function DatasetNode({ data, id, selected }) {
   const [previewResult, setPreviewResult] = useState(null);
   const [validation, setValidation] = useState(null);
   const [filesList, setFilesList] = useState(null);
+  const [inspectResult, setInspectResult] = useState(null);
+  const [uploadsList, setUploadsList] = useState([]);
   const [busyAction, setBusyAction] = useState(false);
+  const [codeExpanded, setCodeExpanded] = useState(false);
 
   const accent = TYPE_HEX[type] ?? '#faebd7';
   const Icon = TYPE_ICONS[type] ?? Database;
 
+  useEffect(() => {
+    if (codeViewNodeId !== id && !execNodes[codeViewNodeId]) {
+      setCodeViewNodeId(id);
+    }
+  }, [codeViewNodeId, execNodes, id]);
+
+  const dockItems = useMemo(() => {
+    const items = Object.entries(execNodes || {})
+      .filter(([, node]) => typeof node?.pythonCode === 'string' && node.pythonCode.length > 0)
+      .map(([nodeId, node]) => ({
+        id: nodeId,
+        label: node?.label || node?.type || nodeId,
+        subtitle: node?.type || '',
+      }));
+
+    const uniq = [];
+    const seen = new Set();
+    for (const item of items) {
+      if (seen.has(item.id)) continue;
+      seen.add(item.id);
+      uniq.push(item);
+    }
+    return uniq;
+  }, [execNodes]);
+
+  const displayedCode = codeViewNodeId === id
+    ? pythonCode
+    : (execNodes?.[codeViewNodeId]?.pythonCode || '');
+  const isDockReadOnly = codeViewNodeId !== id;
+
+  useEffect(() => {
+    localConfigRef.current = localConfig;
+  }, [localConfig]);
+
   const handleChange = useCallback((key, value) => {
-    const nextConfig = { ...localConfig, [key]: value };
+    const nextConfig = { ...localConfigRef.current, [key]: value };
     const nextPythonCode = generateDatasetPythonCode(type, nextConfig);
 
+    localConfigRef.current = nextConfig;
     setLocalConfig(nextConfig);
     if (!manualCodeOverride) setPythonCode(nextPythonCode);
 
@@ -357,7 +1002,7 @@ export default function DatasetNode({ data, id, selected }) {
 
     if (data?.nodeModel?.config) data.nodeModel.config[key] = value;
     if (data?.nodeModel) data.nodeModel.pythonCode = manualCodeOverride ? pythonCode : nextPythonCode;
-  }, [localConfig, type, manualCodeOverride, pythonCode, updateNodeConfig, updateExecutionNode, id, data]);
+  }, [type, manualCodeOverride, pythonCode, updateNodeConfig, updateExecutionNode, id, data]);
 
   const handleCodeChange = useCallback((nextCode) => {
     setPythonCode(nextCode);
@@ -385,6 +1030,23 @@ export default function DatasetNode({ data, id, selected }) {
     setPreviewing(true);
     setPreviewResult(null);
     try {
+      if (type === 'dataset.csv' && localConfig.client_upload_id) {
+        const sample = await previewClientUpload(localConfig.client_upload_id, {
+          delimiter: localConfig.delimiter || ',',
+          header: localConfig.header !== false,
+          primary: localConfig.primary,
+          relations: Array.isArray(localConfig.relations) ? localConfig.relations : [],
+          target_column: localConfig.target_column,
+          features: Array.isArray(localConfig.features)
+            ? localConfig.features
+            : (Array.isArray(localConfig.feature_columns) ? localConfig.feature_columns : []),
+          missing: localConfig.missing || { strategy: localConfig.handle_missing || 'drop' },
+          n: count,
+        });
+        setPreviewResult(sample);
+        return;
+      }
+
       const graph = { nodes: execNodes, edges: execEdges };
       const res = await previewNode(graph, id, count);
       setPreviewResult(res?.sample ?? res);
@@ -397,6 +1059,13 @@ export default function DatasetNode({ data, id, selected }) {
 
   const validateCurrentPath = useCallback(async () => {
     const p = localConfig.path;
+    if (type === 'dataset.csv' && localConfig.client_upload_id) {
+      const res = await validateClientUpload(localConfig.client_upload_id);
+      setValidation(res);
+      if (res && Array.isArray(res.files)) setFilesList(res.files);
+      return;
+    }
+
     if (!p) {
       setValidation({ error: 'No path configured' });
       return;
@@ -411,9 +1080,21 @@ export default function DatasetNode({ data, id, selected }) {
     } finally {
       setBusyAction(false);
     }
-  }, [localConfig.path]);
+  }, [localConfig.path, localConfig.client_upload_id, type]);
 
-  const listCurrentPath = useCallback(async () => {
+  const listCurrentPath = useCallback(async (mode = 'files') => {
+    if (mode === 'uploads') {
+      setBusyAction(true);
+      try {
+        const res = await apiListUploads();
+        const serverUploads = res?.ok && Array.isArray(res.datasets) ? res.datasets : [];
+        const clientUploads = await listClientUploads();
+        setUploadsList([...clientUploads, ...serverUploads]);
+      } finally {
+        setBusyAction(false);
+      }
+      return;
+    }
     await validateCurrentPath();
   }, [validateCurrentPath]);
 
@@ -441,10 +1122,211 @@ export default function DatasetNode({ data, id, selected }) {
     }
   }, [localConfig.path, handleChange]);
 
+  const listUploads = useCallback(async () => {
+    setBusyAction(true);
+    try {
+      const res = await apiListUploads();
+      const serverUploads = res?.ok && Array.isArray(res.datasets) ? res.datasets : [];
+      const clientUploads = await listClientUploads();
+      setUploadsList([...clientUploads, ...serverUploads]);
+    } catch {
+      setUploadsList(await listClientUploads());
+    } finally {
+      setBusyAction(false);
+    }
+  }, []);
+
+  const inspectCsvConfig = useCallback(async () => {
+    if (type !== 'dataset.csv') return;
+    const files = Array.isArray(localConfig.files) ? localConfig.files : [];
+    const hasPath = !!String(localConfig.path || '').trim();
+    const hasClientUpload = !!localConfig.client_upload_id;
+    if (!hasPath && files.length === 0 && !hasClientUpload) {
+      setValidation({ error: 'Set a CSV path or files before inspect.' });
+      return;
+    }
+    setBusyAction(true);
+    try {
+      if (hasClientUpload) {
+        const res = await inspectClientUpload(localConfig.client_upload_id, {
+          delimiter: localConfig.delimiter || ',',
+          header: localConfig.header !== false,
+          primary: localConfig.primary,
+          target_column: localConfig.target_column,
+        });
+        setInspectResult(res);
+        if (!localConfig.primary && res.primary) handleChange('primary', res.primary);
+        setValidation({ exists: true, isDirectory: true, clientOnly: true });
+        if (Array.isArray(res?.tables?.[res.primary]?.rows)) {
+          setFilesList(Object.values(res.tables).map((t) => t.file));
+        }
+        return;
+      }
+
+      const payload = {
+        path: localConfig.path,
+        files,
+        delimiter: localConfig.delimiter || ',',
+        header: localConfig.header !== false,
+        primary: localConfig.primary,
+        target_column: localConfig.target_column,
+      };
+      const res = await apiInspectCsv(payload);
+      if (res?.ok) {
+        setInspectResult(res);
+        if (!localConfig.primary && res.primary) handleChange('primary', res.primary);
+      } else {
+        setValidation({ error: res?.error || 'CSV inspect failed' });
+      }
+    } catch (err) {
+      setValidation({ error: String(err) });
+    } finally {
+      setBusyAction(false);
+    }
+  }, [type, localConfig, handleChange]);
+
+  const ensureCsvMetadata = useCallback(async () => {
+    if (type !== 'dataset.csv') return;
+    const files = Array.isArray(localConfig.files) ? localConfig.files : [];
+    const hasPath = !!String(localConfig.path || '').trim();
+    const hasClientUpload = !!localConfig.client_upload_id;
+    if (!hasPath && files.length === 0 && !hasClientUpload) return;
+
+    try {
+      if (hasClientUpload) {
+        const res = await inspectClientUpload(localConfig.client_upload_id, {
+          delimiter: localConfig.delimiter || ',',
+          header: localConfig.header !== false,
+          primary: localConfig.primary,
+          target_column: localConfig.target_column,
+        });
+        if (res?.ok) {
+          setInspectResult(res);
+          if (!localConfig.primary && res.primary) handleChange('primary', res.primary);
+          if (Array.isArray(res?.tables?.[res.primary]?.rows)) {
+            setFilesList(Object.values(res.tables).map((t) => t.file));
+          }
+        }
+        return;
+      }
+
+      const payload = {
+        path: localConfig.path,
+        files,
+        delimiter: localConfig.delimiter || ',',
+        header: localConfig.header !== false,
+        primary: localConfig.primary,
+        target_column: localConfig.target_column,
+      };
+      const res = await apiInspectCsv(payload);
+      if (res?.ok) {
+        setInspectResult(res);
+        if (!localConfig.primary && res.primary) handleChange('primary', res.primary);
+      }
+    } catch {
+      // Best-effort metadata fetch for dropdowns; keep UI responsive on failure.
+    }
+  }, [type, localConfig, handleChange]);
+
+  const validateJoins = useCallback(async () => {
+    if (type !== 'dataset.csv') return;
+    const files = Array.isArray(localConfig.files) ? localConfig.files : [];
+    const hasPath = !!String(localConfig.path || '').trim();
+    const hasClientUpload = !!localConfig.client_upload_id;
+    if (!hasPath && files.length === 0 && !hasClientUpload) {
+      setValidation({ error: 'Set a CSV path or files before join validation.' });
+      return;
+    }
+    setBusyAction(true);
+    try {
+      if (hasClientUpload) {
+        const res = await validateClientUploadJoins(localConfig.client_upload_id, {
+          delimiter: localConfig.delimiter || ',',
+          header: localConfig.header !== false,
+          primary: localConfig.primary,
+          relations: Array.isArray(localConfig.relations) ? localConfig.relations : [],
+        });
+        setValidation({
+          exists: true,
+          isDirectory: true,
+          joinValidation: res.validation,
+          joinValid: res.valid,
+          clientOnly: true,
+        });
+        if (inspectResult) {
+          setInspectResult({ ...inspectResult, joinSuggestions: res.suggestions || inspectResult.joinSuggestions || [] });
+        }
+        return;
+      }
+
+      const payload = {
+        path: localConfig.path,
+        files,
+        delimiter: localConfig.delimiter || ',',
+        header: localConfig.header !== false,
+        primary: localConfig.primary,
+        relations: Array.isArray(localConfig.relations) ? localConfig.relations : [],
+      };
+      const res = await apiValidateCsvJoins(payload);
+      if (res?.ok) {
+        setValidation({
+          exists: true,
+          isDirectory: true,
+          joinValidation: res.validation,
+          joinValid: res.valid,
+        });
+        if (inspectResult) {
+          setInspectResult({ ...inspectResult, joinSuggestions: res.suggestions || inspectResult.joinSuggestions || [] });
+        }
+      } else {
+        setValidation({ error: res?.error || 'Join validation failed' });
+      }
+    } catch (err) {
+      setValidation({ error: String(err) });
+    } finally {
+      setBusyAction(false);
+    }
+  }, [type, localConfig, inspectResult]);
+
   const handleUpload = useCallback(async (files) => {
     setPreviewing(true);
     setPreviewResult(null);
     try {
+      if (type === 'dataset.csv') {
+        const created = await createClientUpload(files);
+        handleChange('client_upload_id', created.uploadId);
+        handleChange('path', `client://${created.uploadId}`);
+        handleChange('files', created.csvFiles || []);
+        setFilesList(created.files || []);
+        try {
+          const inspected = await inspectClientUpload(created.uploadId, {
+            delimiter: localConfig.delimiter || ',',
+            header: localConfig.header !== false,
+            primary: localConfig.primary,
+            target_column: localConfig.target_column,
+          });
+          if (inspected?.ok) {
+            setInspectResult(inspected);
+            if (!localConfig.primary && inspected.primary) handleChange('primary', inspected.primary);
+          }
+        } catch {
+          // Non-blocking: upload succeeded even if inspect metadata fetch fails.
+        }
+        setValidation({
+          ok: true,
+          exists: true,
+          isDirectory: true,
+          isFile: false,
+          count: (created.files || []).length,
+          files: created.files || [],
+          uploaded: true,
+          clientOnly: true,
+        });
+        listUploads();
+        setPreviewResult({ uploaded: `client://${created.uploadId}`, clientOnly: true });
+        return;
+      }
+
       const fd = new FormData();
       for (const f of files) {
         const rel = f.webkitRelativePath || f.name;
@@ -458,13 +1340,47 @@ export default function DatasetNode({ data, id, selected }) {
       }
       const uploadPath = json.uploadPath;
       handleChange('path', `./${uploadPath}`);
+      const uploadedFileList = files.map((f) => f.webkitRelativePath || f.name).filter(Boolean);
+      if (uploadedFileList.length > 0) {
+        setFilesList(uploadedFileList);
+      }
+      try {
+        const pathCheck = await apiValidatePath(`./${uploadPath}`);
+        setValidation({ ...(pathCheck || {}), uploaded: true });
+        if (pathCheck && Array.isArray(pathCheck.files) && pathCheck.files.length > 0) {
+          setFilesList(pathCheck.files);
+        }
+      } catch {
+        setValidation({ uploaded: true, exists: true, isDirectory: true });
+      }
+      listUploads();
       setPreviewResult({ uploaded: uploadPath });
     } catch (err) {
       setPreviewResult({ error: String(err) });
     } finally {
       setPreviewing(false);
     }
-  }, [handleChange]);
+  }, [handleChange, listUploads, type]);
+
+  useEffect(() => {
+    if (type !== 'dataset.csv') return;
+    listUploads();
+  }, [type, listUploads]);
+
+  useEffect(() => {
+    if (type !== 'dataset.csv') return;
+    ensureCsvMetadata();
+  }, [
+    type,
+    localConfig.path,
+    localConfig.client_upload_id,
+    localConfig.primary,
+    localConfig.delimiter,
+    localConfig.header,
+    localConfig.target_column,
+    JSON.stringify(localConfig.files || []),
+    ensureCsvMetadata,
+  ]);
 
   return (
     <div
@@ -486,7 +1402,7 @@ export default function DatasetNode({ data, id, selected }) {
         />
       ))}
 
-      <div className="flex items-center justify-between px-2.5 py-2 cursor-grab active:cursor-grabbing" style={{ background: `${accent}18`, borderBottom: `1px solid ${accent}30` }} onClick={() => setCollapsed((c) => !c)}>
+      <div className="flex items-center justify-between px-2.5 py-2 cursor-grab active:cursor-grabbing" style={{ background: `${accent}18`, borderBottom: `1px solid ${accent}30` }} onClick={() => toggleNodeCollapse(id)}>
         <div className="flex items-center gap-2">
           <div className="w-5.5 h-5.5 rounded-[5px] flex items-center justify-center shrink-0" style={{ background: `${accent}28` }}>
             <Icon size={12} color={accent} />
@@ -527,9 +1443,27 @@ export default function DatasetNode({ data, id, selected }) {
                 filesList={filesList}
                 busy={busyAction}
                 onUpload={handleUpload}
+                onInspect={inspectCsvConfig}
+                inspectResult={inspectResult}
+                onValidateJoins={validateJoins}
+                uploadsList={uploadsList}
               />
             )}
-            {activeTab === 'Code' && <CodeTab pythonCode={pythonCode} onCodeChange={handleCodeChange} onResetCode={resetCodeFromTemplate} />}
+            <div className={activeTab === 'Code' ? '' : 'hidden'}>
+              {codeExpanded && (
+                <div className="mb-1 text-[9px] text-[#faebd7]/55 font-mono">Code is opened in floating fullscreen panel.</div>
+              )}
+              <CodeTab
+                pythonCode={displayedCode}
+                onCodeChange={handleCodeChange}
+                onResetCode={resetCodeFromTemplate}
+                readOnly={isDockReadOnly}
+                dockItems={dockItems}
+                activeDockId={codeViewNodeId}
+                onDockSelect={(nodeId) => setCodeViewNodeId(String(nodeId))}
+                onExpandedChange={setCodeExpanded}
+              />
+            </div>
             {activeTab === 'Preview' && <PreviewTab nodeType={type} config={localConfig} previewing={previewing} onRunPreview={() => runPreview(5)} previewResult={previewResult} />}
           </div>
 

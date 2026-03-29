@@ -15,12 +15,16 @@ export default function AnnotationNode({ id, data, selected }) {
   };
 
   return (
-    <div className={`p-2 transition-all duration-200 ${selected ? 'ring-2 ring-primary/50' : ''}`}>
+    <div className={`p-2 transition-all duration-200 rounded-md bg-black/15 ${selected ? 'ring-2 ring-primary/50' : ''}`}>
+      <div className="flex items-center justify-between mb-1 px-1 py-0.5 text-[10px] font-mono text-[#faebd7]/55 cursor-move select-none">
+        <span>Text Note</span>
+        <span className="tracking-[2px]">:::</span>
+      </div>
       <textarea
         value={text}
         onChange={handleChange}
         placeholder="Type here..."
-        className="bg-transparent border-none outline-none resize-none overflow-hidden font-mono text-sm leading-relaxed min-w-[120px]"
+        className="nodrag bg-transparent border-none outline-none resize-none overflow-hidden font-mono text-sm leading-relaxed min-w-[120px]"
         style={{ 
           color: color,
           width: 'auto',

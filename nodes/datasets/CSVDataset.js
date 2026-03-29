@@ -25,16 +25,25 @@ export const CSVDatasetDef = {
 
   defaultConfig: {
     // Source
+    source: 'local',
+    source_mode: 'folder',
     path: '',
+    files: [],
+    primary: '',
+    relations: [],
     delimiter: ',',
     header: true,
     target_column: '',
     feature_columns: [],    // [] = all except target
+    features: [],
+    column_types: {},
     skip_rows: 0,
     encoding: 'utf-8',
 
-    normalize: 'standard',
+    normalize: 'none',
     handle_missing: 'drop',
+    missing: { strategy: 'drop' },
+    preprocessing: {},
   },
 
   metadata: {
@@ -42,5 +51,7 @@ export const CSVDatasetDef = {
     num_features: null,
     num_samples: null,
     column_types: {},
+    target: null,
+    tables: [],
   },
 };

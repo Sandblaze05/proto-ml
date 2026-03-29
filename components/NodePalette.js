@@ -104,10 +104,16 @@ export const CATEGORIES = [
 // ── Palette item ──────────────────────────────────────────────────────────────
 function PaletteItem({ node }) {
   const addNode          = useUIStore(s => s.addNode);
+  const getVisibleCenterPosition = useUIStore(s => s.getVisibleCenterPosition);
   const addExecutionNode = useExecutionStore(s => s.addExecutionNode);
 
   const handleAdd = () => {
     const newId = `${node.id}-${uuidv4().slice(0, 6)}`;
+    const center = getVisibleCenterPosition();
+    const spawnPosition = {
+      x: center.x + (Math.random() - 0.5) * 40,
+      y: center.y + (Math.random() - 0.5) * 40,
+    };
     const isDataset = node.id.startsWith('dataset.');
     const isTransform = node.id.startsWith('transform.');
     const isLifecycle = node.id.startsWith('lifecycle.');
@@ -121,7 +127,7 @@ function PaletteItem({ node }) {
       addNode({
         id: newId,
         type: 'datasetNode',
-        position: { x: 250, y: 200 + Math.random() * 60 },
+        position: spawnPosition,
         data: {
           nodeModel: {
             type: def.type,
@@ -180,7 +186,7 @@ function PaletteItem({ node }) {
       addNode({
         id: newId,
         type: 'transformNode',
-        position: { x: 250, y: 200 + Math.random() * 60 },
+        position: spawnPosition,
         data: { nodeModel: newNodeModel },
       });
 
@@ -211,7 +217,7 @@ function PaletteItem({ node }) {
       addNode({
         id: newId,
         type: 'custom',
-        position: { x: 250, y: 200 },
+        position: spawnPosition,
         data: { nodeModel: newNodeModel },
       });
 

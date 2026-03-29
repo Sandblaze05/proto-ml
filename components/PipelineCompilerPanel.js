@@ -91,9 +91,9 @@ const PipelineCompilerPanel = () => {
             <div className='mr-5 w-full bg-foreground h-px' />
           </span>
         </span>
-        <div className={`nowheel w-full flex flex-col flex-1 overflow-y-auto transition-opacity duration-200 ${panelOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
+        <div className={`nowheel w-full flex flex-col flex-1 transition-opacity duration-200 ${panelOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
           
-          <div className='mt-2 flex items-center justify-between'>
+          <div className='mt-2 flex items-center justify-between shrink-0'>
             <div className='text-[12px] font-bold font-mono text-foreground/80 flex items-center gap-1.5'>
               <Code2 size={16} /> Compile to Python
             </div>
@@ -106,13 +106,13 @@ const PipelineCompilerPanel = () => {
           </div>
 
           {compileMeta && (
-            <div className='text-[10px] font-mono text-foreground/50 mt-3 mb-1'>
+            <div className='text-[10px] font-mono text-foreground/50 mt-3 mb-1 shrink-0'>
               nodes: {compileMeta.nodeCount} | edges: {compileMeta.edgeCount} | datasets: {compileMeta.datasetCount}
             </div>
           )}
 
           {compileErrors.length > 0 && (
-            <div className='mt-3 p-3 rounded bg-red-900/20 border border-red-500/30 text-[11px] font-mono text-red-300 shadow-inner'>
+            <div className='mt-3 p-3 rounded bg-red-900/20 border border-red-500/30 text-[11px] font-mono text-red-300 shadow-inner shrink-0 overflow-y-auto max-h-[120px]'>
               <div className='flex items-center gap-1.5 mb-2 font-bold text-[12px]'><AlertCircle size={14} /> Compile Errors</div>
               {compileErrors.map((err, i) => (
                 <div key={i} className="mb-1 leading-relaxed">- {err}</div>
@@ -121,12 +121,12 @@ const PipelineCompilerPanel = () => {
           )}
 
           {compiledCode && compileErrors.length === 0 && (
-            <div className='mt-3 p-2 rounded bg-emerald-900/20 border border-emerald-500/30 text-[11px] font-mono text-emerald-300 flex items-center gap-1.5 shadow-inner'>
+            <div className='mt-3 p-2 rounded bg-emerald-900/20 border border-emerald-500/30 text-[11px] font-mono text-emerald-300 flex items-center gap-1.5 shadow-inner shrink-0'>
               <CheckCircle2 size={14} /> Compile successful
             </div>
           )}
 
-          <div className="flex-1 mt-4 border border-foreground/20 rounded-lg overflow-hidden bg-black/40 min-h-[300px] mb-2">
+          <div className="flex-1 mt-4 border border-foreground/20 rounded-lg overflow-hidden bg-black/40 mb-2 flex flex-col min-h-0">
             <MonacoCodeEditor
               title='Compiled Pipeline Python'
               language='python'
