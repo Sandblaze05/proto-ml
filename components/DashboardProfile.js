@@ -90,12 +90,12 @@ const DashboardProfile = () => {
   const initials = name.slice(0, 1).toUpperCase()
 
   return (
-    <div className='z-100 fixed top-3 right-3 flex flex-row items-start gap-3'>
+    <div className='z-[200] fixed top-3 right-3 flex flex-row items-start gap-3'>
 
       {/* Settings Panel Expanding Box */}
       <div 
         ref={panelRef}
-        className={`bg-background/95 backdrop-blur-xl border-2 border-foreground shadow-[0_15px_30px_rgba(0,0,0,0.5)] flex flex-col overflow-hidden relative z-10 ${settingsOpen ? '' : 'cursor-pointer hover:border-foreground/70 border-foreground/40 hover:bg-background'}`}
+        className={`bg-background/95 backdrop-blur-xl border-2 border-foreground shadow-[0_15px_30px_rgba(0,0,0,0.5)] flex flex-col overflow-hidden relative z-[200] ${settingsOpen ? '' : 'cursor-pointer hover:border-foreground/70 border-foreground/40 hover:bg-background'}`}
         style={{ width: 40, height: 40, borderRadius: 20, padding: 0 }}
         onClick={(e) => { 
           if (!settingsOpen) {
@@ -137,10 +137,10 @@ const DashboardProfile = () => {
       </div>
 
       {/* Avatar Container */}
-      <div className="relative" ref={menuRef}>
+      <div className="relative z-[200]" ref={menuRef}>
         <button
           onClick={() => setMenuOpen(s => !s)}
-          className='border-2 border-foreground rounded-full w-10 h-10 overflow-hidden flex items-center justify-center cursor-pointer hover:border-foreground/70 transition-colors bg-background relative z-10'
+          className='border-2 border-foreground rounded-full w-10 h-10 overflow-hidden flex items-center justify-center cursor-pointer hover:border-foreground/70 transition-colors bg-background relative z-[200]'
         >
           {avatarUrl ? (
             <img src={avatarUrl} alt={name} className='w-full h-full object-cover' referrerPolicy='no-referrer' />
@@ -151,7 +151,7 @@ const DashboardProfile = () => {
 
         {/* Dropdown menu */}
         <div 
-          className={`absolute top-14 right-0 w-52 bg-background/95 backdrop-blur-xl border-2 border-foreground rounded-2xl overflow-hidden shadow-xl transition-all duration-300 origin-top-right ${menuOpen ? 'opacity-100 scale-100 pointer-events-auto' : 'opacity-0 scale-95 pointer-events-none'}`}
+          className={`absolute top-14 right-0 w-52 bg-background/95 backdrop-blur-xl border-2 border-foreground rounded-2xl overflow-hidden shadow-xl transition-all duration-300 origin-top-right z-[201] ${menuOpen ? 'opacity-100 scale-100 pointer-events-auto' : 'opacity-0 scale-95 pointer-events-none'}`}
         >
           <div className='px-4 py-3 border-b border-foreground/20'>
             <p className='font-mono font-bold text-sm truncate'>{name}</p>

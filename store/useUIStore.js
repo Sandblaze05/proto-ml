@@ -16,6 +16,8 @@ export const useUIStore = create((set, get) => ({
   future: [],
   annotationColor: '#faebd7',
   activeTool: 'select', // 'select', 'draw', 'erase', 'text'
+  activeAnnotationShape: null, // shapeType string or null
+  setActiveAnnotationShape: (shape) => set({ activeAnnotationShape: shape }),
   showMinimap: false,
   hydrateShowMinimap: () => {
     if (typeof window === 'undefined') return;
@@ -196,7 +198,16 @@ export const useUIStore = create((set, get) => ({
       ),
     });
   },
-  
+
+  toggleNodeLock: (id) => {
+    get().saveToHistory();
+    set({
+      nodes: get().nodes.map((node) => 
+        node.id === id ? { ...node, draggable: node.draggable === false } : node
+      ),
+    });
+  },
+
   setNodes: (nodes) => set({ nodes }),
   setEdges: (edges) => set({ edges }),
 }));

@@ -15,7 +15,7 @@ import dagre from 'dagre';
 import { View, Minus, Plus, Maximize, Minimize2, Trash2, 
   AlignCenterHorizontal, AlignCenterVertical,
   CheckCircle2, AlertCircle, Info, X, Wand2,
-  MousePointer2, Pencil, Eraser, Type, Undo2, Redo2, ChevronLeft, ChevronRight
+  MousePointer2, Pencil, Eraser, Type, Undo2, Redo2, ChevronLeft, ChevronRight, Lock, Unlock
 } from 'lucide-react';
 import gsap from 'gsap';
 import { useDroppable } from '@dnd-kit/core';
@@ -25,7 +25,9 @@ import { useExecutionStore } from '../store/useExecutionStore';
 import DatasetNode from './nodes/DatasetNode';
 import TransformNode from './nodes/TransformNode';
 import AnnotationNode from './nodes/AnnotationNode';
+import ShapeNode from './nodes/ShapeNode';
 import { CATEGORIES } from './NodePalette';
+import { ANNOTATION_SHAPES, RectIcon } from './AnnotationsPanel';
 import { v4 as uuidv4 } from 'uuid';
 import { generateDatasetPythonCode } from '@/lib/pythonTemplates/datasetNodeTemplate';
 import { generateTransformPythonCode } from '@/lib/pythonTemplates/transformNodeTemplate';
@@ -217,7 +219,8 @@ function ToastItem({ toast, onRemove }) {
 }
 
 // Generic CustomNode for non-dataset nodes (Process / Model / Optimize)
-function CustomNode({ data }) {
+function CustomNode({ id, data }) {
+  const isLocked = useStore(s => s.nodeInternals.get(id)?.draggable === false);
   const { type, inputs, outputs, params, pythonCode } = data.nodeModel;
 
   let bgClass = "bg-[#1f1f1f]";
@@ -226,7 +229,12 @@ function CustomNode({ data }) {
   else if (["Optimizer", "Accuracy"].includes(type)) bgClass = "bg-[#2f2f2f]";
 
   return (
-    <div className={`p-3 rounded-lg border border-[#faebd7]/30 text-[#faebd7] font-mono shadow-xl ${bgClass}`} style={{ minWidth: 180 }}>
+    <div className={`p-3 rounded-lg border border-[#faebd7]/30 text-[#faebd7] font-mono shadow-xl ${bgClass}`} style={{ minWidth: 180, position: 'relative' }}>
+      {isLocked && (
+        <div className="absolute top-2 right-2 z-20 pointer-events-none opacity-60">
+          <Lock size={12} color="#faebd7" />
+        </div>
+      )}
       {/* Input Handles */}
       {inputs.map((inp, idx) => (
         <Handle
@@ -275,7 +283,8 @@ const nodeTypes = {
   custom: CustomNode,  
   datasetNode: DatasetNode,
   transformNode: TransformNode,
-  annotationNode: AnnotationNode
+  annotationNode: AnnotationNode,
+  shapeNode: ShapeNode
 };
 const edgeTypes = {};
 
@@ -562,6 +571,7 @@ function Spotlight({ isOpen, onClose }) {
         id: newId,
         type: 'datasetNode',
         position,
+        zIndex: 100,
         data: {
           nodeModel: {
             type: def.type, label: def.label, inputs: def.inputs, outputs: def.outputs,
@@ -585,6 +595,7 @@ function Spotlight({ isOpen, onClose }) {
         id: newId,
         type: 'transformNode',
         position,
+        zIndex: 100,
         data: {
           nodeModel: {
             type: def.type, label: def.label, inputs: (def.inputs || []).map(p => p.name),
@@ -673,17 +684,49 @@ function Spotlight({ isOpen, onClose }) {
 const initialCustomNodes = [];
 const initialCustomEdges = [];
 
+// ── Toolbar Icon Components ────────────────────────────────────────────────
+const StrokeWidthIcon = ({ width, active }) => (
+  <svg width="24" height="24" viewBox="0 0 24 24" className={active ? 'text-foreground' : 'text-foreground/40'}>
+    <line x1="4" y1="12" x2="20" y2="12" stroke="currentColor" strokeWidth={width * 1.5} strokeLinecap="round" />
+  </svg>
+);
+
+const StrokeStyleIcon = ({ style, active }) => {
+  const dashArray = style === 'dashed' ? '6 3' : style === 'dotted' ? '1.5 3' : 'none';
+  return (
+    <svg width="32" height="24" viewBox="0 0 24 24" className={active ? 'text-foreground' : 'text-foreground/40'}>
+      <line x1="4" y1="12" x2="20" y2="12" stroke="currentColor" strokeWidth="2.5" strokeDasharray={dashArray} strokeLinecap="round" />
+    </svg>
+  );
+};
+
+const ArrowStyleIcon = ({ type, active }) => {
+  return (
+    <svg width="24" height="24" viewBox="0 0 24 24" className={active ? 'text-foreground' : 'text-foreground/40'}>
+      <line x1="4" y1="12" x2="20" y2="12" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      {(type === 'end' || type === 'both') && <path d="M 15 7 L 21 12 L 15 17" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />}
+      {(type === 'start' || type === 'both') && <path d="M 9 7 L 3 12 L 9 17" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />}
+      {type === 'none' && <line x1="9" y1="9" x2="15" y2="15" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />}
+      {type === 'none' && <line x1="15" y1="9" x2="9" y2="15" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />}
+    </svg>
+  );
+};
+
 function FloatingToolbar() {
   const { 
     undo, redo, history, future, 
     activeTool, setActiveTool, 
+    activeAnnotationShape, setActiveAnnotationShape,
     annotationColor, setAnnotationColor,
-    addToast
+    addToast, setNodes, nodes
   } = useUIStore();
   const [isCollapsed, setIsCollapsed] = useState(true);
+  const [showShapes, setShowShapes] = useState(false);
   const [pos, setPos] = useState({ x: 0, y: 12 });
   const [isDragging, setIsDragging] = useState(false);
   const dragRef = useRef(null);
+
+  const selectedShapeNode = useMemo(() => nodes.find(n => n.selected && n.type === 'shapeNode'), [nodes]);
 
   useEffect(() => {
     // Default position beside settings icon (Top-Right, Collapsed)
@@ -725,6 +768,22 @@ function FloatingToolbar() {
 
   const colors = ['#faebd7', '#34d399', '#60a5fa', '#f87171', '#fbbf24', '#c084fc'];
 
+  const handleShapeClick = (shapeId) => {
+    if (activeAnnotationShape === shapeId) {
+      setActiveAnnotationShape(null);
+    } else {
+      setActiveAnnotationShape(shapeId);
+      setActiveTool('select'); // Ensure we aren't in draw/erase mode
+      addToast(`Selected ${shapeId} - click and drag on canvas`, 'info');
+    }
+    setShowShapes(false);
+  };
+
+  const updateSelectedNode = (patch) => {
+    if (!selectedShapeNode) return;
+    setNodes(nodes.map(n => n.id === selectedShapeNode.id ? { ...n, data: { ...n.data, ...patch } } : n));
+  };
+
   if (isCollapsed) {
     return (
       <div
@@ -737,101 +796,207 @@ function FloatingToolbar() {
     );
   }
 
+  const d = selectedShapeNode?.data || {};
+  const strokeColor = d.strokeColor || '#67e8f9';
+  const fillColor = d.fillColor ?? 'none';
+  const strokeWidth = d.strokeWidth || 2;
+  const strokeStyle = d.strokeStyle || 'solid';
+  const opacity = d.opacity !== undefined ? d.opacity : 1;
+  const arrowheads = d.arrowheads || 'none';
+  const shapeType = d.shapeType;
+
   return (
     <div 
       ref={dragRef}
       className={`fixed z-1100 transition-shadow duration-300 ${isDragging ? 'shadow-2xl scale-[1.02]' : 'shadow-xl'}`}
       style={{ left: pos.x, top: pos.y }}
     >
-      <div className="flex items-center bg-background/90 backdrop-blur-2xl border border-foreground/20 rounded-2xl overflow-hidden p-1 shadow-2xl">
-        {/* Drag Handle */}
-        <div 
-          onMouseDown={onStartDrag}
-          className="px-2 py-4 cursor-grab active:cursor-grabbing hover:bg-foreground/5 transition-colors rounded-l-xl"
-        >
-          <div className="w-1 h-6 flex flex-col gap-1">
-            <div className="w-full h-1 bg-foreground/20 rounded-full" />
-            <div className="w-full h-1 bg-foreground/20 rounded-full" />
-            <div className="w-full h-1 bg-foreground/20 rounded-full" />
+      <div className="flex flex-col bg-background/90 backdrop-blur-2xl border border-foreground/20 rounded-2xl p-1 shadow-2xl">
+        <div className="flex items-center">
+          {/* Drag Handle */}
+          <div 
+            onMouseDown={onStartDrag}
+            className="px-2 py-4 cursor-grab active:cursor-grabbing hover:bg-foreground/5 transition-colors rounded-l-xl"
+          >
+            <div className="w-1 h-6 flex flex-col gap-1">
+              <div className="w-full h-1 bg-foreground/20 rounded-full" />
+              <div className="w-full h-1 bg-foreground/20 rounded-full" />
+              <div className="w-full h-1 bg-foreground/20 rounded-full" />
+            </div>
           </div>
-        </div>
 
-        <div className="flex items-center gap-1 px-1">
-          <div className="flex bg-foreground/5 rounded-xl p-1 gap-1">
-            <button 
-              onClick={() => setActiveTool('select')}
-              className={`p-2 rounded-lg transition-all ${activeTool === 'select' ? 'bg-background shadow-sm text-foreground' : 'text-foreground/40 hover:text-foreground hover:bg-foreground/5'}`}
+          <div className="flex items-center gap-1 px-1">
+            <div className="flex bg-foreground/5 rounded-xl p-1 gap-1">
+              <button 
+              onClick={() => { setActiveTool('select'); setActiveAnnotationShape(null); setShowShapes(false); }}
+              className={`p-2 rounded-lg transition-all ${activeTool === 'select' && !activeAnnotationShape ? 'bg-background shadow-sm text-foreground' : 'text-foreground/40 hover:text-foreground hover:bg-foreground/5'}`}
               title="Select Tool (V)"
             >
               <MousePointer2 size={18} />
             </button>
             <button 
-              onClick={() => setActiveTool('draw')}
+              onClick={() => { setActiveTool('draw'); setActiveAnnotationShape(null); setShowShapes(false); }}
               className={`p-2 rounded-lg transition-all ${activeTool === 'draw' ? 'bg-background shadow-sm text-foreground' : 'text-foreground/40 hover:text-foreground hover:bg-foreground/5'}`}
               title="Draw Mode (D)"
             >
               <Pencil size={18} />
             </button>
             <button 
-              onClick={() => setActiveTool('erase')}
+              onClick={() => { setActiveTool('erase'); setActiveAnnotationShape(null); setShowShapes(false); }}
               className={`p-2 rounded-lg transition-all ${activeTool === 'erase' ? 'bg-background shadow-sm text-foreground' : 'text-foreground/40 hover:text-foreground hover:bg-foreground/5'}`}
               title="Eraser (E)"
             >
               <Eraser size={18} />
             </button>
-            <button 
-              onClick={() => {
-                setActiveTool('text');
-                addToast('Click anywhere on canvas to place text', 'info');
-              }}
-              className={`p-2 rounded-lg transition-all ${activeTool === 'text' ? 'bg-background shadow-sm text-foreground' : 'text-foreground/40 hover:text-foreground hover:bg-foreground/5'}`}
-              title="Text Box (T)"
-            >
-              <Type size={18} />
-            </button>
-          </div>
+              
+              <div className="relative">
+                <button 
+                  onClick={() => setShowShapes(!showShapes)}
+                  className={`p-2 rounded-lg transition-all ${activeAnnotationShape ? 'bg-background shadow-sm text-foreground' : 'text-foreground/40 hover:text-foreground hover:bg-foreground/5'}`}
+                  title="Shapes"
+                >
+                  <RectIcon color={activeAnnotationShape ? '#67e8f9' : 'currentColor'} />
+                </button>
+                
+                {showShapes && (
+                  <div className="absolute top-full mt-2 left-1/2 -translate-x-1/2 bg-background/95 backdrop-blur-2xl border border-foreground/20 rounded-xl shadow-2xl p-2 grid grid-cols-4 gap-1 z-1200 min-w-[180px]">
+                    {ANNOTATION_SHAPES.map(shape => (
+                      <button
+                        key={shape.id}
+                        onClick={() => handleShapeClick(shape.id)}
+                        className={`p-2 rounded-lg transition-all flex flex-col items-center justify-center gap-1 ${activeAnnotationShape === shape.id ? 'bg-foreground/10 border border-foreground/20' : 'hover:bg-foreground/5 border border-transparent'}`}
+                        title={shape.label}
+                      >
+                        <shape.Icon color={activeAnnotationShape === shape.id ? '#67e8f9' : 'currentColor'} />
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
 
-          <div className="h-6 w-px bg-foreground/10 mx-1" />
-
-          <div className="flex gap-1">
-            <button 
-              onClick={undo}
-              disabled={history.length === 0}
-              className="p-2 text-foreground/40 hover:text-foreground hover:bg-foreground/5 rounded-lg disabled:opacity-20 transition-all font-bold"
-              title="Undo (Ctrl+Z)"
-            >
-              <Undo2 size={18} />
-            </button>
-            <button 
-              onClick={redo}
-              disabled={future.length === 0}
-              className="p-2 text-foreground/40 hover:text-foreground hover:bg-foreground/5 rounded-lg disabled:opacity-20 transition-all font-bold"
-              title="Redo (Ctrl+Y)"
-            >
-              <Redo2 size={18} />
-            </button>
-          </div>
-
-          <div className="h-6 w-px bg-foreground/10 mx-1" />
-
-          <div className="flex gap-1 px-1">
-            {colors.map(c => (
               <button 
-                key={c}
-                onClick={() => setAnnotationColor(c)}
-                className={`w-6 h-6 rounded-full border-2 transition-transform hover:scale-110 ${annotationColor === c ? 'border-foreground' : 'border-transparent'}`}
-                style={{ backgroundColor: c }}
-              />
-            ))}
+                onClick={() => {
+                  setActiveTool('text');
+                  setActiveAnnotationShape(null);
+                  setShowShapes(false);
+                  addToast('Click anywhere on canvas to place sticky note', 'info');
+                }}
+                className={`p-2 rounded-lg transition-all ${activeTool === 'text' ? 'bg-background shadow-sm text-foreground' : 'text-foreground/40 hover:text-foreground hover:bg-foreground/5'}`}
+                title="Add Sticky Note (T)"
+              >
+                <Type size={18} />
+              </button>
+            </div>
+
+            <div className="h-6 w-px bg-foreground/10 mx-1" />
+
+            <div className="flex gap-1">
+              <button 
+                onClick={undo}
+                disabled={history.length === 0}
+                className="p-2 text-foreground/40 hover:text-foreground hover:bg-foreground/5 rounded-lg disabled:opacity-20 transition-all font-bold"
+                title="Undo (Ctrl+Z)"
+              >
+                <Undo2 size={18} />
+              </button>
+              <button 
+                onClick={redo}
+                disabled={future.length === 0}
+                className="p-2 text-foreground/40 hover:text-foreground hover:bg-foreground/5 rounded-lg disabled:opacity-20 transition-all font-bold"
+                title="Redo (Ctrl+Y)"
+              >
+                <Redo2 size={18} />
+              </button>
+            </div>
+
+            <div className="h-6 w-px bg-foreground/10 mx-1" />
+
+            <div className="flex gap-1 px-1">
+              {colors.map(c => (
+                <button 
+                  key={c}
+                  onClick={() => {
+                    setAnnotationColor(c);
+                    if (selectedShapeNode) updateSelectedNode({ strokeColor: c });
+                  }}
+                  className={`w-6 h-6 rounded-full border-2 transition-transform hover:scale-110 ${ (selectedShapeNode ? strokeColor === c : annotationColor === c) ? 'border-foreground' : 'border-transparent'}`}
+                  style={{ backgroundColor: c }}
+                />
+              ))}
+            </div>
           </div>
+
+          <button 
+            onClick={() => setIsCollapsed(true)}
+            className="p-2 text-foreground/20 hover:text-foreground transition-colors ml-1"
+          >
+            <ChevronLeft size={16} />
+          </button>
         </div>
 
-        <button 
-          onClick={() => setIsCollapsed(true)}
-          className="p-2 text-foreground/20 hover:text-foreground transition-colors ml-1"
-        >
-          <ChevronLeft size={16} />
-        </button>
+        {/* Expanded properties when a shape is selected */}
+        {selectedShapeNode && (
+          <div className="flex items-center gap-4 px-4 py-2 border-t border-foreground/10 mt-1 animate-in slide-in-from-top-1 duration-200">
+            <div className="flex items-center gap-2">
+              <div className="flex bg-foreground/5 rounded-lg p-1 gap-1">
+                {[1, 2, 4].map(w => (
+                  <button
+                    key={w}
+                    onClick={() => updateSelectedNode({ strokeWidth: w })}
+                    className={`p-1 rounded transition-all ${strokeWidth === w ? 'bg-background shadow-sm' : 'hover:bg-foreground/5'}`}
+                    title={w === 1 ? 'Thin' : w === 2 ? 'Mid' : 'Thick'}
+                  >
+                    <StrokeWidthIcon width={w === 4 ? 3 : w} active={strokeWidth === w} />
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <div className="flex bg-foreground/5 rounded-lg p-1 gap-1">
+                {['solid', 'dashed', 'dotted'].map(s => (
+                  <button
+                    key={s}
+                    onClick={() => updateSelectedNode({ strokeStyle: s })}
+                    className={`p-1 rounded transition-all ${strokeStyle === s ? 'bg-background shadow-sm' : 'hover:bg-foreground/5'}`}
+                    title={s.charAt(0).toUpperCase() + s.slice(1)}
+                  >
+                    <StrokeStyleIcon style={s} active={strokeStyle === s} />
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {['line', 'dotted-line', 'elbow'].includes(shapeType) && (
+              <div className="flex items-center gap-2">
+                <div className="flex bg-foreground/5 rounded-lg p-1 gap-1">
+                  {['none', 'end', 'start', 'both'].map(a => (
+                    <button
+                      key={a}
+                      onClick={() => updateSelectedNode({ arrowheads: a })}
+                      className={`p-1 rounded transition-all ${arrowheads === a ? 'bg-background shadow-sm' : 'hover:bg-foreground/5'}`}
+                      title={a === 'none' ? 'No Arrows' : a === 'end' ? 'End Arrow' : a === 'start' ? 'Start Arrow' : 'Both Arrows'}
+                    >
+                      <ArrowStyleIcon type={a} active={arrowheads === a} />
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="flex items-center gap-3 ml-auto min-w-[60px] max-w-[80px]">
+              <input
+                type="range"
+                min={0.1}
+                max={1}
+                step={0.05}
+                value={opacity}
+                onChange={e => updateSelectedNode({ opacity: parseFloat(e.target.value) })}
+                className="w-full h-1 bg-foreground/10 rounded-full appearance-none cursor-pointer accent-foreground"
+              />
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -883,7 +1048,7 @@ function pointHitsPath(path, x, y, tolerance) {
 }
 
 function DrawingLayer() {
-  const { drawings, addDrawing, setDrawings, activeTool, annotationColor, saveToHistory } = useUIStore();
+  const { drawings, addDrawing, setDrawings, activeTool, annotationColor, saveToHistory, setNodes } = useUIStore();
   const transform = useStore(s => s.transform);
   const [tx, ty, zoom] = transform;
 
@@ -904,15 +1069,33 @@ function DrawingLayer() {
 
   const eraseAtPoint = useCallback((x, y, shouldSaveHistory = false) => {
     const tolerance = 8 / zoom;
-    const before = useUIStore.getState().drawings;
-    const next = before.filter((draw) => !pointHitsPath(draw.path, x, y, tolerance));
-    if (next.length !== before.length) {
+    const state = useUIStore.getState();
+    const beforeDrawings = state.drawings;
+    const beforeNodes = state.nodes;
+
+    // 1. Erase drawings
+    const nextDrawings = beforeDrawings.filter((draw) => !pointHitsPath(draw.path, x, y, tolerance));
+    
+    // 2. Erase shape nodes
+    const nextNodes = beforeNodes.filter((node) => {
+      if (node.type !== 'shapeNode') return true;
+      const { x: nx, y: ny } = node.position;
+      const nw = node.width || node.data.width || 180;
+      const nh = node.height || node.data.height || 100;
+      
+      const hit = x >= nx - tolerance && x <= nx + nw + tolerance &&
+                  y >= ny - tolerance && y <= ny + nh + tolerance;
+      return !hit;
+    });
+
+    if (nextDrawings.length !== beforeDrawings.length || nextNodes.length !== beforeNodes.length) {
       if (shouldSaveHistory) saveToHistory();
-      setDrawings(next);
+      if (nextDrawings.length !== beforeDrawings.length) setDrawings(nextDrawings);
+      if (nextNodes.length !== beforeNodes.length) setNodes(nextNodes);
       return true;
     }
     return false;
-  }, [zoom, saveToHistory, setDrawings]);
+  }, [zoom, saveToHistory, setDrawings, setNodes]);
 
   const finishDrag = useCallback(() => {
     dragRef.current = null;
@@ -1089,6 +1272,7 @@ function InteractiveCanvas() {
   const [selectedNodes, setSelectedNodes] = useState([]);
   const [menu, setMenu] = useState(null);
   const [isSpotlightOpen, setIsSpotlightOpen] = useState(false);
+  const [droppingOver, setDroppingOver] = useState(false);
   const initialized = useRef(false);
 
   useEffect(() => {
@@ -1158,6 +1342,7 @@ function InteractiveCanvas() {
       type: 'custom',
       data: { nodeModel: n },
       position: { x: 0, y: 0 },
+      zIndex: 100,
     }));
 
     const rfEdges = initialCustomEdges.map(e => ({
@@ -1268,18 +1453,128 @@ function InteractiveCanvas() {
     setMenu(null);
     if (activeTool === 'text') {
       const position = screenToFlowPosition({ x: event.clientX, y: event.clientY });
-      const newId = `text-${uuidv4().slice(0, 6)}`;
+      const newId = `note-${uuidv4().slice(0, 6)}`;
       
       addNode({
         id: newId,
         type: 'annotationNode',
         position,
+        zIndex: 50,
         data: { label: '', color: useUIStore.getState().annotationColor },
       });
       setActiveTool('select');
-      addToast('Annotation placed!', 'success');
+      addToast('Sticky note placed!', 'success');
     }
   }, [activeTool, screenToFlowPosition, addNode, setActiveTool, addToast]);
+
+  // ── Drag-to-canvas handlers ────────────────────────────────────────────────
+  const onCanvasDragOver = useCallback((e) => {
+    if (e.dataTransfer.types.includes('application/proto-ml-node')) {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'copy';
+      setDroppingOver(true);
+    }
+  }, []);
+
+  const onCanvasDragLeave = useCallback((e) => {
+    // Only set false if we actually left the container (not a child)
+    if (!e.currentTarget.contains(e.relatedTarget)) {
+      setDroppingOver(false);
+    }
+  }, []);
+
+  const onCanvasDrop = useCallback((e) => {
+    e.preventDefault();
+    setDroppingOver(false);
+
+    const raw = e.dataTransfer.getData('application/proto-ml-node');
+    if (!raw) return;
+
+    let node;
+    try { node = JSON.parse(raw); } catch { return; }
+
+    const position = screenToFlowPosition({ x: e.clientX, y: e.clientY });
+    const newId = `${node.id}-${uuidv4().slice(0, 6)}`;
+
+    const isDataset = node.id.startsWith('dataset.');
+    const isTransform = node.id.startsWith('transform.');
+    const isLifecycle = node.id.startsWith('lifecycle.');
+
+    if (isDataset && node.def) {
+      const def = node.def;
+      const initialConfig = { ...def.defaultConfig };
+      const pythonCode = generateDatasetPythonCode(def.type, initialConfig);
+
+      addNode({
+        id: newId,
+        type: 'datasetNode',
+        position,
+        zIndex: 100,
+        data: {
+          nodeModel: {
+            type: def.type, label: def.label, inputs: def.inputs, outputs: def.outputs,
+            config: initialConfig, schema: { ...def.schema }, metadata: { ...def.metadata }, pythonCode,
+          },
+        },
+      });
+      addExecutionNode(newId, {
+        type: def.type, label: def.label, inputs: def.inputs.map(p => p.name),
+        outputs: def.outputs.map(p => p.name),
+        portMap: {
+          inputs: Object.fromEntries(def.inputs.map(p => [p.name, p])),
+          outputs: Object.fromEntries(def.outputs.map(p => [p.name, p])),
+        },
+        config: initialConfig, schema: { ...def.schema }, metadata: { ...def.metadata }, pythonCode,
+      });
+    } else if ((isTransform || isLifecycle) && node.def) {
+      const def = node.def;
+      const initialConfig = { ...(def.defaultConfig || {}) };
+      const pythonCode = isLifecycle
+        ? generateLifecyclePythonCode(def.type, initialConfig)
+        : generateTransformPythonCode(def.type, initialConfig);
+      const inputs = (def.inputs || []).map(p => p.name);
+      const outputs = (def.outputs || []).map(p => p.name);
+
+      addNode({
+        id: newId,
+        type: 'transformNode',
+        position,
+        zIndex: 100,
+        data: {
+          nodeModel: {
+            type: def.type, label: def.label, inputs, outputs,
+            params: initialConfig, config: initialConfig,
+            uiSchema: { ...(def.uiSchema || {}) }, accepts: def.accepts || [],
+            produces: def.produces || [], kind: isLifecycle ? 'lifecycle' : 'transform',
+            category: def.category, pythonCode,
+          },
+        },
+      });
+      addExecutionNode(newId, {
+        type: def.type, label: def.label, inputs, outputs,
+        config: initialConfig, uiSchema: { ...(def.uiSchema || {}) },
+        accepts: def.accepts || [], produces: def.produces || [],
+        kind: isLifecycle ? 'lifecycle' : 'transform', category: def.category, pythonCode,
+      });
+    } else {
+      let inputs = [], outputs = [];
+      if (['cnn', 'transformer', 'optimizer'].includes(node.id)) {
+        inputs = ['data']; outputs = ['data_out'];
+      }
+      if (node.id === 'accuracy') { inputs = ['data']; outputs = ['score']; }
+
+      addNode({
+        id: newId,
+        type: 'custom',
+        position,
+        zIndex: 100,
+        data: { nodeModel: { type: node.type, label: node.label, inputs, outputs, params: {}, execution_code: 'function() { return {} }' } },
+      });
+      addExecutionNode(newId, { type: node.type, inputs, outputs, config: {} });
+    }
+
+    addToast(`Added ${node.label} to canvas`, 'success');
+  }, [screenToFlowPosition, addNode, addExecutionNode, addToast]);
 
   const handleDeleteNode = () => {
     if (menu?.id) {
@@ -1297,7 +1592,29 @@ function InteractiveCanvas() {
   };
 
   return (
-    <div ref={setNodeRef} style={{ width: '100%', height: '100%', position: 'relative' }}>
+    <div
+      ref={setNodeRef}
+      style={{ width: '100%', height: '100%', position: 'relative' }}
+      onDragOver={onCanvasDragOver}
+      onDragLeave={onCanvasDragLeave}
+      onDrop={onCanvasDrop}
+    >
+      {/* Drop zone highlight overlay */}
+      {droppingOver && (
+        <div
+          style={{
+            position: 'absolute',
+            inset: 0,
+            zIndex: 5,
+            pointerEvents: 'none',
+            border: '2px solid #67e8f966',
+            borderRadius: 12,
+            boxShadow: 'inset 0 0 60px #67e8f912, 0 0 30px #67e8f910',
+            background: 'radial-gradient(ellipse at center, #67e8f908 0%, transparent 70%)',
+            transition: 'opacity 0.2s',
+          }}
+        />
+      )}
       <ReactFlow
         nodes={nodes}
         edges={edges}
@@ -1337,6 +1654,7 @@ function InteractiveCanvas() {
       <ToastContainer />
       <Spotlight isOpen={isSpotlightOpen} onClose={() => setIsSpotlightOpen(false)} />
       <FloatingToolbar />
+      <ShapeLayerComponents />
 
       {nodes.length === 0 && (
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
@@ -1362,7 +1680,7 @@ function InteractiveCanvas() {
 function ContextMenu({ menu, onClose, screenToFlowPosition }) {
   const { 
     nodes, edges, removeNode, addNode, addToast, 
-    duplicateNode, clearCanvas, updateEdgeStyle, toggleNodeCollapse 
+    duplicateNode, clearCanvas, updateEdgeStyle, toggleNodeCollapse, toggleNodeLock
   } = useUIStore();
   const { removeExecutionNode } = useExecutionStore();
   
@@ -1392,6 +1710,10 @@ function ContextMenu({ menu, onClose, screenToFlowPosition }) {
       case 'collapse-node':
         toggleNodeCollapse(menu.id);
         break;
+      case 'lock-node':
+        toggleNodeLock(menu.id);
+        addToast(menu.data?.draggable === false ? 'Node unlocked' : 'Node locked', 'info');
+        break;
       case 'delete-edge':
         useUIStore.getState().setEdges(edges.filter(e => e.id !== menu.id));
         addToast('Edge removed', 'error');
@@ -1408,6 +1730,7 @@ function ContextMenu({ menu, onClose, screenToFlowPosition }) {
           id: `note-${uuidv4().slice(0, 6)}`,
           type: 'annotationNode',
           position: pos,
+          zIndex: 50,
           data: { label: 'New sticky note', color: '#faebd7' }
         });
         break;
@@ -1422,14 +1745,20 @@ function ContextMenu({ menu, onClose, screenToFlowPosition }) {
 
   const renderContent = () => {
     if (menu.type === 'node') {
+      const isShape = menu.data?.type === 'shapeNode';
+      const isText = isShape && menu.data?.data?.shapeType === 'text';
+      const isLocked = menu.data?.draggable === false;
+      const typeLabel = isText ? 'Text' : isShape ? 'Shape' : 'Node';
+
       return (
         <>
-          <MenuHeader label="Node Actions" />
+          <MenuHeader label={`${typeLabel} Actions`} />
           <MenuButton icon={Maximize} label="Duplicate" onClick={() => handleAction('duplicate-node')} />
-          <MenuButton icon={Minimize2} label="Collapse/Expand" onClick={() => handleAction('collapse-node')} />
+          {!isShape && <MenuButton icon={Minimize2} label="Collapse/Expand" onClick={() => handleAction('collapse-node')} />}
+          <MenuButton icon={isLocked ? Unlock : Lock} label={isLocked ? 'Unlock' : 'Lock'} onClick={() => handleAction('lock-node')} />
           <MenuButton icon={Wand2} label="Copy ID" onClick={() => handleAction('copy-id')} />
           <div className="h-px bg-foreground/10 my-1" />
-          <MenuButton icon={Trash2} label="Delete Node" color="text-red-500" onClick={() => handleAction('delete-node')} />
+          <MenuButton icon={Trash2} label={`Delete ${typeLabel}`} color="text-red-500" onClick={() => handleAction('delete-node')} />
         </>
       );
     }
@@ -1463,6 +1792,148 @@ function ContextMenu({ menu, onClose, screenToFlowPosition }) {
     >
       {renderContent()}
     </div>
+  );
+}
+
+function ShapeLayerComponents() {
+  const { activeAnnotationShape, setActiveAnnotationShape, addNode, addToast, nodes } = useUIStore();
+  const { screenToFlowPosition } = useReactFlow();
+  const [startPt, setStartPt] = useState(null);
+  const [currPt, setCurrPt] = useState(null);
+
+  const selectedShapeNodes = nodes.filter(n => n.selected && n.type === 'shapeNode');
+  const selectedShapeNode = selectedShapeNodes.length === 1 ? selectedShapeNodes[0] : null;
+
+  const isText = activeAnnotationShape === 'text';
+
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape' && activeAnnotationShape) {
+        setActiveAnnotationShape(null);
+        setStartPt(null);
+        setCurrPt(null);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [activeAnnotationShape, setActiveAnnotationShape]);
+
+  const onPointerDown = (e) => {
+    if (!activeAnnotationShape) return;
+    
+    e.preventDefault();
+    e.stopPropagation();
+
+    const pos = { x: e.clientX, y: e.clientY };
+    if (isText) {
+      const flowPos = screenToFlowPosition(pos);
+      addNode({
+        id: `shape-${uuidv4().slice(0, 6)}`,
+        type: 'shapeNode',
+        position: flowPos,
+        width: 160,
+        height: 40,
+        zIndex: 10,
+        data: { shapeType: 'text', label: '', strokeColor: '#67e8f9', width: 160, height: 40 },
+      });
+      setActiveAnnotationShape(null);
+      addToast('Text added', 'success');
+      return;
+    }
+    setStartPt(pos);
+    setCurrPt(pos);
+  };
+
+  const onPointerMove = (e) => {
+    if (!startPt) return;
+    setCurrPt({ x: e.clientX, y: e.clientY });
+  };
+
+  const onPointerUp = (e) => {
+    if (!startPt) return;
+    const endPt = { x: e.clientX, y: e.clientY };
+    
+    const dragDist = Math.hypot(endPt.x - startPt.x, endPt.y - startPt.y);
+    if (dragDist < 5) {
+      const flowPos = screenToFlowPosition(endPt);
+      addNode({
+        id: `shape-${uuidv4().slice(0, 6)}`,
+        type: 'shapeNode',
+        position: flowPos,
+        width: 200,
+        height: 120,
+        zIndex: 10,
+        data: { 
+          shapeType: activeAnnotationShape, 
+          strokeColor: '#67e8f9', 
+          fillColor: 'none',
+          strokeWidth: 2,
+          strokeStyle: activeAnnotationShape.startsWith('dotted') ? 'dotted' : 'solid',
+          width: 200, height: 120 
+        },
+      });
+      setStartPt(null); setCurrPt(null); setActiveAnnotationShape(null);
+      return;
+    }
+
+    const flowStart = screenToFlowPosition(startPt);
+    const flowEnd = screenToFlowPosition(endPt);
+
+    const w = Math.max(Math.abs(flowEnd.x - flowStart.x), 40);
+    const h = Math.max(Math.abs(flowEnd.y - flowStart.y), 30);
+    const px = Math.min(flowStart.x, flowEnd.x);
+    const py = Math.min(flowStart.y, flowEnd.y);
+
+    addNode({
+      id: `shape-${uuidv4().slice(0, 6)}`,
+      type: 'shapeNode',
+      position: { x: px, y: py },
+      width: w,
+      height: h,
+      zIndex: 10,
+      data: {
+        shapeType: activeAnnotationShape,
+        width: w, height: h,
+        strokeColor: '#67e8f9',
+        fillColor: 'none',
+        strokeWidth: 2,
+        strokeStyle: activeAnnotationShape.startsWith('dotted') ? 'dotted' : 'solid',
+      },
+    });
+
+    setStartPt(null);
+    setCurrPt(null);
+    setActiveAnnotationShape(null);
+  };
+
+  return (
+    <>
+      {activeAnnotationShape && (
+        <div
+          style={{
+            position: 'absolute', inset: 0, zIndex: 1000,
+            cursor: 'crosshair', pointerEvents: 'auto'
+          }}
+          onPointerDown={onPointerDown}
+          onPointerMove={onPointerMove}
+          onPointerUp={onPointerUp}
+          onContextMenu={e => { e.preventDefault(); setActiveAnnotationShape(null); }}
+        >
+          {startPt && currPt && !isText && (
+            <div style={{
+              position: 'absolute',
+              left: Math.min(startPt.x, currPt.x),
+              top: Math.min(startPt.y, currPt.y),
+              width: Math.abs(currPt.x - startPt.x),
+              height: Math.abs(currPt.y - startPt.y),
+              border: '1px dashed #67e8f9',
+              backgroundColor: 'rgba(103,232,249,0.05)',
+              pointerEvents: 'none'
+            }} />
+          )}
+        </div>
+      )}
+    </>
   );
 }
 

@@ -51,11 +51,11 @@ const RegisterForm = ({ onClose = () => { }, initialError = '' }) => {
     setLoading(true)
 
     if (mode === 'signin') {
-      const { error } = await supabase.auth.signInWithPassword({ email, password })
+      const { error } = await supabase.auth.signInWithPassword({ email, password }, { persistSession: true })
       if (error) { setError(error.message); setLoading(false) }
       else window.location.href = '/dashboard'
     } else {
-      const { error } = await supabase.auth.signUp({ email, password })
+      const { error } = await supabase.auth.signUp({ email, password }, { persistSession: true })
       if (error) { setError(error.message); setLoading(false) }
       else { setMessage('Check your email for a confirmation link!'); setLoading(false) }
     }

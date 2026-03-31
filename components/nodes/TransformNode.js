@@ -1,8 +1,8 @@
 'use client';
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Handle, Position } from 'reactflow';
-import { Wrench, Settings2, Code2, ChevronDown, ChevronUp } from 'lucide-react';
+import { Handle, Position, useStore } from 'reactflow';
+import { Wrench, Settings2, Code2, ChevronDown, ChevronUp, Lock } from 'lucide-react';
 import { useExecutionStore } from '../../store/useExecutionStore';
 import { useUIStore } from '../../store/useUIStore';
 import { generateTransformPythonCode } from '../../lib/pythonTemplates/transformNodeTemplate';
@@ -120,6 +120,7 @@ function ConfigField({ label, value, onChange, schema = {} }) {
 }
 
 export default function TransformNode({ data, id, selected }) {
+  const isLocked = useStore(s => s.nodeInternals.get(id)?.draggable === false);
   const { nodeModel, collapsed: storeCollapsed } = data;
   const {
     type,
@@ -217,10 +218,18 @@ export default function TransformNode({ data, id, selected }) {
     return Array.from(keys);
   }, [uiSchema, localConfig]);
 
+  const selectedColor = kind === 'lifecycle' ? '#ffe066' : '#67e8f9';
+
   return (
     <div
-      className={`w-67 rounded-xl overflow-hidden font-mono transition-shadow duration-200 ${selected ? 'shadow-[0_0_0_2px_#67e8f955,0_8px_32px_rgba(0,0,0,0.7)]' : 'shadow-[0_4px_20px_rgba(0,0,0,0.55)]'}`}
-      style={{ background: '#141414', border: `1px solid ${selected ? '#67e8f9' : '#faebd720'}` }}
+      className={`w-67 rounded-xl overflow-hidden font-mono transition-shadow duration-200`}
+      style={{
+        background: '#141414',
+        border: `1px solid ${selected ? selectedColor : '#faebd720'}`,
+        boxShadow: selected
+          ? `0 0 0 2px ${selectedColor}55, 0 8px 32px rgba(0,0,0,0.7)`
+          : '0 4px 20px rgba(0,0,0,0.55)',
+      }}
     >
       {inputs.map((inp, idx) => (
         <Handle
@@ -234,19 +243,22 @@ export default function TransformNode({ data, id, selected }) {
 
       <div
         className="flex items-center justify-between px-2.5 py-2 cursor-grab active:cursor-grabbing"
-        style={{ background: '#67e8f922', borderBottom: '1px solid #67e8f944' }}
+        style={{ background: kind === 'lifecycle' ? '#ffe06622' : '#67e8f922', borderBottom: kind === 'lifecycle' ? '1px solid #ffe06644' : '1px solid #67e8f944' }}
         onClick={() => toggleNodeCollapse(id)}
       >
         <div className="flex items-center gap-2">
-          <div className="w-5.5 h-5.5 rounded-[5px] flex items-center justify-center shrink-0 bg-cyan-500/20">
-            <Wrench size={12} color="#67e8f9" />
+          <div className="w-5.5 h-5.5 rounded-[5px] flex items-center justify-center shrink-0" style={{ background: kind === 'lifecycle' ? '#ffe06633' : 'rgba(34,211,238,0.2)' }}>
+            <Wrench size={12} color={kind === 'lifecycle' ? '#ffe066' : '#67e8f9'} />
           </div>
           <div>
-            <div className="text-[11px] font-bold text-[#faebd7] leading-tight">{label || type}</div>
-            <div className="text-[8px] uppercase tracking-widest text-cyan-300/80">{kind === 'lifecycle' ? 'Lifecycle Node' : 'Transform Node'}</div>
+            <div className="text-[11px] font-bold" style={{ color: kind === 'lifecycle' ? '#ffe066' : '#faebd7' }}>{label || type}</div>
+            <div className="text-[8px] uppercase tracking-widest" style={{ color: kind === 'lifecycle' ? '#ffe066cc' : 'rgba(103,232,249,0.8)' }}>{kind === 'lifecycle' ? 'Lifecycle Node' : 'Transform Node'}</div>
           </div>
         </div>
-        {collapsed ? <ChevronDown size={14} color="#faebd760" /> : <ChevronUp size={14} color="#faebd760" />}
+        <div className="flex items-center gap-2">
+          {isLocked && <Lock size={12} color={kind === 'lifecycle' ? '#ffe066' : '#67e8f9'} className="opacity-60" />}
+          {collapsed ? <ChevronDown size={14} color="#faebd760" /> : <ChevronUp size={14} color="#faebd760" />}
+        </div>
       </div>
 
       {!collapsed && (

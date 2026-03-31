@@ -1,5 +1,5 @@
 'use client';
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import {
   Database, ImageIcon, FileText, Braces, Globe, Table,
   ToyBrick, Activity, GitBranchPlus, PackageOpen, BrainCircuit,
@@ -102,10 +102,11 @@ export const CATEGORIES = [
 ];
 
 // ── Palette item ──────────────────────────────────────────────────────────────
-function PaletteItem({ node }) {
+function PaletteItem({ node, isInUse }) {
   const addNode          = useUIStore(s => s.addNode);
   const getVisibleCenterPosition = useUIStore(s => s.getVisibleCenterPosition);
   const addExecutionNode = useExecutionStore(s => s.addExecutionNode);
+  const ghostRef = useRef(null);
 
   const handleAdd = () => {
     const newId = `${node.id}-${uuidv4().slice(0, 6)}`;
@@ -123,26 +124,26 @@ function PaletteItem({ node }) {
       const initialConfig = { ...def.defaultConfig };
       const pythonCode = generateDatasetPythonCode(def.type, initialConfig);
 
-      // UI node — use 'datasetNode' type so InfiniteCanvas routes it to DatasetNode component
       addNode({
         id: newId,
         type: 'datasetNode',
         position: spawnPosition,
+        zIndex: 100,
         data: {
           nodeModel: {
             type: def.type,
             label: def.label,
-            inputs:  def.inputs,
-            outputs: def.outputs,
+            inputs:  def.inputs.map(p => p.name),
+            outputs: def.outputs.map(p => p.name),
             config:  initialConfig,
             schema:  { ...def.schema },
             metadata: { ...def.metadata },
+            kind: 'dataset',
             pythonCode,
           },
         },
       });
 
-      // Execution node — full typed model
       addExecutionNode(newId, {
         type:     def.type,
         label:    def.label,
@@ -187,6 +188,8 @@ function PaletteItem({ node }) {
         id: newId,
         type: 'transformNode',
         position: spawnPosition,
+        zIndex: 100,
+        selected: true,
         data: { nodeModel: newNodeModel },
       });
 
@@ -205,7 +208,6 @@ function PaletteItem({ node }) {
       });
 
     } else {
-      // Generic non-dataset node (Process / Model / Optimize)
       let inputs = [], outputs = [];
       if (['cnn', 'transformer', 'optimizer'].includes(node.id)) {
         inputs = ['data']; outputs = ['data_out'];
@@ -218,6 +220,7 @@ function PaletteItem({ node }) {
         id: newId,
         type: 'custom',
         position: spawnPosition,
+        zIndex: 100,
         data: { nodeModel: newNodeModel },
       });
 
@@ -230,70 +233,150 @@ function PaletteItem({ node }) {
     }
   };
 
+  // ── Drag start handler ────────────────────────────────────────────────────
+  const onDragStart = useCallback((e) => {
+    e.dataTransfer.setData('application/proto-ml-node', JSON.stringify(node));
+    e.dataTransfer.effectAllowed = 'copy';
+
+    // Custom drag ghost
+    if (ghostRef.current) {
+      ghostRef.current.style.display = 'flex';
+      e.dataTransfer.setDragImage(ghostRef.current, 60, 18);
+      // Hide it again shortly after the browser captures the ghost
+      requestAnimationFrame(() => {
+        if (ghostRef.current) ghostRef.current.style.display = 'none';
+      });
+    }
+  }, [node]);
+
   const Icon  = node.icon;
   const color = node.color ?? '#faebd7';
 
   return (
-    <div
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        padding: '7px 8px',
-        borderRadius: 6,
-        background: '#111',
-        border: '1px solid transparent',
-        transition: 'border-color 0.15s, background 0.15s',
-        cursor: 'default',
-      }}
-      onMouseEnter={e => { e.currentTarget.style.borderColor = color + '55'; e.currentTarget.style.background = color + '0d'; }}
-      onMouseLeave={e => { e.currentTarget.style.borderColor = 'transparent'; e.currentTarget.style.background = '#111'; }}
-    >
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <div style={{
-          width: 24, height: 24,
-          borderRadius: 5,
-          background: color + '22',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          flexShrink: 0,
-        }}>
-          <Icon size={13} color={color} />
-        </div>
-        <div>
-          <div style={{ fontSize: 11, color: '#faebd7cc', fontFamily: 'monospace', fontWeight: 600 }}>{node.label}</div>
-          {node.def && (
-            <div style={{ fontSize: 9, color: color + 'aa', fontFamily: 'monospace' }}>
-              {node.def.outputs.length} outputs
-            </div>
-          )}
-        </div>
-      </div>
-      <button
-        onClick={handleAdd}
+    <>
+      {/* Hidden drag ghost element */}
+      <div
+        ref={ghostRef}
         style={{
-          width: 22, height: 22,
-          borderRadius: 4,
-          border: `1px solid ${color}44`,
-          background: color + '18',
-          color,
-          cursor: 'pointer',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          transition: 'background 0.15s',
-          flexShrink: 0,
+          display: 'none',
+          position: 'fixed',
+          top: -9999,
+          left: -9999,
+          alignItems: 'center',
+          gap: 6,
+          padding: '6px 12px',
+          borderRadius: 8,
+          background: '#1a1a1a',
+          border: `1px solid ${color}66`,
+          boxShadow: `0 4px 20px ${color}30, 0 0 0 1px ${color}22`,
+          opacity: 0.92,
+          pointerEvents: 'none',
+          zIndex: 99999,
+          fontFamily: 'monospace',
+          whiteSpace: 'nowrap',
         }}
-        title={`Add ${node.label}`}
-        onMouseEnter={e => { e.currentTarget.style.background = color + '35'; }}
-        onMouseLeave={e => { e.currentTarget.style.background = color + '18'; }}
       >
-        <Plus size={13} />
-      </button>
-    </div>
+        <div style={{
+          width: 20, height: 20, borderRadius: 4,
+          background: color + '30',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}>
+          <Icon size={11} color={color} />
+        </div>
+        <span style={{ fontSize: 10, color: '#faebd7cc', fontWeight: 600 }}>{node.label}</span>
+      </div>
+
+      <div
+        draggable
+        onDragStart={onDragStart}
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          padding: '7px 8px',
+          borderRadius: 6,
+          background: '#111',
+          border: '1px solid transparent',
+          transition: 'border-color 0.15s, background 0.15s, opacity 0.2s',
+          cursor: 'grab',
+          opacity: isInUse ? 0.4 : 1,
+          position: 'relative',
+        }}
+        onMouseEnter={e => { e.currentTarget.style.borderColor = color + '55'; e.currentTarget.style.background = color + '0d'; }}
+        onMouseLeave={e => { e.currentTarget.style.borderColor = 'transparent'; e.currentTarget.style.background = '#111'; }}
+      >
+        {/* In-use indicator dot */}
+        {isInUse && (
+          <div style={{
+            position: 'absolute',
+            top: 4,
+            right: 4,
+            width: 6,
+            height: 6,
+            borderRadius: '50%',
+            background: '#67e8f9',
+            boxShadow: '0 0 6px #67e8f9aa',
+            zIndex: 2,
+          }} title="Already on canvas" />
+        )}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div style={{
+            width: 24, height: 24,
+            borderRadius: 5,
+            background: color + '22',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            flexShrink: 0,
+            position: 'relative',
+          }}>
+            <Icon size={13} color={color} />
+          </div>
+          <div>
+            <div style={{ fontSize: 11, color: '#faebd7cc', fontFamily: 'monospace', fontWeight: 600 }}>{node.label}</div>
+            {node.def && (
+              <div style={{ fontSize: 9, color: color + 'aa', fontFamily: 'monospace' }}>
+                {node.def.outputs.length} outputs
+              </div>
+            )}
+          </div>
+        </div>
+        <button
+          onClick={(e) => { e.stopPropagation(); handleAdd(); }}
+          style={{
+            width: 22, height: 22,
+            borderRadius: 4,
+            border: `1px solid ${color}44`,
+            background: color + '18',
+            color,
+            cursor: 'pointer',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            transition: 'background 0.15s',
+            flexShrink: 0,
+          }}
+          title={`Add ${node.label}`}
+          onMouseEnter={e => { e.currentTarget.style.background = color + '35'; }}
+          onMouseLeave={e => { e.currentTarget.style.background = color + '18'; }}
+        >
+          <Plus size={13} />
+        </button>
+      </div>
+    </>
   );
 }
 
 // ── Palette root ──────────────────────────────────────────────────────────────
 export default function NodePalette() {
   const [openCategory, setOpenCategory] = useState('Data');
+
+  // Derive a set of node types currently on the canvas
+  const canvasNodes = useUIStore(s => s.nodes);
+  const inUseTypes = useMemo(() => {
+    const set = new Set();
+    canvasNodes.forEach(n => {
+      const modelType = n.data?.nodeModel?.type;
+      if (modelType) set.add(modelType);
+    });
+    return set;
+  }, [canvasNodes]);
 
   return (
     <div style={{ width: '100%', marginTop: 16 }}>
@@ -342,7 +425,7 @@ export default function NodePalette() {
             {openCategory === cat.name && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 4, padding: 6, background: '#0d0d0d', borderTop: '1px solid #faebd710' }}>
                 {cat.nodes.map(node => (
-                  <PaletteItem key={node.id} node={node} />
+                  <PaletteItem key={node.id} node={node} isInUse={inUseTypes.has(node.type)} />
                 ))}
               </div>
             )}

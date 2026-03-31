@@ -1,8 +1,8 @@
 'use client';
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Handle, Position } from 'reactflow';
-import { FolderOpen, Eye, Code2, ChevronDown, ChevronUp, ImageIcon, Database, FileText, Braces, Globe, Table2, Upload, ShieldCheck, List, Search, Link2, Trash2 } from 'lucide-react';
+import { Handle, Position, useStore } from 'reactflow';
+import { FolderOpen, Eye, Code2, ChevronDown, ChevronUp, ImageIcon, Database, FileText, Braces, Globe, Table2, Upload, ShieldCheck, List, Search, Link2, Trash2, Lock } from 'lucide-react';
 import { useExecutionStore } from '../../store/useExecutionStore';
 import { useUIStore } from '../../store/useUIStore';
 import { previewNode } from '../../lib/executionClient';
@@ -926,6 +926,7 @@ function CodeTab({ pythonCode, onCodeChange, onResetCode, readOnly = false, dock
 }
 
 export default function DatasetNode({ data, id, selected }) {
+  const isLocked = useStore(s => s.nodeInternals.get(id)?.draggable === false);
   const { nodeModel, collapsed: storeCollapsed } = data;
   const { type, inputs = [], outputs = [], config = {}, label } = nodeModel;
 
@@ -1412,7 +1413,10 @@ export default function DatasetNode({ data, id, selected }) {
             <div className="text-[8px] uppercase tracking-widest" style={{ color: `${accent}cc` }}>Dataset Node</div>
           </div>
         </div>
-        {collapsed ? <ChevronDown size={14} color="#faebd760" /> : <ChevronUp size={14} color="#faebd760" />}
+        <div className="flex items-center gap-2">
+          {isLocked && <Lock size={12} color={accent} className="opacity-60" />}
+          {collapsed ? <ChevronDown size={14} color="#faebd760" /> : <ChevronUp size={14} color="#faebd760" />}
+        </div>
       </div>
 
       {!collapsed && (

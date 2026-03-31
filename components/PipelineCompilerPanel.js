@@ -22,7 +22,7 @@ const PipelineCompilerPanel = () => {
     if (!panelRef.current) return
 
     const tween = gsap.to(panelRef.current, {
-      xPercent: panelOpen ? 0 : 120, // Slide completely off screen to the right
+      xPercent: panelOpen ? 0 : 120,
       opacity: panelOpen ? 1 : 0,
       duration: 0.4,
       ease: 'power3.out',
@@ -57,7 +57,7 @@ const PipelineCompilerPanel = () => {
       {!panelOpen && (
         <button
           onClick={() => setPanelOpen(true)}
-          className="group z-[100] fixed top-[80px] right-0 flex items-center h-[44px] bg-background/90 backdrop-blur-md border border-r-0 border-foreground rounded-l-md shadow-[0_6px_18px_rgba(0,0,0,0.35)] cursor-pointer hover:bg-foreground/10 transition-all duration-300 overflow-hidden w-[44px] hover:w-[130px]"
+          className="group z-[150] fixed top-[80px] right-0 flex items-center h-[44px] bg-background/90 backdrop-blur-md border border-r-0 border-foreground rounded-l-md shadow-[0_6px_18px_rgba(0,0,0,0.35)] cursor-pointer hover:bg-foreground/10 transition-all duration-300 overflow-hidden w-[44px] hover:w-[130px]"
           aria-label="Open Compiler"
           title="Open Compiler"
         >
@@ -74,7 +74,7 @@ const PipelineCompilerPanel = () => {
         ref={panelRef}
         onMouseEnter={() => setPanelHover(true)}
         onMouseLeave={() => setPanelHover(false)}
-        className={`z-[100] flex flex-col fixed py-4 px-4 gap-2 items-center right-4 top-[80px] bottom-[24px] rounded-2xl border-3 border-foreground w-100 bg-background/90 backdrop-blur-md overflow-hidden shadow-2xl ${panelOpen ? 'pointer-events-auto' : 'pointer-events-none'}`}
+        className={`z-[150] flex flex-col fixed py-4 px-4 gap-2 items-center right-4 top-[80px] bottom-[24px] rounded-2xl border-3 border-foreground w-100 bg-background/90 backdrop-blur-md overflow-hidden shadow-2xl ${panelOpen ? 'pointer-events-auto' : 'pointer-events-none'}`}
       >
         <span className={`w-full flex items-center justify-between`}>
           <button

@@ -14,7 +14,7 @@ function createLifecycleDef({
     kind: 'lifecycle',
     category,
     label,
-    color: '#f59e0b',
+    color: '#ffe066',
     accepts,
     produces,
     inputs,
