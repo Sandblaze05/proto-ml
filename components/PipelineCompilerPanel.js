@@ -4,6 +4,7 @@ import React, { useEffect, useRef, useState } from 'react'
 import { SidebarClose, Code2, PlayCircle, AlertCircle, CheckCircle2 } from 'lucide-react'
 import gsap from 'gsap'
 import { useExecutionStore } from '@/store/useExecutionStore'
+import { useUIStore } from '@/store/useUIStore'
 import { compileExecutionGraph } from '@/lib/executor/pipelineCompiler'
 import MonacoCodeEditor from './nodes/MonacoCodeEditor'
 
@@ -17,6 +18,30 @@ const PipelineCompilerPanel = () => {
 
   const execNodes = useExecutionStore(s => s.nodes)
   const execEdges = useExecutionStore(s => s.edges)
+  const uiNodes = useUIStore(s => s.nodes)
+  const uiEdges = useUIStore(s => s.edges)
+
+  const buildCompilerGraphFromUI = () => {
+    const nodesById = (uiNodes || []).reduce((acc, node) => {
+      const model = node?.data?.nodeModel || {}
+      acc[node.id] = {
+        id: node.id,
+        type: model.type || node.type || 'unknown',
+        config: model.config || model.params || {},
+        pythonCode: model.pythonCode || model.execution_code || '',
+      }
+      return acc
+    }, {})
+
+    const normalizedEdges = (uiEdges || []).map((edge) => ({
+      source: edge.source,
+      target: edge.target,
+      sourceHandle: edge.sourceHandle,
+      targetHandle: edge.targetHandle,
+    }))
+
+    return { nodes: nodesById, edges: normalizedEdges }
+  }
 
   useEffect(() => {
     if (!panelRef.current) return
@@ -46,7 +71,13 @@ const PipelineCompilerPanel = () => {
   }, [panelHover, panelOpen]);
 
   const handleCompile = () => {
-    const result = compileExecutionGraph({ nodes: execNodes, edges: execEdges })
+    const uiGraph = buildCompilerGraphFromUI()
+    const hasUiNodes = Object.keys(uiGraph.nodes || {}).length > 0
+    const sourceGraph = hasUiNodes
+      ? uiGraph
+      : { nodes: execNodes, edges: execEdges }
+
+    const result = compileExecutionGraph(sourceGraph)
     setCompiledCode(result.code || '')
     setCompileErrors(result.errors || [])
     setCompileMeta(result.metadata || null)

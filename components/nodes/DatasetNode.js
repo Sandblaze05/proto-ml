@@ -45,6 +45,50 @@ const PORT_HEX = {
 function portHex(dt) { return PORT_HEX[dt] ?? PORT_HEX.default; }
 function portTw(dt) { return PORT_TW[dt] ?? PORT_TW_DEFAULT; }
 
+function inferPortDatatype(name = '', fallback = 'default') {
+  const n = String(name || '').trim().toLowerCase();
+  if (!n) return fallback;
+
+  if (n === 'images' || n.includes('image') || n.includes('tensor') || n.includes('pixel')) return 'tensor';
+  if (n === 'labels' || n.includes('label') || n.includes('sequence') || n.includes('token')) return 'sequence';
+  if (n === 'classes' || n.includes('class') || n.includes('map') || n.includes('dict') || n.includes('meta')) return 'dict';
+  if (n.includes('loader') || n.includes('batch')) return 'dataloader';
+  if (n.includes('list') || n.includes('ids') || n.includes('index')) return 'list';
+
+  return fallback;
+}
+
+function normalizePort(port, idx, fallbackPrefix) {
+  if (typeof port === 'string') {
+    const trimmed = port.trim();
+    const name = trimmed || `${fallbackPrefix}_${idx + 1}`;
+    return {
+      name,
+      datatype: inferPortDatatype(name, 'default'),
+      shape: [],
+    };
+  }
+
+  if (port && typeof port === 'object') {
+    const name = typeof port.name === 'string' && port.name.trim().length > 0
+      ? port.name.trim()
+      : `${fallbackPrefix}_${idx + 1}`;
+
+    return {
+      ...port,
+      name,
+      datatype: inferPortDatatype(name, port.datatype || 'default'),
+      shape: Array.isArray(port.shape) ? port.shape : [],
+    };
+  }
+
+  return {
+    name: `${fallbackPrefix}_${idx + 1}`,
+    datatype: 'default',
+    shape: [],
+  };
+}
+
 const TYPE_ICONS = {
   'dataset.image': ImageIcon,
   'dataset.csv': Table2,
@@ -929,6 +973,14 @@ export default function DatasetNode({ data, id, selected }) {
   const isLocked = useStore(s => s.nodeInternals.get(id)?.draggable === false);
   const { nodeModel, collapsed: storeCollapsed } = data;
   const { type, inputs = [], outputs = [], config = {}, label } = nodeModel;
+  const normalizedInputs = useMemo(
+    () => (Array.isArray(inputs) ? inputs.map((port, idx) => normalizePort(port, idx, 'in')) : []),
+    [inputs],
+  );
+  const normalizedOutputs = useMemo(
+    () => (Array.isArray(outputs) ? outputs.map((port, idx) => normalizePort(port, idx, 'out')) : []),
+    [outputs],
+  );
 
   const [activeTab, setActiveTab] = useState('Source');
   const toggleNodeCollapse = useUIStore((s) => s.toggleNodeCollapse);
@@ -1392,9 +1444,9 @@ export default function DatasetNode({ data, id, selected }) {
         '--accent-faint': `${accent}55`,
       }}
     >
-      {inputs.map((inp, idx) => (
+      {normalizedInputs.map((inp, idx) => (
         <Handle
-          key={`in-${inp.name}`}
+          key={`in-${inp.name || idx}`}
           type="target"
           position={Position.Left}
           id={inp.name}
@@ -1472,10 +1524,10 @@ export default function DatasetNode({ data, id, selected }) {
           </div>
 
           <div className="flex flex-col items-end gap-1 px-2.5 pt-1.5 pb-2.5 border-t border-[#faebd7]/5">
-            {outputs.map((out) => {
+            {normalizedOutputs.map((out, idx) => {
               const tw = portTw(out.datatype);
               return (
-                <div key={out.name} className="flex items-center gap-1.5">
+                <div key={out.name || idx} className="flex items-center gap-1.5">
                   {out.shape?.length > 0 && <span className="text-[8px] text-[#faebd7]/25 font-mono">{out.shape.join('x')}</span>}
                   <span className={`text-[8px] font-mono px-1.5 py-px rounded border ${tw.badge}`}>{out.name}</span>
                   <div className={`w-2 h-2 rounded-full shrink-0 ${tw.dot}`} />
@@ -1488,10 +1540,10 @@ export default function DatasetNode({ data, id, selected }) {
 
       {collapsed && (
         <div className="flex flex-col items-end gap-1 px-2.5 py-1.5 border-t border-[#faebd7]/5">
-          {outputs.map((out) => {
+          {normalizedOutputs.map((out, idx) => {
             const tw = portTw(out.datatype);
             return (
-              <div key={out.name} className="flex items-center gap-1">
+              <div key={out.name || idx} className="flex items-center gap-1">
                 <span className={`text-[7px] font-mono px-1 py-px rounded border ${tw.badge}`}>{out.name}</span>
                 <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${tw.dot}`} />
               </div>
@@ -1500,9 +1552,9 @@ export default function DatasetNode({ data, id, selected }) {
         </div>
       )}
 
-      {outputs.map((out, idx) => (
+      {normalizedOutputs.map((out, idx) => (
         <Handle
-          key={`out-${out.name}`}
+          key={`out-${out.name || idx}`}
           type="source"
           position={Position.Right}
           id={out.name}

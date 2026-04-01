@@ -169,11 +169,11 @@ export default function MonacoCodeEditor({
         <div className="border-b border-[#faebd7]/15 bg-[#171717]">
           <div className="flex items-end justify-between gap-2 px-2 pt-2 pb-1 cursor-move" onMouseDown={startDragging}>
             <div className="flex items-end gap-1 overflow-x-auto">
-              {Array.isArray(dockItems) && dockItems.length > 0 ? dockItems.map((item) => {
+              {Array.isArray(dockItems) && dockItems.length > 0 ? dockItems.map((item, idx) => {
                 const isActive = String(activeDockId || '') === String(item.id || '');
                 return (
                   <button
-                    key={item.id}
+                    key={item.id || idx}
                     onMouseDown={(e) => e.stopPropagation()}
                     onClick={(e) => {
                       e.stopPropagation();

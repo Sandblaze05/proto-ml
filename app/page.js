@@ -1,19 +1,12 @@
 'use client'
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect } from "react"
 import { useSearchParams, useRouter } from "next/navigation"
 import { Suspense } from "react"
 import Image from "next/image"
 import RegisterForm from "@/components/RegisterForm"
 import { ShaderAnimation } from "@/components/ShaderAnimation"
 import { Features } from "@/components/Features"
-import { ProjectTimelineDemo } from "@/components/ProjectTimelineDemo"
-import LandingFooter from "@/components/LandingFooter"
-import { LogoCloud } from "@/components/ui/logo-cloud"
-import { gsap } from "gsap"
-import { ScrollTrigger } from "gsap/ScrollTrigger"
-
-gsap.registerPlugin(ScrollTrigger)
 
 const MARQUEE_ITEMS = [
   { label: "Drag & Drop" },
@@ -60,49 +53,11 @@ const BG = "#171717"
 const FG = "#faebd7"
 
 function HomeContent() {
-  const mainRef = useRef(null)
   const searchParams = useSearchParams()
   const router = useRouter()
   const authError = searchParams.get("error") === "auth"
   const [formOpen, setFormOpen] = useState(authError)
   const [openFaq, setOpenFaq] = useState(0)
-  const [mobileNavOpen, setMobileNavOpen] = useState(false)
-  const [user, setUser] = useState(null)
-  const [activeSection, setActiveSection] = useState("")
-
-  useEffect(() => {
-    const observerOptions = {
-      root: null,
-      rootMargin: '-20% 0px -70% 0px',
-      threshold: 0
-    }
-
-    const observerCallback = (entries) => {
-      entries.forEach((entry) => {
-        if (entry.isIntersecting) {
-          setActiveSection(entry.target.id)
-        }
-      })
-    }
-
-    const observer = new IntersectionObserver(observerCallback, observerOptions)
-    
-    // Sections to observe
-    const sectionIds = ['features', 'features-section', 'pipeline', 'faqs']
-    sectionIds.forEach(id => {
-      const el = document.getElementById(id)
-      if (el) observer.observe(el)
-    })
-
-    return () => observer.disconnect()
-  }, [])
-
-  useEffect(() => {
-    import('@/lib/supabase/client').then(({ createClient }) => {
-      const supabase = createClient()
-      supabase.auth.getUser().then(({ data }) => setUser(data?.user ?? null))
-    })
-  }, [])
 
   useEffect(() => {
     if (authError) {
@@ -110,116 +65,11 @@ function HomeContent() {
     }
   }, [authError, router])
 
-  useEffect(() => {
-    // Wait for everything to be ready
-    const timer = setTimeout(() => {
-      const ctx = gsap.context(() => {
-        // Fade in
-        gsap.utils.toArray(".fade-in").forEach((el) => {
-          gsap.from(el, {
-            opacity: 0,
-            duration: 1.5,
-            ease: "power2.inOut",
-            scrollTrigger: {
-              trigger: el,
-              start: "top 90%",
-              toggleActions: "play none none none",
-            },
-          })
-        })
-
-        // Reveal from bottom
-        gsap.utils.toArray(".reveal-bottom").forEach((el) => {
-          gsap.from(el, {
-            y: 50,
-            opacity: 0,
-            duration: 1.2,
-            ease: "power3.out",
-            scrollTrigger: {
-              trigger: el,
-              start: "top 85%",
-              toggleActions: "play none none none",
-            },
-          })
-        })
-
-        // Reveal from top
-        gsap.utils.toArray(".reveal-top").forEach((el) => {
-          gsap.from(el, {
-            y: -50,
-            opacity: 0,
-            duration: 1.2,
-            ease: "power3.out",
-            scrollTrigger: {
-              trigger: el,
-              start: "top 85%",
-              toggleActions: "play none none none",
-            },
-          })
-        })
-
-        // Reveal from left
-        gsap.utils.toArray(".reveal-left").forEach((el) => {
-          gsap.from(el, {
-            x: -50,
-            opacity: 0,
-            duration: 1.2,
-            ease: "power3.out",
-            scrollTrigger: {
-              trigger: el,
-              start: "top 85%",
-              toggleActions: "play none none none",
-            },
-          })
-        })
-
-        // Reveal from right
-        gsap.utils.toArray(".reveal-right").forEach((el) => {
-          gsap.from(el, {
-            x: 50,
-            opacity: 0,
-            duration: 1.2,
-            ease: "power3.out",
-            scrollTrigger: {
-              trigger: el,
-              start: "top 85%",
-              toggleActions: "play none none none",
-            },
-          })
-        })
-
-        // Staggered cards reveal
-        gsap.utils.toArray(".stagger-reveal").forEach((container) => {
-          const items = container.querySelectorAll(".stagger-item")
-          gsap.from(items, {
-            y: 60,
-            opacity: 0,
-            duration: 0.8,
-            stagger: 0.2,
-            ease: "back.out(1.7)",
-            scrollTrigger: {
-              trigger: container,
-              start: "top 80%",
-              toggleActions: "play none none none",
-            },
-          })
-        })
-      }, mainRef.current) // Use the DOM node directly
-
-      return () => {
-        ctx.revert()
-        clearTimeout(timer)
-      }
-    }, 100)
-
-    return () => clearTimeout(timer)
-  }, [])
-
   const handleOpenForm = () => setFormOpen(true)
   const handleCloseForm = () => setFormOpen(false)
 
   return (
-    <div style={{ backgroundColor: BG, color: FG }} className="font-body min-h-screen w-full relative overflow-x-hidden">
+    <div style={{ backgroundColor: BG, color: FG }} className="font-body min-h-screen">
       {formOpen && (
         <RegisterForm
           onClose={handleCloseForm}
@@ -229,11 +79,10 @@ function HomeContent() {
 
       {/* ── Header ── */}
       <header
-        style={{ backgroundColor: `${BG}cc`, borderColor: `${FG}18`, backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)' }}
-        className="fixed top-6 left-1/2 -translate-x-1/2 w-[92%] max-w-5xl z-50 border rounded-full shadow-none bg-opacity-70 backdrop-blur-lg"
+        style={{ backgroundColor: `${BG}cc`, borderColor: `${FG}18` }}
+        className="fixed top-6 left-1/2 -translate-x-1/2 w-[92%] max-w-5xl z-50 border backdrop-blur-xl rounded-full shadow-2xl"
       >
         <nav className="flex justify-between items-center px-4 md:px-6 py-1 w-full">
-          {/* Logo */}
           <div className="flex items-center gap-3">
             <Image
               src="/logo.png"
@@ -250,103 +99,22 @@ function HomeContent() {
               proto-ML
             </div>
           </div>
-          {/* Navbar Links (Desktop) */}
-          <div className="hidden md:flex gap-8 items-center text-lg font-semibold">
-            <a href="#features-section" className={`hover:opacity-80 transition-all relative group ${activeSection === 'features-section' ? 'opacity-100' : 'opacity-60'}`} style={{ color: FG }}>
-              Features
-              <span className={`absolute -bottom-1 left-0 h-0.5 bg-current transition-all duration-300 ${activeSection === 'features-section' ? 'w-full' : 'w-0 group-hover:w-full'}`}></span>
-            </a>
-            <a href="#pipeline" className={`hover:opacity-80 transition-all relative group ${activeSection === 'pipeline' ? 'opacity-100' : 'opacity-60'}`} style={{ color: FG }}>
-              Pipeline
-              <span className={`absolute -bottom-1 left-0 h-0.5 bg-current transition-all duration-300 ${activeSection === 'pipeline' ? 'w-full' : 'w-0 group-hover:w-full'}`}></span>
-            </a>
-            <a href="#faqs" className={`hover:opacity-80 transition-all relative group ${activeSection === 'faqs' ? 'opacity-100' : 'opacity-60'}`} style={{ color: FG }}>
-              FAQs
-              <span className={`absolute -bottom-1 left-0 h-0.5 bg-current transition-all duration-300 ${activeSection === 'faqs' ? 'w-full' : 'w-0 group-hover:w-full'}`}></span>
-            </a>
-            <a href="/about" className={`hover:opacity-80 transition-all relative group opacity-60`} style={{ color: FG }}>
-              About
-              <span className="absolute -bottom-1 left-0 w-0 h-0.5 bg-current transition-all duration-300 group-hover:w-full"></span>
-            </a>
-          </div>
-          {/* Hamburger (Mobile) */}
-          <div className="md:hidden flex items-center">
-            <button onClick={() => setMobileNavOpen((v) => !v)} aria-label="Open navigation" className="p-2 rounded-full hover:bg-white/10 transition">
-              <svg width="28" height="28" fill="none" stroke={FG} strokeWidth="2" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
-            </button>
-          </div>
-          {/* Login or Dashboard Button */}
-          {user ? (
-            <a
-              href="/dashboard"
-              style={{ backgroundColor: FG, color: BG }}
-              className="font-manrope tracking-tight text-sm px-6 py-2 font-bold rounded-full hover:opacity-80 duration-150 transition-all cursor-pointer hidden md:block"
-            >
-              Dashboard
-            </a>
-          ) : (
-            <button
-              onClick={handleOpenForm}
-              style={{ backgroundColor: FG, color: BG }}
-              className="font-manrope tracking-tight text-sm px-6 py-2 font-bold rounded-full hover:opacity-80 duration-150 transition-all cursor-pointer hidden md:block"
-            >
-              Login
-            </button>
-          )}
-          {/* Mobile Nav Dropdown */}
-          <div 
-            className={`absolute top-full left-0 right-0 mt-2 mx-4 md:hidden overflow-hidden transition-all duration-300 ease-in-out z-[100] ${mobileNavOpen ? 'max-h-[500px] opacity-100' : 'max-h-0 opacity-0'}`}
+          <button
+            onClick={handleOpenForm}
+            style={{ backgroundColor: FG, color: BG }}
+            className="font-manrope tracking-tight text-sm px-6 py-2 font-bold rounded-full hover:opacity-80 duration-150 transition-all cursor-pointer"
           >
-            <div 
-              style={{ 
-                backgroundColor: `${BG}f8`, 
-                borderColor: `${FG}25`, 
-                backdropFilter: 'blur(30px)', 
-                WebkitBackdropFilter: 'blur(30px)',
-                boxShadow: `0 8px 32px 0 rgba(0, 0, 0, 0.8)`
-              }}
-              className="border rounded-2xl flex flex-col p-4 gap-1"
-            >
-              <a href="#features-section" className={`text-lg font-semibold py-3 px-4 w-full text-left rounded-xl hover:bg-white/10 transition-all ${activeSection === 'features-section' ? 'bg-white/10 pl-6' : ''}`} style={{ color: FG }} onClick={() => setMobileNavOpen(false)}>
-                Features
-              </a>
-              <a href="#pipeline" className={`text-lg font-semibold py-3 px-4 w-full text-left rounded-xl hover:bg-white/10 transition-all ${activeSection === 'pipeline' ? 'bg-white/10 pl-6' : ''}`} style={{ color: FG }} onClick={() => setMobileNavOpen(false)}>
-                Pipeline
-              </a>
-              <a href="#faqs" className={`text-lg font-semibold py-3 px-4 w-full text-left rounded-xl hover:bg-white/10 transition-all ${activeSection === 'faqs' ? 'bg-white/10 pl-6' : ''}`} style={{ color: FG }} onClick={() => setMobileNavOpen(false)}>
-                FAQs
-              </a>
-              <a href="/about" className="text-lg font-semibold py-3 px-4 w-full text-left rounded-xl hover:bg-white/10 transition" style={{ color: FG }} onClick={() => setMobileNavOpen(false)}>About</a>
-              <div className="h-px w-full my-2" style={{ backgroundColor: `${FG}10` }} />
-              {user ? (
-                <a
-                  href="/dashboard"
-                  style={{ backgroundColor: FG, color: BG }}
-                  className="font-manrope tracking-tight text-sm px-6 py-3 font-bold rounded-xl hover:opacity-80 duration-150 transition-all cursor-pointer w-full text-center"
-                  onClick={() => setMobileNavOpen(false)}
-                >
-                  Dashboard
-                </a>
-              ) : (
-                <button
-                  onClick={() => { setMobileNavOpen(false); handleOpenForm(); }}
-                  style={{ backgroundColor: FG, color: BG }}
-                  className="font-manrope tracking-tight text-sm px-6 py-3 font-bold rounded-xl hover:opacity-80 duration-150 transition-all cursor-pointer w-full"
-                >
-                  Login
-                </button>
-              )}
-            </div>
-          </div>
+            Login
+          </button>
         </nav>
       </header>
 
-      <main ref={mainRef}>
+      <main className="pt-24">
         {/* ── Hero ── */}
-        <section id="features" className="relative min-h-screen pt-32 md:pt-0 flex flex-col md:flex-row items-center justify-center px-6 overflow-hidden">
+        <section className="relative min-h-230.25 flex flex-col md:flex-row items-center justify-center px-6 overflow-hidden">
           <ShaderAnimation />
           <div className="relative z-10 flex flex-col md:flex-row items-center justify-between w-full max-w-6xl mx-auto gap-12 md:gap-0">
-            <div className="flex-1 text-center md:text-left reveal-left">
+            <div className="flex-1 text-center md:text-left">
               <h1
                 style={{ color: FG }}
                 className="font-headline text-5xl sm:text-6xl md:text-8xl font-extrabold tracking-tighter mb-8 leading-[0.95]"
@@ -371,35 +139,58 @@ function HomeContent() {
                 </a>
               </div>
             </div>
-            <div className="flex-1 flex justify-center items-center w-full md:w-auto mt-0 md:mt-0 reveal-right">
+            <div className="flex-1 flex justify-center items-center w-full md:w-auto mt-12 md:mt-0">
               {/* Radial Orbital Timeline in hero */}
-              <ProjectTimelineDemo />
+              {typeof window !== 'undefined' && require("@/components/ProjectTimelineDemo").ProjectTimelineDemo()}
             </div>
           </div>
         </section>
 
-        {/* ── Logo Cloud Marquee ── */}
-        <section className="fade-in">
-          <LogoCloud />
+        {/* ── Marquee ── */}
+        <section
+          style={{ borderColor: `${FG}10`, backgroundColor: `${FG}05` }}
+          className="py-12 border-y overflow-hidden"
+        >
+          <div className="animate-marquee whitespace-nowrap flex gap-16 items-center">
+            {[0, 1].map((set) => (
+              <div
+                key={set}
+                style={{ color: `${FG}60` }}
+                className="flex items-center gap-16 font-label text-sm uppercase tracking-[0.3em]"
+              >
+                {MARQUEE_ITEMS.map(({ label }) => (
+                  <span key={label} className="flex items-center gap-2">
+                    <span style={{ backgroundColor: FG, opacity: 0.4 }} className="w-1.5 h-1.5 rounded-full" />
+                    {label}
+                  </span>
+                ))}
+              </div>
+            ))}
+          </div>
         </section>
 
-        <div className="text-center mb-8 px-6 reveal-top">
-          <h2
-            style={{ color: FG }}
-            className="font-headline text-4xl md:text-5xl font-bold mb-4 tracking-tight mt-16"
-          >
-            Built for Real ML Workflows
-          </h2>
-          <p style={{ color: `${FG}70` }} className="max-w-2xl mx-auto">
-            From graph authoring to production-ready execution, proto-ML keeps your pipeline fast and predictable.
-          </p>
-        </div>
 
-        <div id="features-section"><Features /></div>
+        <Features />
+
+        {/* ── Project Timeline (Radial Orbital) ── */}
+        <section className="py-32 px-8 max-w-7xl mx-auto">
+          <div className="text-center mb-16">
+            <h2 style={{ color: FG }} className="font-headline text-4xl md:text-5xl font-bold mb-4 tracking-tight">
+              proto-ML Project Timeline
+            </h2>
+            <p style={{ color: `${FG}70` }} className="max-w-xl mx-auto">
+              Explore the journey of proto-ML from planning to release, visualized as an interactive orbital timeline.
+            </p>
+          </div>
+          <div className="flex justify-center">
+            {/* Timeline Demo Component */}
+            {typeof window !== 'undefined' && require("@/components/ProjectTimelineDemo").ProjectTimelineDemo()}
+          </div>
+        </section>
 
         {/* ── Pipeline Protocol ── */}
-        <section id="pipeline" className="py-32 px-8 max-w-7xl mx-auto">
-          <div className="text-center mb-24 reveal-top">
+        <section className="py-32 px-8 max-w-7xl mx-auto">
+          <div className="text-center mb-24">
             <h2 style={{ color: FG }} className="font-headline text-4xl md:text-5xl font-bold mb-4 tracking-tight">
               The Pipeline Protocol
             </h2>
@@ -408,13 +199,13 @@ function HomeContent() {
               designed for speed.
             </p>
           </div>
-          <div className="grid md:grid-cols-3 gap-12 stagger-reveal">
+          <div className="grid md:grid-cols-3 gap-12">
             {[
               { num: "01", icon: "token", title: "Initialize Data", body: "Connect your dataset clusters. Our spatial engine auto-detects schemas and prepares the tensor flow." },
               { num: "02", icon: "layers", title: "Draft Architecture", body: "Drag and connect visual nodes to build sophisticated model architectures without touching a single line of boilerplate." },
               { num: "03", icon: "rocket_launch", title: "Deploy & Scale", body: "Compile your pipeline to highly optimized Python code or deploy directly to our serverless inference edge." },
             ].map(({ num, icon, title, body }) => (
-              <div key={num} className="group relative stagger-item">
+              <div key={num} className="group relative">
                 <div
                   style={{ color: `${FG}06` }}
                   className="absolute -top-12 -left-4 text-8xl font-bold font-headline select-none"
@@ -443,7 +234,7 @@ function HomeContent() {
         <section style={{ backgroundColor: `${FG}05` }} className="py-32 overflow-hidden">
           <div className="max-w-7xl mx-auto px-8 mb-20">
             <div className="flex flex-col md:flex-row items-end justify-between gap-8">
-              <div className="max-w-2xl reveal-left">
+              <div className="max-w-2xl">
                 <span style={{ color: `${FG}50` }} className="font-label text-xs tracking-[0.3em] uppercase block mb-4">
                   Transmission Logs
                 </span>
@@ -454,7 +245,7 @@ function HomeContent() {
             </div>
           </div>
 
-          <div className="flex flex-col gap-8 reveal-bottom">
+          <div className="flex flex-col gap-8">
             {/* Single Row: Left scroll */}
             <div className="overflow-hidden flex">
               <div 
@@ -486,8 +277,8 @@ function HomeContent() {
         </section>
 
         {/* ── FAQ ── */}
-        <section id="faqs" className="py-32 px-8 max-w-4xl mx-auto reveal-bottom">
-          <h2 style={{ color: FG }} className="font-headline text-3xl md:text-4xl font-bold mb-16 text-center reveal-top">
+        <section className="py-32 px-8 max-w-4xl mx-auto">
+          <h2 style={{ color: FG }} className="font-headline text-3xl md:text-4xl font-bold mb-16 text-center">
             Frequently Queried
           </h2>
           <div className="space-y-4">
@@ -496,8 +287,8 @@ function HomeContent() {
               return (
                 <div
                   key={q}
-                  style={{ backgroundColor: `${FG}06`, borderColor: `${FG}18`, transitionDelay: `${i * 100}ms` }}
-                  className="border rounded-lg overflow-hidden reveal-right"
+                  style={{ backgroundColor: `${FG}06`, borderColor: `${FG}18` }}
+                  className="border rounded-lg overflow-hidden"
                 >
                   <button
                     onClick={() => setOpenFaq(isOpen ? null : i)}
@@ -538,22 +329,22 @@ function HomeContent() {
         </section>
 
         {/* ── CTA ── */}
-        <section className="py-32 px-8 text-center relative overflow-hidden reveal-bottom">
+        <section className="py-32 px-8 text-center relative overflow-hidden">
           <div
             style={{ background: `radial-gradient(ellipse at center, ${FG}08 0%, transparent 70%)` }}
             className="absolute inset-0"
           />
           <div className="relative z-10 max-w-3xl mx-auto">
-            <h2 style={{ color: FG }} className="font-headline text-5xl md:text-7xl font-extrabold tracking-tighter mb-8 leading-tight reveal-top">
+            <h2 style={{ color: FG }} className="font-headline text-5xl md:text-7xl font-extrabold tracking-tighter mb-8 leading-tight">
               Ready to orchestrate <br />the future?
             </h2>
-            <p style={{ color: `${FG}70` }} className="text-lg mb-12 reveal-bottom">
+            <p style={{ color: `${FG}70` }} className="text-lg mb-12">
               Join 15,000+ developers building the next generation of intelligence.
             </p>
             <button
               onClick={handleOpenForm}
               style={{ backgroundColor: FG, color: BG }}
-              className="px-12 py-5 font-bold text-lg rounded-lg hover:opacity-90 transition-all duration-300 shadow-2xl cursor-pointer reveal-bottom"
+              className="px-12 py-5 font-bold text-lg rounded-lg hover:opacity-90 transition-all duration-300 shadow-2xl cursor-pointer"
             >
               Deploy Your First Node
             </button>
@@ -562,7 +353,45 @@ function HomeContent() {
       </main>
 
       {/* ── Footer ── */}
-      <LandingFooter />
+      <footer style={{ backgroundColor: BG, borderColor: `${FG}10` }} className="w-full border-t">
+        <div className="flex flex-col md:flex-row justify-between items-center px-12 py-16 gap-8 max-w-screen-2xl mx-auto">
+          <div className="flex flex-col items-center md:items-start gap-4">
+            <div className="flex items-center gap-3">
+              <Image
+                src="/logo.png"
+                alt="proto-ML logo"
+                width={36}
+                height={36}
+                className="object-contain"
+                unoptimized
+              />
+              <div style={{ color: FG }} className="text-lg font-bold font-headline tracking-tighter uppercase">
+                proto-ML
+              </div>
+            </div>
+            <div style={{ color: `${FG}50` }} className="font-space-grotesk text-xs uppercase tracking-widest">
+              © {new Date().getFullYear()} proto-ML. Made by Tejas
+            </div>
+          </div>
+          <div className="flex gap-10">
+            {["Privacy", "Terms", "Github", "Twitter"].map((link) => (
+              <a
+                key={link}
+                style={{ color: `${FG}40` }}
+                className="font-space-grotesk text-xs uppercase tracking-widest hover:opacity-80 transition-all hover:-translate-y-0.5 duration-300"
+                href="#"
+              >
+                {link}
+              </a>
+            ))}
+          </div>
+        </div>
+        <div style={{ borderColor: `${FG}08`, color: `${FG}30` }} className="w-full py-4 text-center border-t">
+          <span className="font-label text-[10px] uppercase tracking-[0.5em]">
+            Architecture Defined by Code — Design Defined by Light
+          </span>
+        </div>
+      </footer>
     </div>
   )
 }

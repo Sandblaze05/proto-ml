@@ -6,8 +6,8 @@ export function Features() {
         <section className="bg-gray-50 py-16 md:py-32 dark:bg-transparent">
             <div className="mx-auto w-full max-w-7xl px-6 lg:px-8">
                 <div className="relative">
-                    <div className="relative z-10 grid grid-cols-6 gap-3 stagger-reveal">
-                        <Card className="relative col-span-full flex overflow-hidden lg:col-span-2 stagger-item">
+                    <div className="relative z-10 grid grid-cols-6 gap-3">
+                        <Card className="relative col-span-full flex overflow-hidden lg:col-span-2">
                             <CardContent className="relative m-auto size-fit pt-6">
                                 <div className="relative flex h-24 w-56 items-center">
                                     <svg className="text-muted absolute inset-0 size-full" viewBox="0 0 254 104" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -21,7 +21,7 @@ export function Features() {
                                 <h2 className="mt-6 text-center text-3xl font-semibold">No-Code to Python</h2>
                             </CardContent>
                         </Card>
-                        <Card className="relative col-span-full overflow-hidden sm:col-span-3 lg:col-span-2 stagger-item">
+                        <Card className="relative col-span-full overflow-hidden sm:col-span-3 lg:col-span-2">
                             <CardContent className="pt-6">
                                 <div className="relative mx-auto flex aspect-square size-32 rounded-full border before:absolute before:-inset-2 before:rounded-full before:border dark:border-white/10 dark:before:border-white/5">
                                     <svg className="m-auto h-fit w-24" viewBox="0 0 212 143" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -54,7 +54,7 @@ export function Features() {
                                 </div>
                             </CardContent>
                         </Card>
-                        <Card className="relative col-span-full overflow-hidden sm:col-span-3 lg:col-span-2 stagger-item">
+                        <Card className="relative col-span-full overflow-hidden sm:col-span-3 lg:col-span-2">
                             <CardContent className="pt-6">
                                 <div className="pt-6 lg:px-6">
                                     <svg className="dark:text-muted-foreground w-full" viewBox="0 0 386 123" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -93,7 +93,7 @@ export function Features() {
                                 </div>
                             </CardContent>
                         </Card>
-                        <Card className="relative col-span-full overflow-hidden lg:col-span-3 stagger-item">
+                        <Card className="relative col-span-full overflow-hidden lg:col-span-3">
                             <CardContent className="grid pt-6 sm:grid-cols-2">
                                 <div className="relative z-10 flex flex-col justify-between space-y-12 lg:space-y-6">
                                     <div className="relative flex aspect-square size-12 rounded-full border before:absolute before:-inset-2 before:rounded-full before:border dark:border-white/10 dark:before:border-white/5">
@@ -133,7 +133,7 @@ export function Features() {
                                 </div>
                             </CardContent>
                         </Card>
-                        <Card className="relative col-span-full overflow-hidden lg:col-span-3 stagger-item">
+                        <Card className="relative col-span-full overflow-hidden lg:col-span-3">
                             <CardContent className="grid h-full pt-6 sm:grid-cols-2">
                                 <div className="relative z-10 flex flex-col justify-between space-y-12 lg:space-y-6">
                                     <div className="relative flex aspect-square size-12 rounded-full border before:absolute before:-inset-2 before:rounded-full before:border dark:border-white/10 dark:before:border-white/5">
@@ -147,16 +147,16 @@ export function Features() {
                                 <div className="relative mt-6 before:absolute before:inset-0 before:mx-auto before:w-px before:bg-border sm:-my-6 sm:-mr-6">
                                     <div className="relative flex h-full flex-col justify-center space-y-8 py-8">
                                         <div className="relative flex w-[calc(50%+1.75rem)] items-center justify-end gap-3">
-                                            <span className="block h-fit rounded border px-3 py-1.5 text-xs shadow-sm">Tejas</span>
-                                            <div className="ring-background size-8 ring-4">
-                                                <img className="size-full rounded-full object-cover object-top" src="/tejas.png" alt="Tejas" />
+                                            <span className="block h-fit rounded border px-3 py-1.5 text-sm shadow-sm">Tejas</span>
+                                            <div className="ring-background size-10 ring-4">
+                                                <img className="size-full rounded-full" src="/tejas.png" alt="Tejas" />
                                             </div>
                                         </div>
                                         <div className="relative ml-[calc(50%-1.25rem)] flex items-center gap-3">
-                                            <div className="ring-background size-9 ring-4">
-                                                <img className="size-full rounded-full object-cover object-top" src="/sarang.png" alt="Sarang" />
+                                            <div className="ring-background size-11 ring-4">
+                                                <img className="size-full rounded-full" src="/sarang.png" alt="Sarang" />
                                             </div>
-                                            <span className="block h-fit rounded border px-3 py-1.5 text-xs shadow-sm">Sarang</span>
+                                            <span className="block h-fit rounded border px-3 py-1.5 text-sm shadow-sm">Sarang</span>
                                         </div>
                                     </div>
                                 </div>

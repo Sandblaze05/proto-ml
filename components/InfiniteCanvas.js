@@ -15,7 +15,7 @@ import dagre from 'dagre';
 import { View, Minus, Plus, Maximize, Minimize2, Trash2, 
   AlignCenterHorizontal, AlignCenterVertical,
   CheckCircle2, AlertCircle, Info, X, Wand2,
-  MousePointer2, Pencil, Eraser, Type, Undo2, Redo2, ChevronLeft, ChevronRight, Lock, Unlock
+  MousePointer2, Pencil, Eraser, Type, Undo2, Redo2, ChevronLeft, ChevronRight, Lock, Unlock, Send
 } from 'lucide-react';
 import gsap from 'gsap';
 import { useDroppable } from '@dnd-kit/core';
@@ -681,6 +681,45 @@ function Spotlight({ isOpen, onClose }) {
 }
 
 
+function LiveCursors({ cursors, viewportTransform }) {
+  if (!Array.isArray(cursors) || cursors.length === 0) return null;
+
+  const [tx, ty, zoom] = Array.isArray(viewportTransform) && viewportTransform.length === 3
+    ? viewportTransform
+    : [0, 0, 1];
+
+  const toScreenPosition = (cursor) => {
+    if (cursor?.space === 'flow') {
+      return {
+        left: (cursor.x * zoom) + tx,
+        top: (cursor.y * zoom) + ty,
+      };
+    }
+
+    return {
+      left: cursor.x,
+      top: cursor.y,
+    };
+  };
+
+  return (
+    <>
+      {cursors.map((cursor) => (
+        <div
+          key={cursor.userId}
+          className="pointer-events-none absolute z-[120]"
+          style={{ ...toScreenPosition(cursor), transform: 'translate(8px, 8px)' }}
+        >
+          <Send size={14} strokeWidth={2.4} style={{ color: cursor.color || '#67e8f9', transform: 'rotate(158deg)' }} />
+          <div className="mt-1 max-w-[180px] rounded-md border border-foreground/20 bg-background/90 px-2 py-1 text-[10px] font-mono text-foreground/80 backdrop-blur">
+            {cursor.label || 'Collaborator'}
+          </div>
+        </div>
+      ))}
+    </>
+  );
+}
+
 const initialCustomNodes = [];
 const initialCustomEdges = [];
 
@@ -729,8 +768,8 @@ function FloatingToolbar() {
   const selectedShapeNode = useMemo(() => nodes.find(n => n.selected && n.type === 'shapeNode'), [nodes]);
 
   useEffect(() => {
-    // Default position beside settings icon (Top-Right, Collapsed)
-    setPos({ x: window.innerWidth - 140, y: 12 });
+    // Default position below the top-right profile cluster to avoid overlap.
+    setPos({ x: window.innerWidth - 140, y: 72 });
   }, []);
 
   const onStartDrag = (e) => {
@@ -1255,12 +1294,33 @@ function DrawingLayer() {
   );
 }
 
-function InteractiveCanvas() {
+function InteractiveCanvas({ onCanvasChange, onPointerMove, onEditingNodeChange, remoteCursors = [], remoteNodeEditors = [], readOnly = false }) {
   const { 
     nodes, edges, drawings,  
     setNodes, setEdges, addNode, addEdge, removeNode, addToast, showMinimap,
     activeTool, setActiveTool, undo, redo, saveToHistory, setCanvasViewport
   } = useUIStore();
+
+  const wasDraggingRef = useRef(false);
+
+  // Sync changes to remote peers
+  useEffect(() => {
+    if (!onCanvasChange) return;
+
+    const hasDraggingNode = Array.isArray(nodes) && nodes.some((node) => node?.dragging);
+    if (hasDraggingNode) {
+      wasDraggingRef.current = true;
+      return;
+    }
+
+    if (wasDraggingRef.current) {
+      wasDraggingRef.current = false;
+      onCanvasChange(nodes, edges, drawings, { reason: 'drag-end' });
+      return;
+    }
+
+    onCanvasChange(nodes, edges, drawings, { reason: 'graph-change' });
+  }, [nodes, edges, drawings, onCanvasChange]);
 
   const { addExecutionNode, addExecutionEdge, canConnect, removeExecutionNode } = useExecutionStore();
   const { setNodeRef } = useDroppable({ id: 'canvas-droppable' });
@@ -1295,7 +1355,7 @@ function InteractiveCanvas() {
         }
       }
 
-      if (!isTyping && !e.metaKey && !e.ctrlKey && !e.altKey) {
+      if (!readOnly && !isTyping && !e.metaKey && !e.ctrlKey && !e.altKey) {
         const key = e.key.toLowerCase();
         if (key === 'v') setActiveTool('select');
         if (key === 'd') setActiveTool('draw');
@@ -1315,26 +1375,36 @@ function InteractiveCanvas() {
     };
     window.addEventListener('keydown', handleKeys);
     return () => window.removeEventListener('keydown', handleKeys);
-  }, [undo, redo, setActiveTool]);
+  }, [readOnly, undo, redo, setActiveTool]);
 
   const onNodesChange = useCallback((changes) => {
+    if (readOnly) return;
+
     // Save to history when dragging or significant changes happen
     const isDraggableChange = changes.some(c => c.type === 'position' && c.dragging === false);
     if (isDraggableChange) saveToHistory();
     
     useUIStore.getState().onNodesChange(changes);
-  }, [saveToHistory]);
+  }, [readOnly, saveToHistory]);
 
   const onEdgesChange = useCallback((changes) => {
+    if (readOnly) return;
+
     const isRemoval = changes.some(c => c.type === 'remove');
     if (isRemoval) saveToHistory();
     useUIStore.getState().onEdgesChange(changes);
-  }, [saveToHistory]);
+  }, [readOnly, saveToHistory]);
 
 
   useEffect(() => {
     if (initialized.current) return;
     initialized.current = true;
+
+    // Skip demo initialization when no starter graph is defined.
+    // This prevents wiping server-fetched nodes/edges on first mount.
+    if (initialCustomNodes.length === 0 && initialCustomEdges.length === 0) {
+      return;
+    }
 
     // Layout and Init
     const rfNodes = initialCustomNodes.map(n => ({
@@ -1380,6 +1450,8 @@ function InteractiveCanvas() {
   const [isConnecting, setIsConnecting] = useState(false);
 
   const onConnect = useCallback((connection) => {
+    if (readOnly) return;
+
     // 1. Verify in Execution Store
     if (canConnect(connection.source, connection.target, connection.sourceHandle, connection.targetHandle)) {
       // 2. Add to UI
@@ -1398,7 +1470,7 @@ function InteractiveCanvas() {
     } else {
       addToast('Incompatible connection', 'error');
     }
-  }, [addEdge, addExecutionEdge, canConnect, addToast]);
+  }, [readOnly, addEdge, addExecutionEdge, canConnect, addToast]);
 
   const onConnectStart = useCallback(() => setIsConnecting(true), []);
   const onConnectEnd = useCallback(() => setIsConnecting(false), []);
@@ -1450,6 +1522,8 @@ function InteractiveCanvas() {
   );
 
   const onPaneClick = useCallback((event) => {
+    if (readOnly) return;
+
     setMenu(null);
     if (activeTool === 'text') {
       const position = screenToFlowPosition({ x: event.clientX, y: event.clientY });
@@ -1465,7 +1539,7 @@ function InteractiveCanvas() {
       setActiveTool('select');
       addToast('Sticky note placed!', 'success');
     }
-  }, [activeTool, screenToFlowPosition, addNode, setActiveTool, addToast]);
+  }, [readOnly, activeTool, screenToFlowPosition, addNode, setActiveTool, addToast]);
 
   // ── Drag-to-canvas handlers ────────────────────────────────────────────────
   const onCanvasDragOver = useCallback((e) => {
@@ -1484,6 +1558,8 @@ function InteractiveCanvas() {
   }, []);
 
   const onCanvasDrop = useCallback((e) => {
+    if (readOnly) return;
+
     e.preventDefault();
     setDroppingOver(false);
 
@@ -1574,7 +1650,7 @@ function InteractiveCanvas() {
     }
 
     addToast(`Added ${node.label} to canvas`, 'success');
-  }, [screenToFlowPosition, addNode, addExecutionNode, addToast]);
+  }, [readOnly, screenToFlowPosition, addNode, addExecutionNode, addToast]);
 
   const handleDeleteNode = () => {
     if (menu?.id) {
@@ -1598,6 +1674,26 @@ function InteractiveCanvas() {
       onDragOver={onCanvasDragOver}
       onDragLeave={onCanvasDragLeave}
       onDrop={onCanvasDrop}
+      onFocusCapture={(event) => {
+        if (!onEditingNodeChange) return;
+        const nodeEl = event.target?.closest?.('.react-flow__node');
+        const focusedNodeId = nodeEl?.getAttribute?.('data-id') || null;
+        onEditingNodeChange(focusedNodeId);
+      }}
+      onBlurCapture={() => {
+        if (!onEditingNodeChange) return;
+        requestAnimationFrame(() => {
+          const activeNodeEl = document.activeElement?.closest?.('.react-flow__node');
+          const focusedNodeId = activeNodeEl?.getAttribute?.('data-id') || null;
+          onEditingNodeChange(focusedNodeId);
+        });
+      }}
+      onMouseMove={(event) => {
+        if (onPointerMove) {
+          const flowPos = screenToFlowPosition({ x: event.clientX, y: event.clientY });
+          onPointerMove(flowPos.x, flowPos.y);
+        }
+      }}
     >
       {/* Drop zone highlight overlay */}
       {droppingOver && (
@@ -1631,7 +1727,7 @@ function InteractiveCanvas() {
         fitViewOptions={{ padding: 0.2 }}
         panOnScroll={true}
         zoomOnScroll={true}
-        panOnDrag={activeTool === 'select'}
+        panOnDrag={readOnly ? true : activeTool === 'select'}
         selectionOnDrag={activeTool === 'select'}
         selectionKeyCode="Shift"
         selectionMode="box"
@@ -1640,8 +1736,11 @@ function InteractiveCanvas() {
         edgeTypes={edgeTypes}
         minZoom={0.1}
         maxZoom={2}
-        deleteKeyCode={['Backspace', 'Delete']}
+        deleteKeyCode={readOnly ? null : ['Backspace', 'Delete']}
         onNodesDelete={onNodesDelete}
+        nodesDraggable={!readOnly}
+        nodesConnectable={!readOnly}
+        elementsSelectable={true}
         style={{ background: 'transparent' }}
         proOptions={{ hideAttribution: true }}
       >
@@ -1653,8 +1752,10 @@ function InteractiveCanvas() {
 
       <ToastContainer />
       <Spotlight isOpen={isSpotlightOpen} onClose={() => setIsSpotlightOpen(false)} />
-      <FloatingToolbar />
+      {!readOnly && <FloatingToolbar />}
       <ShapeLayerComponents />
+      <LiveCursors cursors={remoteCursors} viewportTransform={transform} />
+      <LiveNodeEditors editors={remoteNodeEditors} nodes={nodes} viewportTransform={transform} />
 
       {nodes.length === 0 && (
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
@@ -1674,6 +1775,43 @@ function InteractiveCanvas() {
         />
       )}
     </div>
+  );
+}
+
+function LiveNodeEditors({ editors, nodes, viewportTransform }) {
+  if (!Array.isArray(editors) || editors.length === 0) return null;
+
+  const [tx, ty, zoom] = Array.isArray(viewportTransform) && viewportTransform.length === 3
+    ? viewportTransform
+    : [0, 0, 1];
+
+  const nodeById = new Map((nodes || []).map((node) => [node.id, node]));
+
+  return (
+    <>
+      {editors.map((editor) => {
+        const node = nodeById.get(editor.nodeId);
+        if (!node) return null;
+
+        const left = (node.position.x * zoom) + tx;
+        const top = (node.position.y * zoom) + ty;
+
+        return (
+          <div
+            key={`${editor.userId}-${editor.nodeId}`}
+            className="pointer-events-none absolute z-[121]"
+            style={{ left, top, transform: 'translate(8px, -20px)' }}
+          >
+            <div
+              className="rounded-full border border-foreground/20 bg-background/92 px-2 py-1 text-[10px] font-mono text-foreground/80 backdrop-blur"
+              style={{ boxShadow: `0 0 0 1px ${editor.color || '#67e8f9'}33` }}
+            >
+              {editor.label || 'Collaborator'} editing
+            </div>
+          </div>
+        );
+      })}
+    </>
   );
 }
 
@@ -1960,11 +2098,18 @@ function MenuButton({ icon: Icon, label, onClick, color = "text-foreground/80", 
   );
 }
 
-export default function InfiniteCanvas() {
+export default function InfiniteCanvas({ onCanvasChange, onPointerMove, onEditingNodeChange, remoteCursors = [], remoteNodeEditors = [], readOnly = false }) {
   return (
     <div style={{ width: '100%', height: '100vh', position: 'relative' }}>
       <ReactFlowProvider>
-        <InteractiveCanvas />
+        <InteractiveCanvas
+          onCanvasChange={onCanvasChange}
+          onPointerMove={onPointerMove}
+          onEditingNodeChange={onEditingNodeChange}
+          remoteCursors={remoteCursors}
+          remoteNodeEditors={remoteNodeEditors}
+          readOnly={readOnly}
+        />
       </ReactFlowProvider>
     </div>
   );

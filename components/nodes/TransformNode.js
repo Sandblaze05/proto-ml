@@ -233,7 +233,7 @@ export default function TransformNode({ data, id, selected }) {
     >
       {inputs.map((inp, idx) => (
         <Handle
-          key={`in-${inp}`}
+          key={`in-${inp || idx}`}
           type="target"
           position={Position.Left}
           id={inp}
@@ -316,8 +316,8 @@ export default function TransformNode({ data, id, selected }) {
       )}
 
       <div className="flex flex-col items-end gap-1 px-2.5 pt-1.5 pb-2.5 border-t border-[#faebd7]/5">
-        {outputs.map((out) => (
-          <div key={out} className="flex items-center gap-1.5">
+        {outputs.map((out, idx) => (
+          <div key={out || idx} className="flex items-center gap-1.5">
             <span className="text-[8px] font-mono px-1.5 py-px rounded border text-cyan-300 bg-cyan-400/10 border-cyan-400/30">{out}</span>
             <div className="w-2 h-2 rounded-full shrink-0 bg-cyan-300" />
           </div>
@@ -326,7 +326,7 @@ export default function TransformNode({ data, id, selected }) {
 
       {outputs.map((out, idx) => (
         <Handle
-          key={`out-${out}`}
+          key={`out-${out || idx}`}
           type="source"
           position={Position.Right}
           id={out}

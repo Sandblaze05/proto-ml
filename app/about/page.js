@@ -261,6 +261,7 @@ export default function AboutPage() {
                   src="/tejas.png"
                   alt="Tejas Chauhan"
                   fill
+                  loading="eager"
                   className="object-cover object-top group-hover:scale-105 transition-transform duration-700"
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-[#171717] to-transparent opacity-60" />
@@ -284,12 +285,13 @@ export default function AboutPage() {
             </div>
 
             {/* Sarang Rastogi */}
-            <div className="group reveal-left mx-auto max-w-sm" style={{ transitionDelay: "200ms" }}>
+            <div className="group reveal-left mx-auto max-w-sm">
               <div className="relative mb-8 aspect-square overflow-hidden rounded-2xl grayscale hover:grayscale-0 transition-all duration-700 shadow-2xl">
                 <Image
                   src="/sarang.png"
                   alt="Sarang Rastogi"
                   fill
+                  loading="eager"
                   className="object-cover object-top group-hover:scale-105 transition-transform duration-700"
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-[#171717] to-transparent opacity-60" />
