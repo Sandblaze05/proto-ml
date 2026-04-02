@@ -26,6 +26,8 @@ function createLifecycleDef({
 }
 
 const DATA_INPUTS = ['image', 'tabular', 'text'];
+const MODEL_INPUTS = ['model', 'trained_model'];
+const PREDICTION_INPUTS = ['predictions', ...DATA_INPUTS];
 
 export const LIFECYCLE_NODES = [
   createLifecycleDef({
@@ -181,6 +183,243 @@ export const LIFECYCLE_NODES = [
       monitor_metric: { type: 'string' },
       gradient_accumulation: { type: 'number', min: 1, max: 512, step: 1 },
       logging_backend: { type: 'enum', options: ['tensorboard', 'mlflow', 'wandb', 'none'] },
+    },
+  }),
+  createLifecycleDef({
+    type: 'lifecycle.evaluate',
+    label: 'Evaluate',
+    category: 'evaluation',
+    accepts: [...MODEL_INPUTS, 'dataloader', ...DATA_INPUTS],
+    produces: ['metrics', 'predictions', 'confusion_matrix'],
+    inputs: [
+      { name: 'trained_model', datatype: 'model', shape: [], optional: false },
+      { name: 'test_loader', datatype: 'dataloader', shape: [], optional: true },
+    ],
+    outputs: [
+      { name: 'metrics', datatype: 'dict', shape: [] },
+      { name: 'predictions', datatype: 'dict', shape: [] },
+      { name: 'confusion_matrix', datatype: 'dict', shape: [] },
+    ],
+    defaultConfig: {
+      metrics: ['accuracy', 'f1', 'auc'],
+      threshold: 0.5,
+    },
+    uiSchema: {
+      metrics: { type: 'multiselect', options: ['accuracy', 'precision', 'recall', 'f1', 'auc'] },
+      threshold: { type: 'number', min: 0, max: 1, step: 0.01 },
+    },
+  }),
+  createLifecycleDef({
+    type: 'lifecycle.predict',
+    label: 'Predict',
+    category: 'inference',
+    accepts: [...MODEL_INPUTS, ...DATA_INPUTS, 'dataloader'],
+    produces: ['predictions', 'confidence_scores'],
+    inputs: [
+      { name: 'trained_model', datatype: 'model', shape: [], optional: false },
+      { name: 'new_data', datatype: 'tensor', shape: [], optional: true },
+    ],
+    outputs: [
+      { name: 'predictions', datatype: 'dict', shape: [] },
+      { name: 'confidence_scores', datatype: 'dict', shape: [] },
+    ],
+    defaultConfig: {
+      batch_size: 32,
+      return_probabilities: true,
+      threshold: 0.5,
+    },
+    uiSchema: {
+      batch_size: { type: 'number', min: 1, max: 4096, step: 1 },
+      return_probabilities: { type: 'boolean' },
+      threshold: { type: 'number', min: 0, max: 1, step: 0.01 },
+    },
+  }),
+  createLifecycleDef({
+    type: 'lifecycle.metrics',
+    label: 'Metrics',
+    category: 'evaluation',
+    accepts: [...PREDICTION_INPUTS, 'dict'],
+    produces: ['metrics'],
+    inputs: [
+      { name: 'predictions', datatype: 'dict', shape: [], optional: false },
+      { name: 'ground_truth', datatype: 'dict', shape: [], optional: true },
+    ],
+    outputs: [{ name: 'metric_dict', datatype: 'dict', shape: [] }],
+    defaultConfig: {
+      metric_names: ['accuracy', 'precision', 'recall', 'f1', 'auc'],
+      average_type: 'binary',
+      threshold: 0.5,
+    },
+    uiSchema: {
+      metric_names: { type: 'multiselect', options: ['accuracy', 'precision', 'recall', 'f1', 'auc'] },
+      average_type: { type: 'enum', options: ['binary', 'micro', 'macro', 'weighted'] },
+      threshold: { type: 'number', min: 0, max: 1, step: 0.01 },
+    },
+  }),
+  createLifecycleDef({
+    type: 'lifecycle.export',
+    label: 'Export',
+    category: 'deployment',
+    accepts: [...MODEL_INPUTS, 'metrics', 'predictions'],
+    produces: ['model_path', 'artifacts'],
+    inputs: [
+      { name: 'trained_model', datatype: 'model', shape: [], optional: false },
+      { name: 'metrics', datatype: 'dict', shape: [], optional: true },
+      { name: 'predictions', datatype: 'dict', shape: [], optional: true },
+    ],
+    outputs: [
+      { name: 'model_path', datatype: 'string', shape: [] },
+      { name: 'artifacts', datatype: 'dict', shape: [] },
+    ],
+    defaultConfig: {
+      format: 'onnx',
+      path: 'artifacts/model',
+      include_predictions: true,
+      include_metrics: true,
+    },
+    uiSchema: {
+      format: { type: 'enum', options: ['onnx', 'pytorch', 'tensorflow'] },
+      path: { type: 'string' },
+      include_predictions: { type: 'boolean' },
+      include_metrics: { type: 'boolean' },
+    },
+  }),
+  createLifecycleDef({
+    type: 'lifecycle.validate',
+    label: 'Validate Data',
+    category: 'data-control',
+    accepts: DATA_INPUTS,
+    produces: ['validation_report', ...DATA_INPUTS],
+    inputs: [{ name: 'dataset', datatype: 'tensor', shape: [], optional: false }],
+    outputs: [
+      { name: 'validation_report', datatype: 'dict', shape: [] },
+      { name: 'cleaned_data', datatype: 'tensor', shape: [] },
+    ],
+    defaultConfig: {
+      rules: [],
+      missing_threshold: 0.2,
+      outlier_detection: 'none',
+    },
+    uiSchema: {
+      rules: { type: 'array' },
+      missing_threshold: { type: 'number', min: 0, max: 1, step: 0.01 },
+      outlier_detection: { type: 'enum', options: ['none', 'iqr', 'zscore'] },
+    },
+  }),
+  createLifecycleDef({
+    type: 'lifecycle.hyperparameter_tune',
+    label: 'Hyperparameter Tune',
+    category: 'training-execution',
+    accepts: [...MODEL_INPUTS, 'dataloader', ...DATA_INPUTS],
+    produces: ['best_model', 'best_params', 'tuning_history'],
+    inputs: [
+      { name: 'model', datatype: 'model', shape: [], optional: false },
+      { name: 'train_loader', datatype: 'dataloader', shape: [], optional: true },
+      { name: 'val_loader', datatype: 'dataloader', shape: [], optional: true },
+    ],
+    outputs: [
+      { name: 'best_model', datatype: 'model', shape: [] },
+      { name: 'best_params', datatype: 'dict', shape: [] },
+      { name: 'tuning_history', datatype: 'dict', shape: [] },
+    ],
+    defaultConfig: {
+      param_grid: {
+        learning_rate: [0.001, 0.0005],
+        weight_decay: [0.0, 0.0001],
+      },
+      search_method: 'grid',
+      max_trials: 10,
+      objective: 'val_accuracy',
+    },
+    uiSchema: {
+      param_grid: { type: 'json' },
+      search_method: { type: 'enum', options: ['grid', 'random', 'bayes'] },
+      max_trials: { type: 'number', min: 1, max: 1000, step: 1 },
+      objective: { type: 'string' },
+    },
+  }),
+  createLifecycleDef({
+    type: 'lifecycle.ensemble',
+    label: 'Ensemble',
+    category: 'modeling',
+    accepts: [...MODEL_INPUTS],
+    produces: ['ensemble_model', 'weights'],
+    inputs: [{ name: 'models', datatype: 'model', shape: [], optional: false }],
+    outputs: [
+      { name: 'ensemble_model', datatype: 'model', shape: [] },
+      { name: 'weights', datatype: 'dict', shape: [] },
+    ],
+    defaultConfig: {
+      method: 'voting',
+      weights: [],
+    },
+    uiSchema: {
+      method: { type: 'enum', options: ['voting', 'stacking', 'blending'] },
+      weights: { type: 'array' },
+    },
+  }),
+  createLifecycleDef({
+    type: 'lifecycle.feature_engineer',
+    label: 'Feature Engineer',
+    category: 'preprocessing',
+    accepts: DATA_INPUTS,
+    produces: DATA_INPUTS,
+    inputs: [{ name: 'dataset', datatype: 'tensor', shape: [], optional: false }],
+    outputs: [{ name: 'engineered_data', datatype: 'tensor', shape: [] }],
+    defaultConfig: {
+      strategy: 'auto',
+      operations: [],
+    },
+    uiSchema: {
+      strategy: { type: 'enum', options: ['auto', 'manual'] },
+      operations: { type: 'array' },
+    },
+  }),
+  createLifecycleDef({
+    type: 'lifecycle.model_compare',
+    label: 'Model Compare',
+    category: 'evaluation',
+    accepts: [...MODEL_INPUTS, 'metrics'],
+    produces: ['comparison_report', 'best_model'],
+    inputs: [
+      { name: 'models', datatype: 'model', shape: [], optional: false },
+      { name: 'metrics', datatype: 'dict', shape: [], optional: true },
+    ],
+    outputs: [
+      { name: 'comparison_report', datatype: 'dict', shape: [] },
+      { name: 'best_model', datatype: 'model', shape: [] },
+    ],
+    defaultConfig: {
+      primary_metric: 'accuracy',
+      higher_is_better: true,
+    },
+    uiSchema: {
+      primary_metric: { type: 'string' },
+      higher_is_better: { type: 'boolean' },
+    },
+  }),
+  createLifecycleDef({
+    type: 'lifecycle.serve',
+    label: 'Serve',
+    category: 'deployment',
+    accepts: [...MODEL_INPUTS, 'ensemble_model'],
+    produces: ['endpoint', 'serve_artifacts'],
+    inputs: [{ name: 'trained_model', datatype: 'model', shape: [], optional: false }],
+    outputs: [
+      { name: 'endpoint', datatype: 'string', shape: [] },
+      { name: 'serve_artifacts', datatype: 'dict', shape: [] },
+    ],
+    defaultConfig: {
+      protocol: 'http',
+      port: 8000,
+      route: '/predict',
+      replicas: 1,
+    },
+    uiSchema: {
+      protocol: { type: 'enum', options: ['http', 'grpc'] },
+      port: { type: 'number', min: 1, max: 65535, step: 1 },
+      route: { type: 'string' },
+      replicas: { type: 'number', min: 1, max: 128, step: 1 },
     },
   }),
 ];

@@ -10,6 +10,7 @@ function createTransformDef({
 }) {
   return {
     type,
+    domain,
     kind,
     category,
     level,

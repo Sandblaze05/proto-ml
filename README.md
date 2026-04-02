@@ -49,13 +49,13 @@ This section explains what has been implemented so far (concrete files and behav
 - **Capability-aware connections**: lightweight connection validation uses `produces`/`accepts` capability flags before running deeper compatibility checks.
 	- See: [store/useExecutionStore.js](store/useExecutionStore.js#L1)
 
-- **Graph compiler (scaffold)**: first-pass compiler that validates basic graph invariants (non-empty graph, dataset sources, cycles), topologically sorts nodes, assigns deterministic symbols, and emits a readable Python scaffold (imports, helper stubs, per-node config, and context wiring). A compile action shows a read-only Monaco preview.
+- **Graph compiler (structured artifact)**: compiler that validates basic graph invariants (non-empty graph, dataset sources, cycles), topologically sorts nodes, assigns deterministic symbols, and emits a structured Python entrypoint (`run_pipeline()`) with graph metadata, per-node config, and context wiring. A compile action shows a read-only Monaco preview.
 	- See: [lib/executor/pipelineCompiler.js](lib/executor/pipelineCompiler.js#L1)
 	- UI trigger: [components/DashboardNav.js](components/DashboardNav.js#L1)
 
 **Current behavior notes**
 
-- The emitted Python is intentionally a scaffold: it contains `apply_transform`/`apply_node` stubs and deterministic variable assignments wired into a `ctx` dictionary per node. The output is human-readable and deterministic but not yet runnable end-to-end.
+- The emitted Python now has a single `run_pipeline()` entrypoint and returns structured metadata (`graph_spec`, `node_meta`, `node_outputs`, `ctx`), but transform/lifecycle/model execution is still stubbed. The output is deterministic and close to an exportable artifact, but not yet a full end-to-end trainer.
 
 **Remaining (next work to reach an end-to-end runnable system)**
 

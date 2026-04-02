@@ -7,6 +7,7 @@ import Image from "next/image"
 import RegisterForm from "@/components/RegisterForm"
 import { ShaderAnimation } from "@/components/ShaderAnimation"
 import { Features } from "@/components/Features"
+import { ProjectTimelineDemo } from "@/components/ProjectTimelineDemo"
 
 const MARQUEE_ITEMS = [
   { label: "Drag & Drop" },
@@ -109,7 +110,7 @@ function HomeContent() {
         </nav>
       </header>
 
-      <main className="pt-24">
+      <main className="">
         {/* ── Hero ── */}
         <section className="relative min-h-230.25 flex flex-col md:flex-row items-center justify-center px-6 overflow-hidden">
           <ShaderAnimation />
@@ -126,14 +127,14 @@ function HomeContent() {
                 <button
                   onClick={handleOpenForm}
                   style={{ backgroundColor: FG, color: BG }}
-                  className="px-10 py-4 font-bold rounded-lg shadow-xl hover:-translate-y-1 transition-all duration-300 cursor-pointer"
+                  className="px-10 py-4 font-bold rounded-full shadow-xl hover:-translate-y-1 transition-all duration-300 cursor-pointer"
                 >
                   Get Started
                 </button>
                 <a
                   href="#"
                   style={{ color: FG, borderColor: `${FG}30`, backgroundColor: `${FG}08` }}
-                  className="px-10 py-4 border font-medium rounded-lg hover:opacity-80 transition-all text-center"
+                  className="px-10 py-4 border font-medium rounded-full hover:opacity-80 transition-all text-center"
                 >
                   View Documentation
                 </a>
@@ -141,7 +142,7 @@ function HomeContent() {
             </div>
             <div className="flex-1 flex justify-center items-center w-full md:w-auto mt-12 md:mt-0">
               {/* Radial Orbital Timeline in hero */}
-              {typeof window !== 'undefined' && require("@/components/ProjectTimelineDemo").ProjectTimelineDemo()}
+              <ProjectTimelineDemo />
             </div>
           </div>
         </section>
@@ -184,7 +185,7 @@ function HomeContent() {
           </div>
           <div className="flex justify-center">
             {/* Timeline Demo Component */}
-            {typeof window !== 'undefined' && require("@/components/ProjectTimelineDemo").ProjectTimelineDemo()}
+            <ProjectTimelineDemo />
           </div>
         </section>
 

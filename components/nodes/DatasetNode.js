@@ -7,22 +7,19 @@ import { useExecutionStore } from '../../store/useExecutionStore';
 import { useUIStore } from '../../store/useUIStore';
 import { previewNode } from '../../lib/executionClient';
 import {
-  validatePath as apiValidatePath,
-  deleteUpload as apiDeleteUpload,
-  listUploads as apiListUploads,
-  inspectCsv as apiInspectCsv,
-  validateCsvJoins as apiValidateCsvJoins,
-} from '../../lib/datasetClient';
-import {
   createClientUpload,
+  deleteClientUpload,
   inspectClientUpload,
   listClientUploads,
   previewClientUpload,
+  previewClientImageUpload,
   validateClientUpload,
   validateClientUploadJoins,
 } from '../../lib/clientUploadStore';
 import { generateDatasetPythonCode } from '../../lib/pythonTemplates/datasetNodeTemplate';
 import MonacoCodeEditor from './MonacoCodeEditor';
+
+const STRICT_CLIENT_ONLY_DATASETS = true;
 
 const PORT_TW = {
   tensor: { dot: 'bg-purple-400', badge: 'text-purple-400 bg-purple-400/10 border-purple-400/30' },
@@ -234,7 +231,6 @@ function IconHoverAction({ icon: Icon, label, onClick, disabled = false, tone = 
     <button
       onClick={(e) => { e.stopPropagation(); onClick?.(); }}
       disabled={disabled}
-      title={label}
       className={`group relative inline-flex items-center px-2 py-1 text-[10px] rounded transition-colors disabled:opacity-50 ${toneClass}`}
     >
       <Icon size={12} />
@@ -511,6 +507,22 @@ function SourceTab({
         {(inspectResult?.columns?.length > 0 || inspectResult?.joinSuggestions?.length > 0 || inspectResult?.correlations?.length > 0 || inspectResult?.outliers?.length > 0 || (filesList && filesList.length > 0)) && (
           <Field label="Analysis Results">
             <div className="space-y-1.5">
+              {(inspectResult?.metadata || inspectResult?.schema || inspectResult?.stats) && (
+                <div className="text-[9px] bg-black/40 px-2 py-1 rounded font-mono text-[#faebd7]/70 max-h-28 overflow-auto space-y-0.5">
+                  <div>Dataset ID: {inspectResult.datasetId || inspectResult.metadata?.datasetId || localConfig.dataset_id || localConfig.client_upload_id || '—'}</div>
+                  <div>Source: {inspectResult.metadata?.sourceType || inspectResult.schema?.sourceType || inspectResult.sourceType || type.split('.').pop()}</div>
+                  <div>Rows: {inspectResult.metadata?.rows ?? inspectResult.stats?.rows ?? '—'} | Columns: {inspectResult.metadata?.columns ?? inspectResult.stats?.columns ?? '—'}</div>
+                  <div>Missing cells: {inspectResult.stats?.missingCells ?? '—'} | Duplicate rows: {inspectResult.stats?.duplicateRows ?? '—'}</div>
+                  <div>Task Suggestion: {inspectResult.metadata?.taskSuggestion || inspectResult.taskSuggestion || '—'}</div>
+                  {Array.isArray(inspectResult.metadata?.recommendations) && inspectResult.metadata.recommendations.length > 0 && (
+                    <div>
+                      <div className="text-[#faebd7]/45">Recommendations:</div>
+                      <div className="whitespace-pre-wrap">{inspectResult.metadata.recommendations.slice(0, 3).join(' · ')}</div>
+                    </div>
+                  )}
+                </div>
+              )}
+
               {inspectResult?.columns?.length > 0 && (
                 <div className="text-[9px] bg-black/40 px-2 py-1 rounded font-mono text-[#faebd7]/70 max-h-24 overflow-auto">
                   <div>Primary: {inspectResult.primary || '—'}</div>
@@ -1042,20 +1054,72 @@ export default function DatasetNode({ data, id, selected }) {
     localConfigRef.current = localConfig;
   }, [localConfig]);
 
-  const handleChange = useCallback((key, value) => {
-    const nextConfig = { ...localConfigRef.current, [key]: value };
+  const applyConfigPatch = useCallback((patch = {}) => {
+    const nextConfig = { ...localConfigRef.current, ...patch };
     const nextPythonCode = generateDatasetPythonCode(type, nextConfig);
+    const nextCode = manualCodeOverride ? pythonCode : nextPythonCode;
 
     localConfigRef.current = nextConfig;
     setLocalConfig(nextConfig);
     if (!manualCodeOverride) setPythonCode(nextPythonCode);
 
-    updateNodeConfig(id, { [key]: value });
-    updateExecutionNode(id, { pythonCode: manualCodeOverride ? pythonCode : nextPythonCode });
+    updateNodeConfig(id, patch);
+    updateExecutionNode(id, {
+      config: nextConfig,
+      pythonCode: nextCode,
+    });
 
-    if (data?.nodeModel?.config) data.nodeModel.config[key] = value;
-    if (data?.nodeModel) data.nodeModel.pythonCode = manualCodeOverride ? pythonCode : nextPythonCode;
+    if (data?.nodeModel?.config) {
+      Object.assign(data.nodeModel.config, patch);
+    }
+    if (data?.nodeModel) {
+      data.nodeModel.config = { ...(data.nodeModel.config || {}), ...patch };
+      data.nodeModel.pythonCode = nextCode;
+    }
   }, [type, manualCodeOverride, pythonCode, updateNodeConfig, updateExecutionNode, id, data]);
+
+  const handleChange = useCallback((key, value) => {
+    applyConfigPatch({ [key]: value });
+  }, [applyConfigPatch]);
+
+  const commitDatasetAnalysis = useCallback((analysis, extraPatch = {}) => {
+    if (!analysis) return;
+
+    const datasetId = analysis.datasetId || localConfigRef.current.dataset_id || localConfigRef.current.client_upload_id || '';
+    const metadata = analysis.metadata || analysis;
+    const schema = analysis.schema || metadata?.schema || null;
+    const stats = analysis.stats || metadata?.stats || null;
+    const sampleRows = analysis.sampleRows || analysis.preview || metadata?.sampleRows || [];
+    const configPatch = {
+      dataset_id: datasetId,
+      dataset_metadata: metadata,
+      dataset_schema: schema,
+      dataset_stats: stats,
+      dataset_sample: sampleRows,
+      ...extraPatch,
+    };
+
+    applyConfigPatch(configPatch);
+
+    const nextMetadata = {
+      ...(data?.nodeModel?.metadata || {}),
+      datasetId,
+      datasetType: analysis.sourceType || analysis.type || type,
+      datasetMetadata: metadata,
+      taskSuggestion: metadata?.taskSuggestion || analysis.taskSuggestion || null,
+      recommendations: metadata?.recommendations || analysis.recommendations || [],
+    };
+
+    updateExecutionNode(id, {
+      metadata: nextMetadata,
+      schema: schema || data?.nodeModel?.schema || null,
+    });
+
+    if (data?.nodeModel) {
+      data.nodeModel.metadata = nextMetadata;
+      if (schema) data.nodeModel.schema = schema;
+    }
+  }, [applyConfigPatch, data, id, type, updateExecutionNode]);
 
   const handleCodeChange = useCallback((nextCode) => {
     setPythonCode(nextCode);
@@ -1100,6 +1164,15 @@ export default function DatasetNode({ data, id, selected }) {
         return;
       }
 
+      if (type === 'dataset.image' && localConfig.client_upload_id) {
+        const sample = await previewClientImageUpload(localConfig.client_upload_id, {
+          label_strategy: localConfig.label_strategy || 'folder_name',
+          recursive: localConfig.recursive !== false,
+        });
+        setPreviewResult(sample);
+        return;
+      }
+
       const graph = { nodes: execNodes, edges: execEdges };
       const res = await previewNode(graph, id, count);
       setPreviewResult(res?.sample ?? res);
@@ -1108,14 +1181,19 @@ export default function DatasetNode({ data, id, selected }) {
     } finally {
       setPreviewing(false);
     }
-  }, [execNodes, execEdges, id]);
+  }, [execNodes, execEdges, id, type, localConfig]);
 
   const validateCurrentPath = useCallback(async () => {
     const p = localConfig.path;
-    if (type === 'dataset.csv' && localConfig.client_upload_id) {
+    if (localConfig.client_upload_id) {
       const res = await validateClientUpload(localConfig.client_upload_id);
       setValidation(res);
       if (res && Array.isArray(res.files)) setFilesList(res.files);
+      return;
+    }
+
+    if (STRICT_CLIENT_ONLY_DATASETS) {
+      setValidation({ error: 'Client-only mode: upload files from this node. Server paths are disabled.' });
       return;
     }
 
@@ -1123,26 +1201,14 @@ export default function DatasetNode({ data, id, selected }) {
       setValidation({ error: 'No path configured' });
       return;
     }
-    setBusyAction(true);
-    try {
-      const res = await apiValidatePath(p);
-      setValidation(res);
-      if (res && res.files) setFilesList(res.files);
-    } catch (err) {
-      setValidation({ error: String(err) });
-    } finally {
-      setBusyAction(false);
-    }
   }, [localConfig.path, localConfig.client_upload_id, type]);
 
   const listCurrentPath = useCallback(async (mode = 'files') => {
     if (mode === 'uploads') {
       setBusyAction(true);
       try {
-        const res = await apiListUploads();
-        const serverUploads = res?.ok && Array.isArray(res.datasets) ? res.datasets : [];
         const clientUploads = await listClientUploads();
-        setUploadsList([...clientUploads, ...serverUploads]);
+        setUploadsList(clientUploads);
       } finally {
         setBusyAction(false);
       }
@@ -1152,17 +1218,18 @@ export default function DatasetNode({ data, id, selected }) {
   }, [validateCurrentPath]);
 
   const deleteCurrentUpload = useCallback(async () => {
-    const p = localConfig.path;
-    if (!p) {
+    const clientUploadId = localConfig.client_upload_id || (String(localConfig.path || '').startsWith('client://') ? String(localConfig.path).replace('client://', '') : '');
+    if (!clientUploadId) {
       setValidation({ error: 'No path configured' });
       return;
     }
     if (!confirm('Delete uploaded directory? This cannot be undone.')) return;
     setBusyAction(true);
     try {
-      const res = await apiDeleteUpload(p);
+      const res = await deleteClientUpload(clientUploadId);
       if (res.ok) {
         handleChange('path', '');
+        handleChange('client_upload_id', '');
         setFilesList(null);
         setValidation({ deleted: true });
       } else {
@@ -1173,15 +1240,13 @@ export default function DatasetNode({ data, id, selected }) {
     } finally {
       setBusyAction(false);
     }
-  }, [localConfig.path, handleChange]);
+  }, [localConfig.path, localConfig.client_upload_id, handleChange]);
 
   const listUploads = useCallback(async () => {
     setBusyAction(true);
     try {
-      const res = await apiListUploads();
-      const serverUploads = res?.ok && Array.isArray(res.datasets) ? res.datasets : [];
       const clientUploads = await listClientUploads();
-      setUploadsList([...clientUploads, ...serverUploads]);
+      setUploadsList(clientUploads);
     } catch {
       setUploadsList(await listClientUploads());
     } finally {
@@ -1194,6 +1259,10 @@ export default function DatasetNode({ data, id, selected }) {
     const files = Array.isArray(localConfig.files) ? localConfig.files : [];
     const hasPath = !!String(localConfig.path || '').trim();
     const hasClientUpload = !!localConfig.client_upload_id;
+    if (STRICT_CLIENT_ONLY_DATASETS && !hasClientUpload) {
+      setValidation({ error: 'Client-only mode: upload CSV files first, then inspect.' });
+      return;
+    }
     if (!hasPath && files.length === 0 && !hasClientUpload) {
       setValidation({ error: 'Set a CSV path or files before inspect.' });
       return;
@@ -1208,6 +1277,7 @@ export default function DatasetNode({ data, id, selected }) {
           target_column: localConfig.target_column,
         });
         setInspectResult(res);
+        commitDatasetAnalysis(res);
         if (!localConfig.primary && res.primary) handleChange('primary', res.primary);
         setValidation({ exists: true, isDirectory: true, clientOnly: true });
         if (Array.isArray(res?.tables?.[res.primary]?.rows)) {
@@ -1216,33 +1286,19 @@ export default function DatasetNode({ data, id, selected }) {
         return;
       }
 
-      const payload = {
-        path: localConfig.path,
-        files,
-        delimiter: localConfig.delimiter || ',',
-        header: localConfig.header !== false,
-        primary: localConfig.primary,
-        target_column: localConfig.target_column,
-      };
-      const res = await apiInspectCsv(payload);
-      if (res?.ok) {
-        setInspectResult(res);
-        if (!localConfig.primary && res.primary) handleChange('primary', res.primary);
-      } else {
-        setValidation({ error: res?.error || 'CSV inspect failed' });
-      }
     } catch (err) {
       setValidation({ error: String(err) });
     } finally {
       setBusyAction(false);
     }
-  }, [type, localConfig, handleChange]);
+  }, [type, localConfig, handleChange, commitDatasetAnalysis]);
 
   const ensureCsvMetadata = useCallback(async () => {
     if (type !== 'dataset.csv') return;
     const files = Array.isArray(localConfig.files) ? localConfig.files : [];
     const hasPath = !!String(localConfig.path || '').trim();
     const hasClientUpload = !!localConfig.client_upload_id;
+    if (STRICT_CLIENT_ONLY_DATASETS && !hasClientUpload) return;
     if (!hasPath && files.length === 0 && !hasClientUpload) return;
 
     try {
@@ -1255,6 +1311,7 @@ export default function DatasetNode({ data, id, selected }) {
         });
         if (res?.ok) {
           setInspectResult(res);
+          commitDatasetAnalysis(res);
           if (!localConfig.primary && res.primary) handleChange('primary', res.primary);
           if (Array.isArray(res?.tables?.[res.primary]?.rows)) {
             setFilesList(Object.values(res.tables).map((t) => t.file));
@@ -1263,29 +1320,20 @@ export default function DatasetNode({ data, id, selected }) {
         return;
       }
 
-      const payload = {
-        path: localConfig.path,
-        files,
-        delimiter: localConfig.delimiter || ',',
-        header: localConfig.header !== false,
-        primary: localConfig.primary,
-        target_column: localConfig.target_column,
-      };
-      const res = await apiInspectCsv(payload);
-      if (res?.ok) {
-        setInspectResult(res);
-        if (!localConfig.primary && res.primary) handleChange('primary', res.primary);
-      }
     } catch {
       // Best-effort metadata fetch for dropdowns; keep UI responsive on failure.
     }
-  }, [type, localConfig, handleChange]);
+  }, [type, localConfig, handleChange, commitDatasetAnalysis]);
 
   const validateJoins = useCallback(async () => {
     if (type !== 'dataset.csv') return;
     const files = Array.isArray(localConfig.files) ? localConfig.files : [];
     const hasPath = !!String(localConfig.path || '').trim();
     const hasClientUpload = !!localConfig.client_upload_id;
+    if (STRICT_CLIENT_ONLY_DATASETS && !hasClientUpload) {
+      setValidation({ error: 'Client-only mode: upload CSV files first, then validate joins.' });
+      return;
+    }
     if (!hasPath && files.length === 0 && !hasClientUpload) {
       setValidation({ error: 'Set a CSV path or files before join validation.' });
       return;
@@ -1312,28 +1360,6 @@ export default function DatasetNode({ data, id, selected }) {
         return;
       }
 
-      const payload = {
-        path: localConfig.path,
-        files,
-        delimiter: localConfig.delimiter || ',',
-        header: localConfig.header !== false,
-        primary: localConfig.primary,
-        relations: Array.isArray(localConfig.relations) ? localConfig.relations : [],
-      };
-      const res = await apiValidateCsvJoins(payload);
-      if (res?.ok) {
-        setValidation({
-          exists: true,
-          isDirectory: true,
-          joinValidation: res.validation,
-          joinValid: res.valid,
-        });
-        if (inspectResult) {
-          setInspectResult({ ...inspectResult, joinSuggestions: res.suggestions || inspectResult.joinSuggestions || [] });
-        }
-      } else {
-        setValidation({ error: res?.error || 'Join validation failed' });
-      }
     } catch (err) {
       setValidation({ error: String(err) });
     } finally {
@@ -1345,25 +1371,39 @@ export default function DatasetNode({ data, id, selected }) {
     setPreviewing(true);
     setPreviewResult(null);
     try {
-      if (type === 'dataset.csv') {
+      if (type === 'dataset.csv' || type === 'dataset.image') {
         const created = await createClientUpload(files);
-        handleChange('client_upload_id', created.uploadId);
-        handleChange('path', `client://${created.uploadId}`);
-        handleChange('files', created.csvFiles || []);
+        handleChange('client_upload_id', created.datasetId || created.uploadId);
+        handleChange('dataset_id', created.datasetId || created.uploadId);
+        handleChange('path', `client://${created.datasetId || created.uploadId}`);
         setFilesList(created.files || []);
-        try {
-          const inspected = await inspectClientUpload(created.uploadId, {
-            delimiter: localConfig.delimiter || ',',
-            header: localConfig.header !== false,
-            primary: localConfig.primary,
-            target_column: localConfig.target_column,
+        if (created.metadata) {
+          commitDatasetAnalysis({
+            datasetId: created.datasetId || created.uploadId,
+            metadata: created.metadata,
+            schema: created.schema,
+            stats: created.stats,
+            sampleRows: created.metadata?.sampleRows || created.metadata?.preview || [],
+            sourceType: created.metadata?.sourceType || type,
           });
-          if (inspected?.ok) {
-            setInspectResult(inspected);
-            if (!localConfig.primary && inspected.primary) handleChange('primary', inspected.primary);
+        }
+        if (type === 'dataset.csv') {
+          handleChange('files', created.csvFiles || []);
+          try {
+            const inspected = await inspectClientUpload(created.uploadId, {
+              delimiter: localConfig.delimiter || ',',
+              header: localConfig.header !== false,
+              primary: localConfig.primary,
+              target_column: localConfig.target_column,
+            });
+            if (inspected?.ok) {
+              setInspectResult(inspected);
+              commitDatasetAnalysis(inspected);
+              if (!localConfig.primary && inspected.primary) handleChange('primary', inspected.primary);
+            }
+          } catch {
+            // Non-blocking: upload succeeded even if inspect metadata fetch fails.
           }
-        } catch {
-          // Non-blocking: upload succeeded even if inspect metadata fetch fails.
         }
         setValidation({
           ok: true,
@@ -1374,46 +1414,19 @@ export default function DatasetNode({ data, id, selected }) {
           files: created.files || [],
           uploaded: true,
           clientOnly: true,
+          warning: created.warning || null,
         });
         listUploads();
-        setPreviewResult({ uploaded: `client://${created.uploadId}`, clientOnly: true });
+        setPreviewResult({ uploaded: `client://${created.uploadId}`, clientOnly: true, warning: created.warning || null });
         return;
       }
-
-      const fd = new FormData();
-      for (const f of files) {
-        const rel = f.webkitRelativePath || f.name;
-        fd.append(rel, f, rel);
-      }
-      const resp = await fetch('/api/datasets/upload', { method: 'POST', body: fd });
-      const json = await resp.json();
-      if (!resp.ok) {
-        setPreviewResult({ error: json.error || 'Upload failed' });
-        return;
-      }
-      const uploadPath = json.uploadPath;
-      handleChange('path', `./${uploadPath}`);
-      const uploadedFileList = files.map((f) => f.webkitRelativePath || f.name).filter(Boolean);
-      if (uploadedFileList.length > 0) {
-        setFilesList(uploadedFileList);
-      }
-      try {
-        const pathCheck = await apiValidatePath(`./${uploadPath}`);
-        setValidation({ ...(pathCheck || {}), uploaded: true });
-        if (pathCheck && Array.isArray(pathCheck.files) && pathCheck.files.length > 0) {
-          setFilesList(pathCheck.files);
-        }
-      } catch {
-        setValidation({ uploaded: true, exists: true, isDirectory: true });
-      }
-      listUploads();
-      setPreviewResult({ uploaded: uploadPath });
+      setPreviewResult({ error: 'Client-only mode supports dataset.csv and dataset.image uploads only.' });
     } catch (err) {
       setPreviewResult({ error: String(err) });
     } finally {
       setPreviewing(false);
     }
-  }, [handleChange, listUploads, type]);
+  }, [handleChange, listUploads, type, localConfig, commitDatasetAnalysis]);
 
   useEffect(() => {
     if (type !== 'dataset.csv') return;
