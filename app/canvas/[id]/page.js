@@ -11,6 +11,19 @@ import PipelineCompilerPanel from '@/components/PipelineCompilerPanel';
 import { useUIStore } from '@/store/useUIStore';
 import { createClient } from '@/lib/supabase/client';
 
+const CURSOR_COLORS = ['#67e8f9', '#f472b6', '#f59e0b', '#34d399', '#a78bfa', '#fb7185', '#22c55e', '#60a5fa'];
+
+const pickCursorColor = (seed) => {
+  const value = String(seed || '');
+  let hash = 0;
+
+  for (let index = 0; index < value.length; index += 1) {
+    hash = (hash * 31 + value.charCodeAt(index)) >>> 0;
+  }
+
+  return CURSOR_COLORS[hash % CURSOR_COLORS.length];
+};
+
 const SharedCanvasPage = () => {
   const pathname = usePathname();
   const router = useRouter();
@@ -309,6 +322,14 @@ const SharedCanvasPage = () => {
           setRemoteCursors([]);
           setRemoteNodeEditors([]);
           const { data: { user } } = await supabase.auth.getUser();
+
+          // Redirect to landing page if not logged in
+          if (!user) {
+            setLoading(false);
+            router.push('/?signup=true');
+            return;
+          }
+
           const { data, error } = await supabase
             .from('pipelines')
             .select('*')
@@ -378,8 +399,15 @@ const SharedCanvasPage = () => {
             setError('Pipeline not found.');
           }
         } catch (err) {
-          console.error('Error fetching pipeline:', err);
-          setError('Failed to load pipeline.');
+          const errorDetails = {
+            message: err?.message || 'Unknown error',
+            status: err?.status || null,
+            code: err?.code || null,
+            details: err?.details || null,
+            hint: err?.hint || null,
+          };
+          console.error('Error fetching pipeline:', errorDetails);
+          setError('Failed to load pipeline. Please check your login status.');
         } finally {
           setLoading(false);
         }
@@ -456,6 +484,7 @@ const SharedCanvasPage = () => {
             activeUserId.current = user?.id || `anon-${Math.random().toString(36).slice(2, 10)}`;
             const emailLabel = user?.email ? user.email.split('@')[0] : 'Collaborator';
             activeUserLabel.current = emailLabel;
+            activeUserColor.current = pickCursorColor(user?.id || user?.email || activeUserId.current);
             await newChannel.track({ 
               user: user ? user.email : 'Anonymous',
               user_id: activeUserId.current,
@@ -532,7 +561,7 @@ const SharedCanvasPage = () => {
 
       {/* Projects Button */}
       <Link 
-        href="/projects" 
+        href="/dashboard" 
         className="absolute bottom-4 left-4 z-100 flex items-center gap-2 px-4 py-2 bg-foreground text-background text-xs font-bold rounded-full hover:opacity-90 transition-all shadow-xl"
       >
         <Layout size={14} /> My Projects

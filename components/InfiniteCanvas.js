@@ -15,7 +15,7 @@ import dagre from 'dagre';
 import { View, Minus, Plus, Maximize, Minimize2, Trash2, 
   AlignCenterHorizontal, AlignCenterVertical,
   CheckCircle2, AlertCircle, Info, X, Wand2,
-  MousePointer2, Pencil, Eraser, Type, Undo2, Redo2, ChevronLeft, ChevronRight, Lock, Unlock, Send
+  MousePointer2, Pencil, Eraser, Type, Undo2, Redo2, ChevronLeft, ChevronRight, Lock, Unlock
 } from 'lucide-react';
 import gsap from 'gsap';
 import { useDroppable } from '@dnd-kit/core';
@@ -32,6 +32,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { generateDatasetPythonCode } from '@/lib/pythonTemplates/datasetNodeTemplate';
 import { generateTransformPythonCode } from '@/lib/pythonTemplates/transformNodeTemplate';
 import { generateLifecyclePythonCode } from '@/lib/pythonTemplates/lifecycleNodeTemplate';
+import { CursorMark } from '@/components/ui/cursor';
 
 function ZoomControls() {
   const { zoomIn, zoomOut, fitView, getNodes, getEdges } = useReactFlow();
@@ -705,16 +706,14 @@ function LiveCursors({ cursors, viewportTransform }) {
   return (
     <>
       {cursors.map((cursor) => (
-        <div
+        <CursorMark
           key={cursor.userId}
-          className="pointer-events-none absolute z-[120]"
-          style={{ ...toScreenPosition(cursor), transform: 'translate(8px, 8px)' }}
-        >
-          <Send size={14} strokeWidth={2.4} style={{ color: cursor.color || '#67e8f9', transform: 'rotate(158deg)' }} />
-          <div className="mt-1 max-w-[180px] rounded-md border border-foreground/20 bg-background/90 px-2 py-1 text-[10px] font-mono text-foreground/80 backdrop-blur">
-            {cursor.label || 'Collaborator'}
-          </div>
-        </div>
+          x={toScreenPosition(cursor).left}
+          y={toScreenPosition(cursor).top}
+          color={cursor.color || '#67e8f9'}
+          label={cursor.label || 'Collaborator'}
+          className="z-120"
+        />
       ))}
     </>
   );

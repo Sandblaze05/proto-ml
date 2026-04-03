@@ -198,6 +198,7 @@ function FlickeringGrid({
 
   const drawGrid = useCallback(
     (ctx, widthPx, heightPx, cols, rows, squares, dpr) => {
+      if (widthPx <= 0 || heightPx <= 0) return
       ctx.clearRect(0, 0, widthPx, heightPx)
 
       const maskCanvas = document.createElement("canvas")
@@ -221,12 +222,12 @@ function FlickeringGrid({
         for (let j = 0; j < rows; j++) {
           const x = i * (squareSize + gridGap) * dpr
           const y = j * (squareSize + gridGap) * dpr
-          const sw = squareSize * dpr
-          const sh = squareSize * dpr
+          const sw = Math.max(1, Math.floor(squareSize * dpr))
+          const sh = Math.max(1, Math.floor(squareSize * dpr))
 
           let finalOpacity = squares[i * rows + j]
 
-          if (text) {
+          if (text && maskCanvas.width > 0 && maskCanvas.height > 0) {
             const maskData = maskCtx.getImageData(x, y, sw, sh).data
             const hasText = maskData.some((v, idx) => idx % 4 === 0 && v > 0)
             if (hasText) finalOpacity = Math.min(1, finalOpacity * 3 + 0.4)

@@ -18,8 +18,8 @@ const GitHubIcon = () => (
   </svg>
 )
 
-const RegisterForm = ({ onClose = () => { }, initialError = '' }) => {
-  const [mode, setMode] = useState('signin') // 'signin' | 'signup'
+const RegisterForm = ({ onClose = () => { }, initialError = '', initialMode = 'signin' }) => {
+  const [mode, setMode] = useState(initialMode) // 'signin' | 'signup'
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')

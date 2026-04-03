@@ -1,7 +1,8 @@
-import React from "react";
-import { cn } from "@/lib/utils";
+import React from "react"
+import { InfiniteSlider } from "@/components/ui/infinite-slider"
+import { cn } from "@/lib/utils"
 
-const LOGOS = [
+export const BRAND_LOGOS = [
   {
     src: "https://svgl.app/library/nvidia-wordmark-light.svg",
     alt: "Nvidia Logo",
@@ -34,35 +35,31 @@ const LOGOS = [
     src: "https://svgl.app/library/vercel_wordmark.svg",
     alt: "Vercel Logo",
   },
-];
+]
 
-export function LogoCloud({ className, ...props }) {
+export function LogoCloud({ className, logos = BRAND_LOGOS, ...props }) {
   return (
     <div
-      className={cn(
-        "relative w-full overflow-hidden border-y border-white/10 py-10",
-        className
-      )}
       {...props}
+      className={cn(
+        "overflow-hidden py-4 [mask-image:linear-gradient(to_right,transparent,black,transparent)]",
+        className,
+      )}
     >
-      <div className="flex animate-marquee gap-12 items-center">
-        {[...LOGOS, ...LOGOS, ...LOGOS].map((logo, index) => (
-          <div
-            key={`${logo.alt}-${index}`}
-            className="flex shrink-0 items-center justify-center px-4"
-          >
-            <img
-              alt={logo.alt}
-              className="pointer-events-none h-5 select-none brightness-0 invert opacity-40 hover:opacity-100 transition-opacity duration-300"
-              src={logo.src}
-            />
-          </div>
+      <InfiniteSlider gap={42} reverse duration={45}>
+        {logos.map((logo) => (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            alt={logo.alt}
+            className="pointer-events-none h-4 select-none md:h-5 brightness-0 invert opacity-70 hover:opacity-100 transition-opacity"
+            height={logo.height || undefined}
+            key={`logo-${logo.alt}`}
+            loading="lazy"
+            src={logo.src}
+            width={logo.width || undefined}
+          />
         ))}
-      </div>
-      
-      {/* Gradients for fading edges */}
-      <div className="absolute inset-y-0 left-0 w-32 bg-gradient-to-r from-[#171717] to-transparent z-10" />
-      <div className="absolute inset-y-0 right-0 w-32 bg-gradient-to-l from-[#171717] to-transparent z-10" />
+      </InfiniteSlider>
     </div>
-  );
+  )
 }

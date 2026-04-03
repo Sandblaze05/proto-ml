@@ -28,6 +28,10 @@ export default function AboutPage() {
 
   const handleOpenForm = () => setFormOpen(true)
   const handleCloseForm = () => setFormOpen(false)
+  const setLandingTarget = (id) => {
+    sessionStorage.setItem("protoMlLandingTarget", id)
+    setMobileNavOpen(false)
+  }
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -123,22 +127,22 @@ export default function AboutPage() {
           </Link>
           {/* Navbar Links (Desktop) */}
           <div className="hidden md:flex gap-8 items-center text-lg font-semibold">
-            <a href="/#features-section" className="hover:opacity-80 transition-all relative group opacity-60" style={{ color: FG }}>
+            <Link href="/#features-section" onClick={() => setLandingTarget("features-section")} className="hover:opacity-80 transition-all relative group opacity-60" style={{ color: FG }}>
               Features
               <span className="absolute -bottom-1 left-0 w-0 h-0.5 bg-current transition-all duration-300 group-hover:w-full"></span>
-            </a>
-            <a href="/#pipeline" className="hover:opacity-80 transition-all relative group opacity-60" style={{ color: FG }}>
+            </Link>
+            <Link href="/#pipeline" onClick={() => setLandingTarget("pipeline")} className="hover:opacity-80 transition-all relative group opacity-60" style={{ color: FG }}>
               Pipeline
               <span className="absolute -bottom-1 left-0 w-0 h-0.5 bg-current transition-all duration-300 group-hover:w-full"></span>
-            </a>
-            <a href="/#faqs" className="hover:opacity-80 transition-all relative group opacity-60" style={{ color: FG }}>
+            </Link>
+            <Link href="/#faqs" onClick={() => setLandingTarget("faqs")} className="hover:opacity-80 transition-all relative group opacity-60" style={{ color: FG }}>
               FAQs
               <span className="absolute -bottom-1 left-0 w-0 h-0.5 bg-current transition-all duration-300 group-hover:w-full"></span>
-            </a>
-            <a href="/about" className="hover:opacity-80 transition-all relative group opacity-100" style={{ color: FG }}>
+            </Link>
+            <Link href="/about" className="hover:opacity-80 transition-all relative group opacity-100" style={{ color: FG }}>
               About
               <span className="absolute -bottom-1 left-0 w-full h-0.5 bg-current transition-all duration-300"></span>
-            </a>
+            </Link>
           </div>
           {/* Hamburger (Mobile) */}
           <div className="md:hidden flex items-center">
@@ -167,7 +171,7 @@ export default function AboutPage() {
 
           {/* Mobile Nav Dropdown */}
           <div 
-            className={`absolute top-full left-0 right-0 mt-2 mx-4 md:hidden overflow-hidden transition-all duration-300 ease-in-out z-[100] ${mobileNavOpen ? 'max-h-[500px] opacity-100' : 'max-h-0 opacity-0'}`}
+            className={`absolute top-full left-0 right-0 mt-2 mx-4 md:hidden overflow-hidden transition-all duration-300 ease-in-out z-100 ${mobileNavOpen ? 'max-h-125 opacity-100' : 'max-h-0 opacity-0'}`}
           >
             <div 
               style={{ 
@@ -179,10 +183,10 @@ export default function AboutPage() {
               }}
               className="border rounded-2xl flex flex-col p-4 gap-1"
             >
-              <a href="/#features-section" className="text-lg font-semibold py-3 px-4 w-full text-left rounded-xl hover:bg-white/10 transition" style={{ color: FG }} onClick={() => setMobileNavOpen(false)}>Features</a>
-              <a href="/#pipeline" className="text-lg font-semibold py-3 px-4 w-full text-left rounded-xl hover:bg-white/10 transition" style={{ color: FG }} onClick={() => setMobileNavOpen(false)}>Pipeline</a>
-              <a href="/#faqs" className="text-lg font-semibold py-3 px-4 w-full text-left rounded-xl hover:bg-white/10 transition" style={{ color: FG }} onClick={() => setMobileNavOpen(false)}>FAQs</a>
-              <a href="/about" className="text-lg font-semibold py-3 px-4 w-full text-left rounded-xl bg-white/10 pl-6 transition" style={{ color: FG }} onClick={() => setMobileNavOpen(false)}>About</a>
+              <Link href="/#features-section" className="text-lg font-semibold py-3 px-4 w-full text-left rounded-xl hover:bg-white/10 transition" style={{ color: FG }} onClick={() => setLandingTarget("features-section")}>Features</Link>
+              <Link href="/#pipeline" className="text-lg font-semibold py-3 px-4 w-full text-left rounded-xl hover:bg-white/10 transition" style={{ color: FG }} onClick={() => setLandingTarget("pipeline")}>Pipeline</Link>
+              <Link href="/#faqs" className="text-lg font-semibold py-3 px-4 w-full text-left rounded-xl hover:bg-white/10 transition" style={{ color: FG }} onClick={() => setLandingTarget("faqs")}>FAQs</Link>
+              <Link href="/about" className="text-lg font-semibold py-3 px-4 w-full text-left rounded-xl bg-white/10 pl-6 transition" style={{ color: FG }} onClick={() => setMobileNavOpen(false)}>About</Link>
               <div className="h-px w-full my-2" style={{ backgroundColor: `${FG}10` }} />
               {user ? (
                 <Link
@@ -221,7 +225,7 @@ export default function AboutPage() {
             style={{ color: `${FG}70` }}
             className="max-w-2xl mx-auto text-xl leading-relaxed reveal-bottom"
           >
-            proto-ML was born from a simple observation: Machine Learning is complex, but its design shouldn't be. 
+            proto-ML was born from a simple observation: Machine Learning is complex, but its design shouldn&apos;t be. 
             We are building a future where visual intuition and production performance coexist.
           </p>
         </section>
@@ -331,7 +335,7 @@ export default function AboutPage() {
             </p>
             <p>
               Today, proto-ML is used by thousands of developers to orchestrate the next generation of 
-              intelligence. We're not just building a tool; we're building the infrastructure for human-AI collaboration.
+              intelligence. We&apos;re not just building a tool; we&apos;re building the infrastructure for human-AI collaboration.
             </p>
           </div>
         </section>

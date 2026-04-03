@@ -4,18 +4,13 @@ import { useState, useEffect } from "react"
 import { useSearchParams, useRouter } from "next/navigation"
 import { Suspense } from "react"
 import Image from "next/image"
+import Link from "next/link"
 import RegisterForm from "@/components/RegisterForm"
 import { ShaderAnimation } from "@/components/ShaderAnimation"
 import { Features } from "@/components/Features"
 import { ProjectTimelineDemo } from "@/components/ProjectTimelineDemo"
-
-const MARQUEE_ITEMS = [
-  { label: "Drag & Drop" },
-  { label: "Real-time Compilation" },
-  { label: "Export to Python" },
-  { label: "No Setup Required" },
-  { label: "Visually Stunning" },
-]
+import LandingFooter from "@/components/LandingFooter"
+import { LogoCloud } from "@/components/ui/logo-cloud"
 
 const FAQ_ITEMS = [
   {
@@ -57,17 +52,80 @@ function HomeContent() {
   const searchParams = useSearchParams()
   const router = useRouter()
   const authError = searchParams.get("error") === "auth"
-  const [formOpen, setFormOpen] = useState(authError)
+  const signupParam = searchParams.get("signup") === "true"
+  const [formOpen, setFormOpen] = useState(authError || signupParam)
   const [openFaq, setOpenFaq] = useState(0)
+  const [mobileNavOpen, setMobileNavOpen] = useState(false)
+  const [activeSection, setActiveSection] = useState("features-section")
+  const [user, setUser] = useState(null)
 
   useEffect(() => {
-    if (authError) {
+    if (authError || signupParam) {
       router.replace("/", { scroll: false })
     }
-  }, [authError, router])
+  }, [authError, signupParam, router])
+
+  useEffect(() => {
+    import("@/lib/supabase/client").then(({ createClient }) => {
+      const supabase = createClient()
+      supabase.auth.getUser().then(({ data }) => setUser(data?.user ?? null))
+    })
+  }, [])
+
+  useEffect(() => {
+    const sections = ["features-section", "pipeline", "faqs"]
+      .map((id) => document.getElementById(id))
+      .filter(Boolean)
+
+    if (!sections.length) return
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const visible = entries
+          .filter((entry) => entry.isIntersecting)
+          .sort((a, b) => b.intersectionRatio - a.intersectionRatio)
+
+        if (visible[0]?.target?.id) {
+          setActiveSection(visible[0].target.id)
+        }
+      },
+      {
+        rootMargin: "-30% 0px -55% 0px",
+        threshold: [0.1, 0.25, 0.5],
+      },
+    )
+
+    sections.forEach((section) => observer.observe(section))
+    return () => observer.disconnect()
+  }, [])
+
+  useEffect(() => {
+    const hashTarget = window.location.hash?.replace("#", "")
+    const storedTarget = sessionStorage.getItem("protoMlLandingTarget")
+    const target = hashTarget || storedTarget
+
+    if (!target) return
+
+    const timer = window.setTimeout(() => {
+      const el = document.getElementById(target)
+      if (!el) return
+      const y = el.getBoundingClientRect().top + window.scrollY - 132
+      window.scrollTo({ top: y, behavior: "smooth" })
+    }, 60)
+
+    sessionStorage.removeItem("protoMlLandingTarget")
+    return () => window.clearTimeout(timer)
+  }, [])
 
   const handleOpenForm = () => setFormOpen(true)
   const handleCloseForm = () => setFormOpen(false)
+  const handleNavScroll = (id) => {
+    const el = document.getElementById(id)
+    if (!el) return
+    const y = el.getBoundingClientRect().top + window.scrollY - 132
+    window.scrollTo({ top: y, behavior: "smooth" })
+    setMobileNavOpen(false)
+  }
 
   return (
     <div style={{ backgroundColor: BG, color: FG }} className="font-body min-h-screen">
@@ -75,16 +133,22 @@ function HomeContent() {
         <RegisterForm
           onClose={handleCloseForm}
           initialError={authError ? "Authentication failed. Please try again." : ""}
+          initialMode={signupParam ? 'signup' : 'signin'}
         />
       )}
 
       {/* ── Header ── */}
       <header
-        style={{ backgroundColor: `${BG}cc`, borderColor: `${FG}18` }}
-        className="fixed top-6 left-1/2 -translate-x-1/2 w-[92%] max-w-5xl z-50 border backdrop-blur-xl rounded-full shadow-2xl"
+        style={{
+          backgroundColor: `${BG}cc`,
+          borderColor: `${FG}18`,
+          backdropFilter: "blur(16px)",
+          WebkitBackdropFilter: "blur(16px)",
+        }}
+        className="fixed top-6 left-1/2 -translate-x-1/2 w-[92%] max-w-5xl z-50 border rounded-full shadow-none bg-opacity-70 backdrop-blur-lg"
       >
-        <nav className="flex justify-between items-center px-4 md:px-6 py-1 w-full">
-          <div className="flex items-center gap-3">
+        <nav className="relative flex justify-between items-center px-4 md:px-6 py-1 w-full">
+          <Link href="/" className="flex items-center gap-3">
             <Image
               src="/logo.png"
               alt="proto-ML logo"
@@ -99,22 +163,112 @@ function HomeContent() {
             >
               proto-ML
             </div>
+          </Link>
+
+          <div className="hidden md:flex gap-8 items-center text-lg font-semibold">
+            <button
+              onClick={() => handleNavScroll("features-section")}
+              className={`hover:opacity-80 transition-all relative group ${activeSection === "features-section" ? "opacity-100" : "opacity-60"}`}
+              style={{ color: FG }}
+            >
+              Features
+              <span className={`absolute -bottom-1 left-0 h-0.5 bg-current transition-all duration-300 ${activeSection === "features-section" ? "w-full" : "w-0 group-hover:w-full"}`}></span>
+            </button>
+            <button
+              onClick={() => handleNavScroll("pipeline")}
+              className={`hover:opacity-80 transition-all relative group ${activeSection === "pipeline" ? "opacity-100" : "opacity-60"}`}
+              style={{ color: FG }}
+            >
+              Pipeline
+              <span className={`absolute -bottom-1 left-0 h-0.5 bg-current transition-all duration-300 ${activeSection === "pipeline" ? "w-full" : "w-0 group-hover:w-full"}`}></span>
+            </button>
+            <button
+              onClick={() => handleNavScroll("faqs")}
+              className={`hover:opacity-80 transition-all relative group ${activeSection === "faqs" ? "opacity-100" : "opacity-60"}`}
+              style={{ color: FG }}
+            >
+              FAQs
+              <span className={`absolute -bottom-1 left-0 h-0.5 bg-current transition-all duration-300 ${activeSection === "faqs" ? "w-full" : "w-0 group-hover:w-full"}`}></span>
+            </button>
+            <Link href="/about" className="hover:opacity-80 transition-all relative group opacity-60" style={{ color: FG }}>
+              About
+              <span className="absolute -bottom-1 left-0 w-0 h-0.5 bg-current transition-all duration-300 group-hover:w-full"></span>
+            </Link>
           </div>
-          <button
-            onClick={handleOpenForm}
-            style={{ backgroundColor: FG, color: BG }}
-            className="font-manrope tracking-tight text-sm px-6 py-2 font-bold rounded-full hover:opacity-80 duration-150 transition-all cursor-pointer"
+
+          <div className="md:hidden flex items-center">
+            <button onClick={() => setMobileNavOpen((v) => !v)} aria-label="Open navigation" className="p-2 rounded-full hover:bg-white/10 transition">
+              <svg width="28" height="28" fill="none" stroke={FG} strokeWidth="2" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16" /></svg>
+            </button>
+          </div>
+
+          {user ? (
+            <Link
+              href="/dashboard"
+              style={{ backgroundColor: FG, color: BG }}
+              className="font-manrope tracking-tight text-sm px-6 py-2 font-bold rounded-full hover:opacity-80 duration-150 transition-all cursor-pointer hidden md:block"
+            >
+              Dashboard
+            </Link>
+          ) : (
+            <button
+              onClick={handleOpenForm}
+              style={{ backgroundColor: FG, color: BG }}
+              className="font-manrope tracking-tight text-sm px-6 py-2 font-bold rounded-full hover:opacity-80 duration-150 transition-all cursor-pointer hidden md:block"
+            >
+              Login
+            </button>
+          )}
+
+          <div
+            className={`absolute top-full left-0 right-0 mt-2 mx-4 md:hidden overflow-hidden transition-all duration-300 ease-in-out z-100 ${mobileNavOpen ? "max-h-125 opacity-100" : "max-h-0 opacity-0"}`}
           >
-            Login
-          </button>
+            <div
+              style={{
+                backgroundColor: `${BG}f8`,
+                borderColor: `${FG}25`,
+                backdropFilter: "blur(30px)",
+                WebkitBackdropFilter: "blur(30px)",
+                boxShadow: "0 8px 32px 0 rgba(0, 0, 0, 0.8)",
+              }}
+              className="border rounded-2xl flex flex-col p-4 gap-1"
+            >
+              <button onClick={() => handleNavScroll("features-section")} className="text-lg font-semibold py-3 px-4 w-full text-left rounded-xl hover:bg-white/10 transition" style={{ color: FG }}>Features</button>
+              <button onClick={() => handleNavScroll("pipeline")} className="text-lg font-semibold py-3 px-4 w-full text-left rounded-xl hover:bg-white/10 transition" style={{ color: FG }}>Pipeline</button>
+              <button onClick={() => handleNavScroll("faqs")} className="text-lg font-semibold py-3 px-4 w-full text-left rounded-xl hover:bg-white/10 transition" style={{ color: FG }}>FAQs</button>
+              <Link href="/about" className="text-lg font-semibold py-3 px-4 w-full text-left rounded-xl hover:bg-white/10 transition" style={{ color: FG }} onClick={() => setMobileNavOpen(false)}>About</Link>
+              <div className="h-px w-full my-2" style={{ backgroundColor: `${FG}10` }} />
+              {user ? (
+                <Link
+                  href="/dashboard"
+                  style={{ backgroundColor: FG, color: BG }}
+                  className="font-manrope tracking-tight text-sm px-6 py-3 font-bold rounded-xl hover:opacity-80 duration-150 transition-all cursor-pointer w-full text-center"
+                  onClick={() => setMobileNavOpen(false)}
+                >
+                  Dashboard
+                </Link>
+              ) : (
+                <button
+                  onClick={() => {
+                    setMobileNavOpen(false)
+                    handleOpenForm()
+                  }}
+                  style={{ backgroundColor: FG, color: BG }}
+                  className="font-manrope tracking-tight text-sm px-6 py-3 font-bold rounded-xl hover:opacity-80 duration-150 transition-all cursor-pointer w-full"
+                >
+                  Login
+                </button>
+              )}
+            </div>
+          </div>
         </nav>
       </header>
 
       <main className="">
         {/* ── Hero ── */}
-        <section className="relative min-h-230.25 flex flex-col md:flex-row items-center justify-center px-6 overflow-hidden">
+        <section className="relative h-screen flex flex-col md:flex-row items-center justify-center px-6 overflow-hidden pt-32 md:pt-12">
           <ShaderAnimation />
-          <div className="relative z-10 flex flex-col md:flex-row items-center justify-between w-full max-w-6xl mx-auto gap-12 md:gap-0">
+          <div className="relative z-10 flex flex-col md:flex-row items-center justify-between w-full max-w-6xl mx-auto gap-8 md:gap-0">
             <div className="flex-1 text-center md:text-left">
               <h1
                 style={{ color: FG }}
@@ -140,57 +294,35 @@ function HomeContent() {
                 </a>
               </div>
             </div>
-            <div className="flex-1 flex justify-center items-center w-full md:w-auto mt-12 md:mt-0">
+            <div className="flex-1 flex justify-center items-center w-full md:w-auto">
               {/* Radial Orbital Timeline in hero */}
               <ProjectTimelineDemo />
             </div>
           </div>
         </section>
 
-        {/* ── Marquee ── */}
-        <section
-          style={{ borderColor: `${FG}10`, backgroundColor: `${FG}05` }}
-          className="py-12 border-y overflow-hidden"
-        >
-          <div className="animate-marquee whitespace-nowrap flex gap-16 items-center">
-            {[0, 1].map((set) => (
-              <div
-                key={set}
-                style={{ color: `${FG}60` }}
-                className="flex items-center gap-16 font-label text-sm uppercase tracking-[0.3em]"
-              >
-                {MARQUEE_ITEMS.map(({ label }) => (
-                  <span key={label} className="flex items-center gap-2">
-                    <span style={{ backgroundColor: FG, opacity: 0.4 }} className="w-1.5 h-1.5 rounded-full" />
-                    {label}
-                  </span>
-                ))}
-              </div>
-            ))}
+        {/* ── Brand Marquee ── */}
+        <section className="w-full py-2 md:py-4 relative overflow-hidden">
+          <div className="relative w-full px-0">
+            <LogoCloud />
           </div>
         </section>
 
 
-        <Features />
-
-        {/* ── Project Timeline (Radial Orbital) ── */}
-        <section className="py-32 px-8 max-w-7xl mx-auto">
-          <div className="text-center mb-16">
+        <section className="mt-16" id="features-section">
+          <div className="text-center mb-2 md:mb-4 max-w-7xl mx-auto px-8">
             <h2 style={{ color: FG }} className="font-headline text-4xl md:text-5xl font-bold mb-4 tracking-tight">
-              proto-ML Project Timeline
+              Features
             </h2>
             <p style={{ color: `${FG}70` }} className="max-w-xl mx-auto">
-              Explore the journey of proto-ML from planning to release, visualized as an interactive orbital timeline.
+              Build, validate, and ship visual ML workflows with production-grade speed.
             </p>
           </div>
-          <div className="flex justify-center">
-            {/* Timeline Demo Component */}
-            <ProjectTimelineDemo />
-          </div>
+          <Features />
         </section>
 
         {/* ── Pipeline Protocol ── */}
-        <section className="py-32 px-8 max-w-7xl mx-auto">
+        <section id="pipeline" className="py-32 px-8 max-w-7xl mx-auto">
           <div className="text-center mb-24">
             <h2 style={{ color: FG }} className="font-headline text-4xl md:text-5xl font-bold mb-4 tracking-tight">
               The Pipeline Protocol
@@ -278,7 +410,7 @@ function HomeContent() {
         </section>
 
         {/* ── FAQ ── */}
-        <section className="py-32 px-8 max-w-4xl mx-auto">
+        <section id="faqs" className="py-32 px-8 max-w-4xl mx-auto">
           <h2 style={{ color: FG }} className="font-headline text-3xl md:text-4xl font-bold mb-16 text-center">
             Frequently Queried
           </h2>
@@ -345,7 +477,7 @@ function HomeContent() {
             <button
               onClick={handleOpenForm}
               style={{ backgroundColor: FG, color: BG }}
-              className="px-12 py-5 font-bold text-lg rounded-lg hover:opacity-90 transition-all duration-300 shadow-2xl cursor-pointer"
+              className="px-12 py-5 font-bold text-lg rounded-full hover:opacity-90 transition-all duration-300 shadow-2xl cursor-pointer"
             >
               Deploy Your First Node
             </button>
@@ -353,46 +485,7 @@ function HomeContent() {
         </section>
       </main>
 
-      {/* ── Footer ── */}
-      <footer style={{ backgroundColor: BG, borderColor: `${FG}10` }} className="w-full border-t">
-        <div className="flex flex-col md:flex-row justify-between items-center px-12 py-16 gap-8 max-w-screen-2xl mx-auto">
-          <div className="flex flex-col items-center md:items-start gap-4">
-            <div className="flex items-center gap-3">
-              <Image
-                src="/logo.png"
-                alt="proto-ML logo"
-                width={36}
-                height={36}
-                className="object-contain"
-                unoptimized
-              />
-              <div style={{ color: FG }} className="text-lg font-bold font-headline tracking-tighter uppercase">
-                proto-ML
-              </div>
-            </div>
-            <div style={{ color: `${FG}50` }} className="font-space-grotesk text-xs uppercase tracking-widest">
-              © {new Date().getFullYear()} proto-ML. Made by Tejas
-            </div>
-          </div>
-          <div className="flex gap-10">
-            {["Privacy", "Terms", "Github", "Twitter"].map((link) => (
-              <a
-                key={link}
-                style={{ color: `${FG}40` }}
-                className="font-space-grotesk text-xs uppercase tracking-widest hover:opacity-80 transition-all hover:-translate-y-0.5 duration-300"
-                href="#"
-              >
-                {link}
-              </a>
-            ))}
-          </div>
-        </div>
-        <div style={{ borderColor: `${FG}08`, color: `${FG}30` }} className="w-full py-4 text-center border-t">
-          <span className="font-label text-[10px] uppercase tracking-[0.5em]">
-            Architecture Defined by Code — Design Defined by Light
-          </span>
-        </div>
-      </footer>
+      <LandingFooter />
     </div>
   )
 }
