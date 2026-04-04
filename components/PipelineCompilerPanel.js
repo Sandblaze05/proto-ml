@@ -3,7 +3,6 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { SidebarClose, Code2, PlayCircle, AlertCircle, CheckCircle2 } from 'lucide-react'
 import gsap from 'gsap'
-import { useExecutionStore } from '@/store/useExecutionStore'
 import { useUIStore } from '@/store/useUIStore'
 import { compileExecutionGraph } from '@/lib/executor/pipelineCompiler'
 import MonacoCodeEditor from './nodes/MonacoCodeEditor'
@@ -16,8 +15,6 @@ const PipelineCompilerPanel = () => {
   const [compileErrors, setCompileErrors] = useState([])
   const [compileMeta, setCompileMeta] = useState(null)
 
-  const execNodes = useExecutionStore(s => s.nodes)
-  const execEdges = useExecutionStore(s => s.edges)
   const uiNodes = useUIStore(s => s.nodes)
   const uiEdges = useUIStore(s => s.edges)
 
@@ -72,12 +69,7 @@ const PipelineCompilerPanel = () => {
 
   const handleCompile = () => {
     const uiGraph = buildCompilerGraphFromUI()
-    const hasUiNodes = Object.keys(uiGraph.nodes || {}).length > 0
-    const sourceGraph = hasUiNodes
-      ? uiGraph
-      : { nodes: execNodes, edges: execEdges }
-
-    const result = compileExecutionGraph(sourceGraph)
+    const result = compileExecutionGraph(uiGraph)
     setCompiledCode(result.code || '')
     setCompileErrors(result.errors || [])
     setCompileMeta(result.metadata || null)

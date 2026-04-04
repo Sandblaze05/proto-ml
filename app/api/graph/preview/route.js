@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { bootstrapPluginsFromRepo } from '../../../../lib/plugins/pluginBootstrap.js';
 
 export async function POST(request) {
   const body = await request.json();
@@ -8,6 +9,8 @@ export async function POST(request) {
   }
 
   try {
+    await bootstrapPluginsFromRepo();
+
     // Dynamically import the executor helper (supports CommonJS or ESM exports)
     const mod = await import('../../../../lib/executor/createExecutor.js');
     const createDefaultExecutor = mod.createDefaultExecutor || (mod.default && mod.default.createDefaultExecutor) || mod.default;

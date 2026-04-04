@@ -2,14 +2,15 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Handle, Position, useStore } from 'reactflow';
-import { Wrench, Settings2, Code2, ChevronDown, ChevronUp, Lock } from 'lucide-react';
+import { Wrench, Settings2, Code2, Eye, ChevronDown, ChevronUp, Lock } from 'lucide-react';
 import { useExecutionStore } from '../../store/useExecutionStore';
 import { useUIStore } from '../../store/useUIStore';
 import { generateTransformPythonCode } from '../../lib/pythonTemplates/transformNodeTemplate';
+import { previewNode } from '../../lib/executionClient';
 import MonacoCodeEditor from './MonacoCodeEditor';
 
-const TABS = ['Config', 'Code'];
-const TAB_ICONS = { Config: Settings2, Code: Code2 };
+const TABS = ['Config', 'Code', 'Preview'];
+const TAB_ICONS = { Config: Settings2, Code: Code2, Preview: Eye };
 
 function ConfigField({ label, value, onChange, schema = {} }) {
   const isArray = Array.isArray(value);
@@ -119,6 +120,85 @@ function ConfigField({ label, value, onChange, schema = {} }) {
   );
 }
 
+function PreviewTab({ previewing, onRunPreview, previewResult }) {
+  const analysis = useMemo(() => {
+    if (!previewResult || previewResult.error) return null;
+
+    const rows = Array.isArray(previewResult)
+      ? previewResult
+      : (Array.isArray(previewResult?.rows) ? previewResult.rows : []);
+
+    if (!Array.isArray(rows) || rows.length === 0) {
+      return {
+        rows: 0,
+        columns: 0,
+        missingCells: 0,
+        hints: ['No tabular rows available in preview output.'],
+      };
+    }
+
+    const columns = Array.from(new Set(rows.flatMap((row) => Object.keys(row || {}))));
+    let missingCells = 0;
+    rows.forEach((row) => {
+      columns.forEach((column) => {
+        if (row?.[column] === null || row?.[column] === undefined || row?.[column] === '') {
+          missingCells += 1;
+        }
+      });
+    });
+
+    const hints = [];
+    if (missingCells > 0) hints.push('Missing values detected; consider fill or filter operations.');
+    if (columns.length === 0) hints.push('No columns inferred; validate upstream structure.');
+    if (hints.length === 0) hints.push('Shape looks consistent for downstream processing.');
+
+    return {
+      rows: rows.length,
+      columns: columns.length,
+      missingCells,
+      hints,
+      columnsPreview: columns.slice(0, 8),
+      rowsPreview: rows.slice(0, 4),
+    };
+  }, [previewResult]);
+
+  return (
+    <div className="space-y-2">
+      <button
+        onClick={(e) => { e.stopPropagation(); onRunPreview(); }}
+        disabled={previewing}
+        className="w-full px-2 py-1 rounded text-[10px] font-mono bg-cyan-700/30 hover:bg-cyan-700/45 border border-cyan-300/25 disabled:opacity-50"
+      >
+        {previewing ? 'Previewing...' : 'Run Preview'}
+      </button>
+
+      {previewResult?.error && (
+        <div className="rounded border border-red-400/30 bg-red-500/10 px-2 py-1 text-[9px] font-mono text-red-300">
+          {previewResult.error}
+        </div>
+      )}
+
+      {analysis && (
+        <div className="rounded border border-[#faebd7]/12 bg-black/35 px-2 py-1.5">
+          <div className="text-[8px] uppercase tracking-wider text-[#faebd7]/45 font-mono mb-1">Node Analysis</div>
+          <div className="grid grid-cols-2 gap-x-2 gap-y-1 text-[9px] font-mono text-[#faebd7]/70 mb-1">
+            <div>Rows: {analysis.rows}</div>
+            <div>Columns: {analysis.columns}</div>
+            <div>Missing: {analysis.missingCells}</div>
+            <div>Hints: {analysis.hints.length}</div>
+          </div>
+          {analysis.columnsPreview?.length > 0 && (
+            <div className="text-[9px] text-[#faebd7]/60 font-mono mb-1">Schema: {analysis.columnsPreview.join(', ')}</div>
+          )}
+          {analysis.hints.map((hint, index) => (
+            <div key={index} className="text-[9px] text-[#faebd7]/55 font-mono">- {hint}</div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function TransformNode({ data, id, selected }) {
   const isLocked = useStore(s => s.nodeInternals.get(id)?.draggable === false);
   const { nodeModel, collapsed: storeCollapsed } = data;
@@ -143,6 +223,9 @@ export default function TransformNode({ data, id, selected }) {
 
   const updateExecutionNode = useExecutionStore(s => s.updateExecutionNode);
   const execNodes = useExecutionStore(s => s.nodes);
+  const execEdges = useExecutionStore(s => s.edges);
+  const [previewing, setPreviewing] = useState(false);
+  const [previewResult, setPreviewResult] = useState(null);
 
   useEffect(() => {
     if (codeViewNodeId !== id && !execNodes[codeViewNodeId]) {
@@ -205,6 +288,20 @@ export default function TransformNode({ data, id, selected }) {
     setManualCodeOverride(false);
     applyNodeUpdates({ pythonCode: generated });
   }, [type, localConfig, applyNodeUpdates]);
+
+  const runPreview = useCallback(async (count = 5) => {
+    setPreviewing(true);
+    setPreviewResult(null);
+    try {
+      const graph = { nodes: execNodes, edges: execEdges };
+      const res = await previewNode(graph, id, count);
+      setPreviewResult(res?.sample ?? res);
+    } catch (error) {
+      setPreviewResult({ error: String(error) });
+    } finally {
+      setPreviewing(false);
+    }
+  }, [execNodes, execEdges, id]);
 
   useEffect(() => {
     if (!initialPythonCode) {
@@ -309,6 +406,14 @@ export default function TransformNode({ data, id, selected }) {
                 dockItems={dockItems}
                 activeDockId={codeViewNodeId}
                 onDockSelect={(nodeId) => setCodeViewNodeId(String(nodeId))}
+              />
+            </div>
+
+            <div className={activeTab === 'Preview' ? '' : 'hidden'}>
+              <PreviewTab
+                previewing={previewing}
+                onRunPreview={() => runPreview(5)}
+                previewResult={previewResult}
               />
             </div>
           </div>

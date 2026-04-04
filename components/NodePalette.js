@@ -8,10 +8,14 @@ import {
 import { v4 as uuidv4 } from 'uuid';
 import { useUIStore } from '@/store/useUIStore';
 import { useExecutionStore } from '@/store/useExecutionStore';
-import { DATASET_NODES, TRANSFORM_NODES, LIFECYCLE_NODES } from '@/nodes/nodeRegistry';
+import { listNodeDefs } from '@/nodes/nodeRegistry';
 import { generateDatasetPythonCode } from '@/lib/pythonTemplates/datasetNodeTemplate';
 import { generateTransformPythonCode } from '@/lib/pythonTemplates/transformNodeTemplate';
 import { generateLifecyclePythonCode } from '@/lib/pythonTemplates/lifecycleNodeTemplate';
+import { BUILTIN_PIPELINE_TEMPLATES } from '@/lib/templates/builtinTemplates';
+import { instantiatePipelineTemplate } from '@/lib/templates/pipelineTemplateService';
+import { applyTemplateGraphToStores } from '@/lib/templates/applyTemplateToStores';
+import { bootstrapClientPlugins } from '@/lib/plugins/clientPluginBootstrap';
 
 // ── Icon map for dataset node types ──────────────────────────────────────────
 const TYPE_ICON_MAP = {
@@ -37,8 +41,10 @@ const TRANSFORM_ICON_MAP = {
   tabular: Table,
   text: FileText,
   control: Activity,
+  programming: GitBranchPlus,
   pipeline: ToyBrick,
   'data-ops': Database,
+  core: ToyBrick,
 };
 
 const LIFECYCLE_ICON_MAP = {
@@ -46,60 +52,56 @@ const LIFECYCLE_ICON_MAP = {
   modeling: BrainCircuit,
   'training-config': PackageOpen,
   'training-execution': Activity,
+  'core-workflow': Activity,
 };
 
-// ── Build palette categories ──────────────────────────────────────────────────
-export const CATEGORIES = [
-  {
-    name: 'Data',
-    nodes: DATASET_NODES.map(def => ({
+function buildNodeEntry(def) {
+  const kind = def?.kind;
+  if (kind === 'dataset') {
+    return {
       id: def.type,
       type: def.type,
       label: def.label,
       icon: TYPE_ICON_MAP[def.type] ?? Database,
       color: TYPE_COLOR_MAP[def.type] ?? '#faebd7',
-      // Attach the entire definition so PaletteItem can build the execution model
       def,
-    })),
-  },
-  {
-    name: 'Transform Basic',
-    nodes: TRANSFORM_NODES
-      .filter(def => def.level === 1)
-      .map(def => ({
-        id: def.type,
-        type: def.type,
-        label: def.label,
-        icon: TRANSFORM_ICON_MAP[def.metadata?.domain] ?? ToyBrick,
-        color: '#67e8f9',
-        def,
-      })),
-  },
-  {
-    name: 'Transform Advanced',
-    nodes: TRANSFORM_NODES
-      .filter(def => def.level === 2)
-      .map(def => ({
-        id: def.type,
-        type: def.type,
-        label: def.label,
-        icon: TRANSFORM_ICON_MAP[def.category] ?? TRANSFORM_ICON_MAP[def.metadata?.domain] ?? ToyBrick,
-        color: '#38bdf8',
-        def,
-      })),
-  },
-  {
-    name: 'Lifecycle',
-    nodes: LIFECYCLE_NODES.map(def => ({
+    };
+  }
+  if (kind === 'lifecycle') {
+    return {
       id: def.type,
       type: def.type,
       label: def.label,
       icon: LIFECYCLE_ICON_MAP[def.category] ?? Activity,
       color: '#f59e0b',
       def,
-    })),
-  },
-];
+    };
+  }
+  return {
+    id: def.type,
+    type: def.type,
+    label: def.label,
+    icon: TRANSFORM_ICON_MAP[def.category] ?? ToyBrick,
+    color: '#67e8f9',
+    def,
+  };
+}
+
+export function getPaletteCategories() {
+  const defs = listNodeDefs();
+  const datasets = defs.filter((def) => def?.kind === 'dataset').map(buildNodeEntry);
+  const transforms = defs.filter((def) => def?.kind === 'transform').map(buildNodeEntry);
+  const lifecycles = defs.filter((def) => def?.kind === 'lifecycle').map(buildNodeEntry);
+
+  return [
+    { name: 'Core Data', nodes: datasets },
+    { name: 'Core Transform', nodes: transforms },
+    { name: 'Core Lifecycle', nodes: lifecycles },
+  ];
+}
+
+// Snapshot export kept for compatibility with modules that import CATEGORIES directly.
+export const CATEGORIES = getPaletteCategories();
 
 // ── Palette item ──────────────────────────────────────────────────────────────
 function PaletteItem({ node, isInUse }) {
@@ -251,6 +253,17 @@ function PaletteItem({ node, isInUse }) {
 
   const Icon  = node.icon;
   const color = node.color ?? '#faebd7';
+  const requiredInputCount = (node.def?.inputs || []).filter((port) => port?.optional !== true).length;
+  const outputCount = node.def?.outputs?.length || 0;
+  const acceptsSummary = Array.isArray(node.def?.accepts) && node.def.accepts.length > 0
+    ? node.def.accepts.join(', ')
+    : '*';
+  const producesSummary = Array.isArray(node.def?.produces) && node.def.produces.length > 0
+    ? node.def.produces.join(', ')
+    : '*';
+  const guidanceTitle = node.def
+    ? `${node.label}\nRequired inputs: ${requiredInputCount}\nOutputs: ${outputCount}\nAccepts: ${acceptsSummary}\nProduces: ${producesSummary}`
+    : node.label;
 
   return (
     <>
@@ -289,6 +302,7 @@ function PaletteItem({ node, isInUse }) {
       <div
         draggable
         onDragStart={onDragStart}
+        title={guidanceTitle}
         style={{
           display: 'flex',
           alignItems: 'center',
@@ -334,7 +348,12 @@ function PaletteItem({ node, isInUse }) {
             <div style={{ fontSize: 11, color: '#faebd7cc', fontFamily: 'monospace', fontWeight: 600 }}>{node.label}</div>
             {node.def && (
               <div style={{ fontSize: 9, color: color + 'aa', fontFamily: 'monospace' }}>
-                {node.def.outputs.length} outputs
+                {requiredInputCount} required inputs • {outputCount} outputs
+              </div>
+            )}
+            {node.def && (
+              <div style={{ fontSize: 9, color: '#faebd780', fontFamily: 'monospace' }}>
+                {`accepts ${acceptsSummary} -> produces ${producesSummary}`}
               </div>
             )}
           </div>
@@ -363,9 +382,224 @@ function PaletteItem({ node, isInUse }) {
   );
 }
 
+function parseTemplateParameter(rawValue, type) {
+  if (type === 'number') {
+    const parsed = Number(rawValue);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+  if (type === 'boolean') {
+    return rawValue === true || rawValue === 'true';
+  }
+  if (type && type.startsWith('array:')) {
+    return String(rawValue || '')
+      .split(',')
+      .map((entry) => entry.trim())
+      .filter(Boolean);
+  }
+  return rawValue;
+}
+
+function TemplateLibrarySection() {
+  const setNodes = useUIStore((state) => state.setNodes);
+  const setEdges = useUIStore((state) => state.setEdges);
+  const saveToHistory = useUIStore((state) => state.saveToHistory);
+  const addToast = useUIStore((state) => state.addToast);
+  const setExecutionGraph = useExecutionStore((state) => state.setExecutionGraph);
+
+  const [openTemplateId, setOpenTemplateId] = useState(null);
+  const [templateParams, setTemplateParams] = useState(() => {
+    return BUILTIN_PIPELINE_TEMPLATES.reduce((acc, template) => {
+      acc[template.id] = (template.parameters || []).reduce((params, param) => {
+        params[param.name] = param.defaultValue ?? '';
+        return params;
+      }, {});
+      return acc;
+    }, {});
+  });
+
+  const updateParam = (templateId, paramName, value) => {
+    setTemplateParams((prev) => ({
+      ...prev,
+      [templateId]: {
+        ...(prev[templateId] || {}),
+        [paramName]: value,
+      },
+    }));
+  };
+
+  const applyTemplate = (template) => {
+    const values = templateParams[template.id] || {};
+    const typedParams = Object.fromEntries(
+      (template.parameters || []).map((param) => [
+        param.name,
+        parseTemplateParameter(values[param.name], param.type),
+      ]),
+    );
+
+    const instantiation = instantiatePipelineTemplate(template, {
+      parameters: typedParams,
+    });
+
+    if (!instantiation.ok || !instantiation.graph) {
+      addToast(`Template error: ${(instantiation.errors || []).join(' ')}`, 'error');
+      return;
+    }
+
+    const payload = applyTemplateGraphToStores({
+      graph: instantiation.graph,
+      uiStore: {
+        setNodes,
+        setEdges,
+        saveToHistory,
+      },
+      executionStore: {
+        setExecutionGraph,
+      },
+      options: {
+        idPrefix: `${template.id.replace(/[^a-zA-Z0-9_-]/g, '-')}-${Date.now()}`,
+      },
+    });
+
+    if ((payload.warnings || []).length > 0) {
+      addToast(`Template loaded with notes: ${payload.warnings[0]}`, 'info');
+    } else if ((instantiation.unresolvedParameters || []).length > 0) {
+      addToast(`Template loaded, unresolved: ${instantiation.unresolvedParameters.join(', ')}`, 'info');
+    } else {
+      addToast(`Template loaded: ${template.name}`, 'success');
+    }
+  };
+
+  return (
+    <div style={{ border: '1px solid #faebd715', borderRadius: 7, overflow: 'hidden' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 5, padding: 6, background: '#0d0d0d' }}>
+        {BUILTIN_PIPELINE_TEMPLATES.map((template) => {
+          const isOpen = openTemplateId === template.id;
+          const params = template.parameters || [];
+          const values = templateParams[template.id] || {};
+
+          return (
+            <div key={template.id} style={{ border: '1px solid #faebd712', borderRadius: 6, background: '#111' }}>
+              <button
+                onClick={() => setOpenTemplateId(isOpen ? null : template.id)}
+                style={{
+                  width: '100%',
+                  padding: '6px 8px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  background: isOpen ? '#1b1b1b' : '#111',
+                  border: 'none',
+                  color: '#faebd7cc',
+                  cursor: 'pointer',
+                }}
+              >
+                <span style={{ textAlign: 'left' }}>
+                  <div style={{ fontSize: 10, fontWeight: 700, fontFamily: 'monospace' }}>{template.name}</div>
+                  <div style={{ fontSize: 8, color: '#faebd755', fontFamily: 'monospace' }}>{template.id}</div>
+                </span>
+                {isOpen ? <ChevronDown size={12} color="#faebd777" /> : <ChevronRight size={12} color="#faebd777" />}
+              </button>
+
+              {isOpen && (
+                <div style={{ padding: 8, borderTop: '1px solid #faebd710', display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  {params.map((param) => {
+                    const value = values[param.name] ?? '';
+                    const inputType = param.type === 'number' ? 'number' : 'text';
+                    const placeholder = param.description || param.name;
+                    const displayValue = param.type && param.type.startsWith('array:')
+                      ? (Array.isArray(value) ? value.join(', ') : String(value || ''))
+                      : value;
+
+                    if (param.type === 'boolean') {
+                      return (
+                        <label key={param.name} style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                          <span style={{ fontSize: 9, fontFamily: 'monospace', color: '#faebd799' }}>
+                            {param.name}{param.required ? ' *' : ''}
+                          </span>
+                          <select
+                            value={String(value)}
+                            onChange={(e) => updateParam(template.id, param.name, e.target.value)}
+                            style={{
+                              background: '#0b0b0b',
+                              border: '1px solid #faebd720',
+                              borderRadius: 4,
+                              color: '#faebd7',
+                              fontFamily: 'monospace',
+                              fontSize: 10,
+                              padding: '5px 6px',
+                            }}
+                          >
+                            <option value="true">true</option>
+                            <option value="false">false</option>
+                          </select>
+                        </label>
+                      );
+                    }
+
+                    return (
+                      <label key={param.name} style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                        <span style={{ fontSize: 9, fontFamily: 'monospace', color: '#faebd799' }}>
+                          {param.name}{param.required ? ' *' : ''}
+                        </span>
+                        <input
+                          type={inputType}
+                          value={typeof displayValue === 'string' || typeof displayValue === 'number' ? displayValue : ''}
+                          placeholder={placeholder}
+                          onChange={(e) => updateParam(template.id, param.name, e.target.value)}
+                          style={{
+                            background: '#0b0b0b',
+                            border: '1px solid #faebd720',
+                            borderRadius: 4,
+                            color: '#faebd7',
+                            fontFamily: 'monospace',
+                            fontSize: 10,
+                            padding: '5px 6px',
+                          }}
+                        />
+                      </label>
+                    );
+                  })}
+                  <button
+                    onClick={() => applyTemplate(template)}
+                    style={{
+                      marginTop: 2,
+                      border: '1px solid #67e8f944',
+                      background: '#67e8f91a',
+                      color: '#67e8f9',
+                      borderRadius: 4,
+                      padding: '6px 8px',
+                      fontSize: 10,
+                      fontFamily: 'monospace',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Apply Template
+                  </button>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 // ── Palette root ──────────────────────────────────────────────────────────────
 export default function NodePalette() {
-  const [openCategory, setOpenCategory] = useState('Data');
+  const [openCategory, setOpenCategory] = useState('Core Data');
+  const [paletteVersion, setPaletteVersion] = useState(0);
+
+  useEffect(() => {
+    bootstrapClientPlugins()
+      .then(() => setPaletteVersion((v) => v + 1))
+      .catch(() => {
+        // Non-fatal: palette can still use built-in nodes.
+      });
+  }, []);
+
+  const categories = useMemo(() => getPaletteCategories(), [paletteVersion]);
 
   // Derive a set of node types currently on the canvas
   const canvasNodes = useUIStore(s => s.nodes);
@@ -378,24 +612,26 @@ export default function NodePalette() {
     return set;
   }, [canvasNodes]);
 
+  const headingStyle = {
+    fontFamily: 'monospace',
+    color: '#faebd7',
+    fontWeight: 700,
+    fontSize: 12,
+    marginBottom: 12,
+    textTransform: 'uppercase',
+    letterSpacing: '0.08em',
+    borderBottom: '1px solid #faebd715',
+    paddingBottom: 8,
+  };
+
   return (
     <div style={{ width: '100%', marginTop: 16 }}>
-      <h3 style={{
-        fontFamily: 'monospace',
-        color: '#faebd7',
-        fontWeight: 700,
-        fontSize: 12,
-        marginBottom: 12,
-        textTransform: 'uppercase',
-        letterSpacing: '0.08em',
-        borderBottom: '1px solid #faebd715',
-        paddingBottom: 8,
-      }}>
+      <h3 style={headingStyle}>
         Node Palette
       </h3>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-        {CATEGORIES.map(cat => (
+        {categories.map(cat => (
           <div key={cat.name} style={{ border: '1px solid #faebd715', borderRadius: 7, overflow: 'hidden' }}>
             <button
               onClick={() => setOpenCategory(openCategory === cat.name ? null : cat.name)}
@@ -431,6 +667,13 @@ export default function NodePalette() {
             )}
           </div>
         ))}
+      </div>
+
+      <div style={{ marginTop: 14 }}>
+        <h3 style={headingStyle}>
+          Templates
+        </h3>
+        <TemplateLibrarySection />
       </div>
     </div>
   );

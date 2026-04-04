@@ -11,8 +11,6 @@ npm run dev
 
 Open http://localhost:3000 and navigate to the dashboard.
 
-## What Has Been Implemented
-
 ## Quick Start
 
 1. Install dependencies and run the Next.js dev server:
@@ -26,72 +24,63 @@ npm run dev
 
 3. Create or load a graph from the palette, edit node configs, then use the compile preview to inspect generated Python.
 
-## High-level Summary — Done vs Remaining
+## Current Progress (April 2026)
 
-This section explains what has been implemented so far (concrete files and behaviors), and what remains to finish a production-ready pipeline toolchain.
+This reflects the current implementation status in the repository.
 
-**Completed (what's done today)**
+### Completed
 
-- **Dataset nodes with template-based Python**: dataset nodes generate Python using templates and store generated code on node models; code is editable with Monaco and has helpful controls (wrap, copy, reset).
-	- See: [lib/pythonTemplates/datasetNodeTemplate.js](lib/pythonTemplates/datasetNodeTemplate.js#L1)
-	- See: [components/DatasetNode.js](components/DatasetNode.js#L1) and [components/nodes/MonacoCodeEditor.js](components/nodes/MonacoCodeEditor.js#L1)
+- Core visual graph editor with dataset, transform, lifecycle, annotation, and shape nodes on an infinite canvas.
 
-- **Dataset / Transform separation**: dataset templates no longer inline transforms — transforms are first-class nodes in the graph.
-	- See: [lib/pythonTemplates/datasetNodeTemplate.js](lib/pythonTemplates/datasetNodeTemplate.js#L1)
+- Runtime-extensible node and preview-runtime registries for plugin-style expansion.
+  - Node registry APIs: register/unregister/list/exists in [nodes/nodeRegistry.js](nodes/nodeRegistry.js#L1)
+  - Runtime factory APIs: register/unregister/list/get in [lib/runtimeFactories/index.js](lib/runtimeFactories/index.js#L1)
 
-- **Transform registry & extensible transform system**: a registry-driven approach describes transforms' metadata (type, category, level, accepts/produces, defaultConfig, uiSchema) enabling discovery and a palette.
-	- See: [nodes/transforms/transformRegistry.js](nodes/transforms/transformRegistry.js#L1)
+- Core primitive node model for broad workflow authoring:
+  - Transform primitives: map, join, route, plus programming primitives if/else and type-switch in [nodes/transforms/transformRegistry.js](nodes/transforms/transformRegistry.js#L1)
+  - Lifecycle primitives: split, batch loader, model builder, objective, trainer, evaluator, predictor in [nodes/lifecycle/lifecycleRegistry.js](nodes/lifecycle/lifecycleRegistry.js#L1)
 
-- **Transform node UI**: a dedicated transform node renderer with tabs for config and generated code; footer stays visible when collapsed; config uses schema-driven widgets and code uses Monaco.
-	- See: [components/nodes/TransformNode.js](components/nodes/TransformNode.js#L1)
-	- Canvas and palette integration: [components/InfiniteCanvas.js](components/InfiniteCanvas.js#L1), [components/NodePalette.js](components/NodePalette.js#L1)
+- Template system for on-the-fly pipeline creation:
+  - Template validation/instantiation and source merge in [lib/templates/pipelineTemplateService.js](lib/templates/pipelineTemplateService.js#L1)
+  - Template graph -> canvas/execution payload adapter in [lib/templates/templateCanvasAdapter.js](lib/templates/templateCanvasAdapter.js#L1)
+  - One-step apply helper in [lib/templates/applyTemplateToStores.js](lib/templates/applyTemplateToStores.js#L1)
+  - Built-in templates catalog in [lib/templates/builtinTemplates.js](lib/templates/builtinTemplates.js#L1)
+  - UI integration under a dedicated Templates section in [components/NodePalette.js](components/NodePalette.js#L1)
 
-- **Capability-aware connections**: lightweight connection validation uses `produces`/`accepts` capability flags before running deeper compatibility checks.
-	- See: [store/useExecutionStore.js](store/useExecutionStore.js#L1)
+- Plugin architecture with startup bootstrap from repo folder:
+  - Manifest validation + lifecycle manager in [lib/plugins/pluginRegistry.js](lib/plugins/pluginRegistry.js#L1)
+  - Default registry wiring in [lib/plugins/defaultPluginRegistry.js](lib/plugins/defaultPluginRegistry.js#L1)
+  - Repo plugin discovery/bootstrap in [lib/plugins/pluginBootstrap.js](lib/plugins/pluginBootstrap.js#L1)
+  - API endpoint in [app/api/plugins/bootstrap/route.js](app/api/plugins/bootstrap/route.js#L1)
+  - Client bootstrap on canvas load in [lib/plugins/clientPluginBootstrap.js](lib/plugins/clientPluginBootstrap.js#L1), [app/canvas/page.js](app/canvas/page.js#L1), [app/canvas/[id]/page.js](app/canvas/[id]/page.js#L1)
 
-- **Graph compiler (structured artifact)**: compiler that validates basic graph invariants (non-empty graph, dataset sources, cycles), topologically sorts nodes, assigns deterministic symbols, and emits a structured Python entrypoint (`run_pipeline()`) with graph metadata, per-node config, and context wiring. A compile action shows a read-only Monaco preview.
-	- See: [lib/executor/pipelineCompiler.js](lib/executor/pipelineCompiler.js#L1)
-	- UI trigger: [components/DashboardNav.js](components/DashboardNav.js#L1)
+- Improved connection diagnostics and compile UX:
+  - Structured connection validation results in [store/useExecutionStore.js](store/useExecutionStore.js#L1)
+  - Compiler now compiles from the current canvas graph and reports empty-graph errors correctly in [components/PipelineCompilerPanel.js](components/PipelineCompilerPanel.js#L1)
+  - Compiler emits deterministic Python with a single run_pipeline() entrypoint in [lib/executor/pipelineCompiler.js](lib/executor/pipelineCompiler.js#L1)
 
-**Current behavior notes**
+- Node-level analysis/preview support:
+  - Dataset analysis card in [components/nodes/DatasetNode.js](components/nodes/DatasetNode.js#L1)
+  - Transform Preview tab with compact analysis hints in [components/nodes/TransformNode.js](components/nodes/TransformNode.js#L1)
+  - Preview execution pipeline in [lib/executor/graphExecutor.js](lib/executor/graphExecutor.js#L1)
 
-- The emitted Python now has a single `run_pipeline()` entrypoint and returns structured metadata (`graph_spec`, `node_meta`, `node_outputs`, `ctx`), but transform/lifecycle/model execution is still stubbed. The output is deterministic and close to an exportable artifact, but not yet a full end-to-end trainer.
+### Validation Status
 
-**Remaining (next work to reach an end-to-end runnable system)**
+- Focused Vitest suites are in place and passing for registries, templates, plugin bootstrap, execution store diagnostics, and executor preview paths.
+- A full production build succeeds on Next.js 16.2.1.
 
+### Remaining Work (to reach fully production-grade execution)
 
-- **Runtime execution implementation** (high priority)
-	- Implement `apply_transform` and `apply_node` runtime hooks that call actual transform implementations.
-	- Add pluggable runtime targets: local Python process, Jupyter runner (see `lib/executor/remoteJupyterRunner.js`), and remote/cluster runtimes.
-	- Files to update/extend: [lib/executor/createExecutor.js](lib/executor/createExecutor.js#L1), [lib/executor/remoteJupyterRunner.js](lib/executor/remoteJupyterRunner.js#L1), runtime factories in [lib/runtimeFactories/index.js](lib/runtimeFactories/index.js#L1).
-
-- **Stronger semantic compilation** (medium priority)
-	- Support multi-input nodes with merge strategies and explicit semantics for how multiple inputs combine (concat, merge-by-key, zip, etc.).
-	- Add branch/condition code generation for conditional/guard nodes.
-	- Enforce stricter staging rules (dataset -> transforms -> split -> train/eval) and add type/shape inference checks during compile.
-	- Files to extend: [lib/executor/pipelineCompiler.js](lib/executor/pipelineCompiler.js#L1) and the transform registry.
-
-- **Transform UX polish** (low/medium priority)
-	- Improve schema widgets for nested objects and arrays (arrays-of-objects editors, add/remove controls).
-	- Provide inline validation messages (required, min/max, pattern) in the node config panel.
-	- Consider a small library of preset transforms and a UI for installing transform packs.
-
-- **Compose/subgraph support**
-	- Implement subgraph compilation and reuse (composable pipelines that expand into inline code or importable modules).
-	- Visual grouping and parameterized subgraph inputs/outputs.
-
-- **Compilation artifacts, persistence & export**
-	- Persist compiled pipeline artifacts (with metadata and compiler diagnostics), add versioning, and allow export as a single `.py` artifact.
-
-- **Testing and QA**
-	- Add unit tests for graph validation and code emission (jest/mocha), and snapshot tests to detect regressions in generated code.
-	- Add integration tests for node editing → compile → execute (using a lightweight local executor target).
+- Replace preview-oriented runtime behavior with production execution backends for full training/inference runs.
+- Deepen compiler semantics for advanced branching/merging and richer type-shape validation.
+- Expand config UX for complex nested schemas and stronger inline validation feedback.
+- Add export/versioning flows for compiled artifacts and broader end-to-end integration coverage.
 
 ## How to test the compiler locally (developer notes)
 
 1. Start the Next dev server: `npm run dev`.
-2. Open the dashboard and create a small graph: one dataset node → one transform node.
-3. Use the compile action (Dashboard → Compile) to preview generated Python.
+2. Open the canvas and create a small graph (for example: dataset -> transform).
+3. Open the Compiler panel and click Compile to preview generated Python.
 4. For quick smoke tests of runtime execution, see `lib/executor/createExecutor.js` — you can run a node script that imports the compiler and executor to run a small graph outside the UI (useful for CI or debugging).
 
 Example (quick dev script):
@@ -103,12 +92,6 @@ const { createExecutor } = require('../lib/executor/createExecutor');
 
 // load a saved graph JSON or construct a minimal graph object and call compileGraph(graph)
 ```
-
-## Suggested next steps (short-term roadmap)
-
-- Implement a minimal local executor that maps `apply_transform` to a JS-to-Python call or direct Node-side logic for a small set of transforms.
-- Add unit tests for `pipelineCompiler.js` covering cycle detection, topological sort, and code emission for sample graphs.
-- Improve transform config widgets for nested objects (one or two focused widgets will raise UX quality substantially).
 
 ## Contributors / Contacts
 

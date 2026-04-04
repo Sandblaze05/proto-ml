@@ -857,6 +857,14 @@ const DashboardPage = () => {
 																			Open <ExternalLink size={14} />
 																		</Link>
 																	)}
+																	{viewMode === 'grid' && (
+																		<Link
+																			href={`/canvas/${p.id}`}
+																			className="flex items-center justify-center gap-2 w-full py-3 bg-foreground/10 rounded-xl font-bold text-sm group-hover:bg-foreground group-hover:text-background transition-all"
+																		>
+																			Open Workspace <ExternalLink size={14} />
+																		</Link>
+																	)}
 																</div>
 															</div>
 														))}

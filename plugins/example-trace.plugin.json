@@ -1,0 +1,33 @@
+{
+  "manifest": {
+    "id": "example.trace.plugin",
+    "name": "Example Trace Plugin",
+    "version": "0.1.0",
+    "apiVersion": 1
+  },
+  "nodes": [
+    {
+      "type": "transform.plugin.trace",
+      "kind": "transform",
+      "category": "programming",
+      "label": "Trace",
+      "accepts": ["*"],
+      "produces": ["*"],
+      "inputs": [
+        { "name": "in", "datatype": "any", "shape": [], "optional": false }
+      ],
+      "outputs": [
+        { "name": "out", "datatype": "any", "shape": [] }
+      ],
+      "defaultConfig": {
+        "prefix": "trace"
+      },
+      "uiSchema": {
+        "prefix": { "type": "string", "label": "Prefix" }
+      },
+      "metadata": {
+        "domain": "plugin"
+      }
+    }
+  ]
+}

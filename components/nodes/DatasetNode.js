@@ -1020,6 +1020,32 @@ export default function DatasetNode({ data, id, selected }) {
   const accent = TYPE_HEX[type] ?? '#faebd7';
   const Icon = TYPE_ICONS[type] ?? Database;
 
+  const analysisCard = useMemo(() => {
+    const stats = localConfig?.dataset_stats || inspectResult?.stats || {};
+    const schema = localConfig?.dataset_schema || inspectResult?.schema || {};
+    const metadata = localConfig?.dataset_metadata || inspectResult?.metadata || {};
+
+    const rows = Number.isFinite(stats?.rows)
+      ? stats.rows
+      : (Array.isArray(previewResult?.rows) ? previewResult.rows.length : null);
+    const columns = Number.isFinite(stats?.columns)
+      ? stats.columns
+      : (Array.isArray(schema?.columns) ? schema.columns.length : null);
+    const missingCells = Number.isFinite(stats?.missingCells) ? stats.missingCells : null;
+    const taskSuggestion = metadata?.taskSuggestion || null;
+
+    if (rows === null && columns === null && missingCells === null && !taskSuggestion) {
+      return null;
+    }
+
+    return {
+      rows,
+      columns,
+      missingCells,
+      taskSuggestion,
+    };
+  }, [localConfig, inspectResult, previewResult]);
+
   useEffect(() => {
     if (codeViewNodeId !== id && !execNodes[codeViewNodeId]) {
       setCodeViewNodeId(id);
@@ -1498,6 +1524,18 @@ export default function DatasetNode({ data, id, selected }) {
               );
             })}
           </div>
+
+          {analysisCard && (
+            <div className="mx-2.5 mt-2 rounded border border-[#faebd7]/12 bg-black/35 px-2 py-1.5">
+              <div className="text-[8px] uppercase tracking-wider text-[#faebd7]/45 font-mono mb-1">Node Analysis</div>
+              <div className="grid grid-cols-2 gap-x-2 gap-y-1 text-[9px] font-mono text-[#faebd7]/70">
+                <div>Rows: {analysisCard.rows ?? '—'}</div>
+                <div>Columns: {analysisCard.columns ?? '—'}</div>
+                <div>Missing: {analysisCard.missingCells ?? '—'}</div>
+                <div>Hint: {analysisCard.taskSuggestion || '—'}</div>
+              </div>
+            </div>
+          )}
 
           <div className="nowheel h-55 overflow-y-auto px-2.5 pt-2 pb-2 scrollbar-thin scrollbar-track-transparent scrollbar-thumb-[#faebd7]/10" style={{ scrollbarWidth: 'thin', scrollbarColor: '#faebd710 transparent' }}>
             {activeTab === 'Source' && (

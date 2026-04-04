@@ -26,7 +26,7 @@ import DatasetNode from './nodes/DatasetNode';
 import TransformNode from './nodes/TransformNode';
 import AnnotationNode from './nodes/AnnotationNode';
 import ShapeNode from './nodes/ShapeNode';
-import { CATEGORIES } from './NodePalette';
+import { getPaletteCategories } from './NodePalette';
 import { ANNOTATION_SHAPES, RectIcon } from './AnnotationsPanel';
 import { v4 as uuidv4 } from 'uuid';
 import { generateDatasetPythonCode } from '@/lib/pythonTemplates/datasetNodeTemplate';
@@ -297,7 +297,7 @@ function EdgeAwareMiniMap() {
   const rfHeight = useStore(s => s.height);
   const nodeColorByType = useMemo(() => {
     const map = {};
-    CATEGORIES.forEach((category) => {
+    getPaletteCategories().forEach((category) => {
       category.nodes.forEach((paletteNode) => {
         map[paletteNode.type] = paletteNode.color;
       });
@@ -525,7 +525,7 @@ function Spotlight({ isOpen, onClose }) {
   const containerRef = useRef(null);
 
   const flatNodes = useMemo(() => {
-    return CATEGORIES.flatMap(cat => cat.nodes);
+    return getPaletteCategories().flatMap(cat => cat.nodes);
   }, []);
 
   const filtered = useMemo(() => {
@@ -1321,7 +1321,7 @@ function InteractiveCanvas({ onCanvasChange, onPointerMove, onEditingNodeChange,
     onCanvasChange(nodes, edges, drawings, { reason: 'graph-change' });
   }, [nodes, edges, drawings, onCanvasChange]);
 
-  const { addExecutionNode, addExecutionEdge, canConnect, removeExecutionNode } = useExecutionStore();
+  const { addExecutionNode, addExecutionEdge, canConnect, validateConnection, removeExecutionNode } = useExecutionStore();
   const { setNodeRef } = useDroppable({ id: 'canvas-droppable' });
   const { project, screenToFlowPosition } = useReactFlow();
   const transform = useStore((s) => s.transform);
@@ -1451,8 +1451,15 @@ function InteractiveCanvas({ onCanvasChange, onPointerMove, onEditingNodeChange,
   const onConnect = useCallback((connection) => {
     if (readOnly) return;
 
+    const diagnostic = validateConnection(
+      connection.source,
+      connection.target,
+      connection.sourceHandle,
+      connection.targetHandle,
+    );
+
     // 1. Verify in Execution Store
-    if (canConnect(connection.source, connection.target, connection.sourceHandle, connection.targetHandle)) {
+    if (diagnostic.ok && canConnect(connection.source, connection.target, connection.sourceHandle, connection.targetHandle)) {
       // 2. Add to UI
       addEdge(connection);
       // 3. Add to Execution Graph
@@ -1467,9 +1474,10 @@ function InteractiveCanvas({ onCanvasChange, onPointerMove, onEditingNodeChange,
         );
       }
     } else {
-      addToast('Incompatible connection', 'error');
+      const fixHint = diagnostic?.details?.suggestedFix ? ` ${diagnostic.details.suggestedFix}` : '';
+      addToast(`Incompatible connection: ${diagnostic?.message || 'validation failed.'}${fixHint}`, 'error');
     }
-  }, [readOnly, addEdge, addExecutionEdge, canConnect, addToast]);
+  }, [readOnly, addEdge, addExecutionEdge, canConnect, validateConnection, addToast]);
 
   const onConnectStart = useCallback(() => setIsConnecting(true), []);
   const onConnectEnd = useCallback(() => setIsConnecting(false), []);

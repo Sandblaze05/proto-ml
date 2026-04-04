@@ -1,13 +1,21 @@
 'use client'
 
+import { useEffect } from 'react'
 import Link from 'next/link'
 import { Layout } from 'lucide-react'
 import InfiniteCanvas from '@/components/InfiniteCanvas'
 import DashboardNav from '@/components/DashboardNav'
 import DashboardProfile from '@/components/DashboardProfile'
 import PipelineCompilerPanel from '@/components/PipelineCompilerPanel'
+import { bootstrapClientPlugins } from '@/lib/plugins/clientPluginBootstrap'
 
 const Page = () => {
+  useEffect(() => {
+    bootstrapClientPlugins().catch(() => {
+      // Non-fatal: canvas should still render without optional plugins.
+    })
+  }, [])
+
   return (
     <div className="w-full h-screen relative">
       <DashboardNav />
