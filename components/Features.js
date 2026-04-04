@@ -1,13 +1,60 @@
+'use client'
+
+import React, { useEffect, useRef } from 'react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Shield, Users } from 'lucide-react'
+import gsap from 'gsap'
+import { ScrollTrigger } from 'gsap/dist/ScrollTrigger'
+
+gsap.registerPlugin(ScrollTrigger)
 
 export function Features() {
+    const sectionRef = useRef(null)
+    const cardsRef = useRef([])
+
+    useEffect(() => {
+        const ctx = gsap.context(() => {
+            cardsRef.current.forEach((card, index) => {
+                if (!card) return
+                
+                gsap.fromTo(card, 
+                    { 
+                        opacity: 0, 
+                        y: 50,
+                        scale: 0.95
+                    },
+                    {
+                        opacity: 1,
+                        y: 0,
+                        scale: 1,
+                        duration: 0.8,
+                        ease: 'power3.out',
+                        scrollTrigger: {
+                            trigger: card,
+                            start: 'top 85%',
+                            toggleActions: 'play none none none'
+                        },
+                        delay: index * 0.1
+                    }
+                )
+            })
+        }, sectionRef)
+
+        return () => ctx.revert()
+    }, [])
+
+    const addToCardsRef = (el) => {
+        if (el && !cardsRef.current.includes(el)) {
+            cardsRef.current.push(el)
+        }
+    }
+
     return (
-        <section className="bg-gray-50 py-8 md:py-14 dark:bg-transparent">
+        <section ref={sectionRef} className="bg-gray-50 py-8 md:py-14 dark:bg-transparent" id="features-section">
             <div className="mx-auto w-full max-w-7xl px-6 lg:px-8">
                 <div className="relative">
                     <div className="relative z-10 grid grid-cols-6 gap-3">
-                        <Card className="relative col-span-full flex overflow-hidden lg:col-span-2">
+                        <Card ref={addToCardsRef} className="relative col-span-full flex overflow-hidden lg:col-span-2">
                             <CardContent className="relative m-auto size-fit pt-6">
                                 <div className="relative flex h-24 w-56 items-center">
                                     <svg className="text-muted absolute inset-0 size-full" viewBox="0 0 254 104" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -21,7 +68,7 @@ export function Features() {
                                 <h2 className="mt-6 text-center text-3xl font-semibold">No-Code to Python</h2>
                             </CardContent>
                         </Card>
-                        <Card className="relative col-span-full overflow-hidden sm:col-span-3 lg:col-span-2">
+                        <Card ref={addToCardsRef} className="relative col-span-full overflow-hidden sm:col-span-3 lg:col-span-2">
                             <CardContent className="pt-6">
                                 <div className="relative mx-auto flex aspect-square size-32 rounded-full border before:absolute before:-inset-2 before:rounded-full before:border dark:border-white/10 dark:before:border-white/5">
                                     <svg className="m-auto h-fit w-24" viewBox="0 0 212 143" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -54,7 +101,7 @@ export function Features() {
                                 </div>
                             </CardContent>
                         </Card>
-                        <Card className="relative col-span-full overflow-hidden sm:col-span-3 lg:col-span-2">
+                        <Card ref={addToCardsRef} className="relative col-span-full overflow-hidden sm:col-span-3 lg:col-span-2">
                             <CardContent className="pt-6">
                                 <div className="pt-6 lg:px-6">
                                     <svg className="dark:text-muted-foreground w-full" viewBox="0 0 386 123" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -93,7 +140,7 @@ export function Features() {
                                 </div>
                             </CardContent>
                         </Card>
-                        <Card className="relative col-span-full overflow-hidden lg:col-span-3">
+                        <Card ref={addToCardsRef} className="relative col-span-full overflow-hidden lg:col-span-3">
                             <CardContent className="grid pt-6 sm:grid-cols-2">
                                 <div className="relative z-10 flex flex-col justify-between space-y-12 lg:space-y-6">
                                     <div className="relative flex aspect-square size-12 rounded-full border before:absolute before:-inset-2 before:rounded-full before:border dark:border-white/10 dark:before:border-white/5">
@@ -133,7 +180,7 @@ export function Features() {
                                 </div>
                             </CardContent>
                         </Card>
-                        <Card className="relative col-span-full overflow-hidden lg:col-span-3">
+                        <Card ref={addToCardsRef} className="relative col-span-full overflow-hidden lg:col-span-3">
                             <CardContent className="grid h-full pt-6 sm:grid-cols-2">
                                 <div className="relative z-10 flex flex-col justify-between space-y-12 lg:space-y-6">
                                     <div className="relative flex aspect-square size-12 rounded-full border before:absolute before:-inset-2 before:rounded-full before:border dark:border-white/10 dark:before:border-white/5">
