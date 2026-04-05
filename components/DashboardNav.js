@@ -8,8 +8,7 @@ import { useUIStore } from '@/store/useUIStore'
 import { createClient } from '@/lib/supabase/client'
 import { usePathname, useRouter } from 'next/navigation'
 
-const ACTIVE_PIPELINE_ID_KEY = 'protoMlActivePipelineId'
-const DRAFT_PIPELINE_NAME_KEY = 'protoMlDraftPipelineName'
+
 
 const DashboardNav = () => {
 
@@ -27,7 +26,7 @@ const DashboardNav = () => {
   const [shareMode, setShareMode] = useState('email');
   const [sharePermission, setSharePermission] = useState('view');
   const [shareGenerated, setShareGenerated] = useState(false);
-  const { nodes, edges, addToast } = useUIStore();
+  const { nodes, edges, addToast, draftPipelineName } = useUIStore();
   const supabase = createClient();
   const pathname = usePathname();
   const router = useRouter();
@@ -60,7 +59,6 @@ const DashboardNav = () => {
 
       if (error || !data) {
         setCurrentPipelineId(null);
-        localStorage.removeItem(ACTIVE_PIPELINE_ID_KEY);
         return;
       }
 
@@ -81,8 +79,7 @@ const DashboardNav = () => {
 
       const cleanNodes = JSON.parse(JSON.stringify(nodes, (key, val) => key === '_gsap' ? undefined : val));
       const cleanEdges = JSON.parse(JSON.stringify(edges, (key, val) => key === '_gsap' ? undefined : val));
-      const draftName = (localStorage.getItem(DRAFT_PIPELINE_NAME_KEY) || '').trim();
-      const pipelineName = draftName || 'Untitled Pipeline';
+      const pipelineName = draftPipelineName.trim() || 'Untitled Pipeline';
 
       let activeId = effectivePipelineId;
       let error = null;
@@ -123,7 +120,6 @@ const DashboardNav = () => {
         if (!error && response.data?.id) {
           activeId = response.data.id;
           setCurrentPipelineId(activeId);
-          localStorage.setItem(ACTIVE_PIPELINE_ID_KEY, activeId);
         }
       }
 
@@ -144,7 +140,6 @@ const DashboardNav = () => {
         if (!error && response.data?.id) {
           activeId = response.data.id;
           setCurrentPipelineId(activeId);
-          localStorage.setItem(ACTIVE_PIPELINE_ID_KEY, activeId);
         }
       }
 

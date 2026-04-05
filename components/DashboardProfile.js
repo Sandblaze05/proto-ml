@@ -8,8 +8,6 @@ import gsap from 'gsap'
 import { usePathname } from 'next/navigation'
 import { AnimatedTooltip } from '@/components/ui/animated-tooltip'
 
-const ACTIVE_PIPELINE_ID_KEY = 'protoMlActivePipelineId'
-const DRAFT_PIPELINE_NAME_KEY = 'protoMlDraftPipelineName'
 
 const DashboardProfile = ({ activeCollaborators = [] }) => {
   const [user, setUser] = useState(null)
@@ -22,9 +20,9 @@ const DashboardProfile = ({ activeCollaborators = [] }) => {
 
   const panelRef = useRef(null)
   const contentRef = useRef(null)
-
   const supabase = createClient()
   const pathname = usePathname()
+  const setDraftPipelineName = useUIStore(s => s.setDraftPipelineName)
 
   const showMinimap = useUIStore(s => s.showMinimap)
   const setShowMinimap = useUIStore(s => s.setShowMinimap)
@@ -43,7 +41,7 @@ const DashboardProfile = ({ activeCollaborators = [] }) => {
         setIsOwner(true)
         setPipelineName('Unsaved Pipeline')
         setPipelineNameDraft('')
-        localStorage.removeItem(DRAFT_PIPELINE_NAME_KEY)
+        setDraftPipelineName('')
         return
       }
 
@@ -60,15 +58,14 @@ const DashboardProfile = ({ activeCollaborators = [] }) => {
         setIsOwner(true)
         setPipelineName('Unsaved Pipeline')
         setPipelineNameDraft('')
-        localStorage.removeItem(ACTIVE_PIPELINE_ID_KEY)
-        localStorage.removeItem(DRAFT_PIPELINE_NAME_KEY)
+        setDraftPipelineName('')
         return
       }
 
       const loadedName = (data.name || 'Untitled Pipeline').trim()
       setPipelineName(loadedName)
       setPipelineNameDraft(loadedName)
-      localStorage.setItem(DRAFT_PIPELINE_NAME_KEY, loadedName)
+      setDraftPipelineName(loadedName)
       setIsOwner(Boolean(authedUser?.id) && authedUser.id === data.user_id)
     }
 
@@ -76,8 +73,8 @@ const DashboardProfile = ({ activeCollaborators = [] }) => {
   }, [pathname, supabase])
 
   useEffect(() => {
-    localStorage.setItem(DRAFT_PIPELINE_NAME_KEY, pipelineNameDraft)
-  }, [pipelineNameDraft])
+    setDraftPipelineName(pipelineNameDraft)
+  }, [pipelineNameDraft, setDraftPipelineName])
 
   useEffect(() => {
     hydrateShowMinimap()
@@ -104,7 +101,7 @@ const DashboardProfile = ({ activeCollaborators = [] }) => {
     }
     if (!pipelineId) {
       setPipelineName(nextName)
-      localStorage.setItem(DRAFT_PIPELINE_NAME_KEY, nextName)
+      setDraftPipelineName(nextName)
       return
     }
     if (!isOwner || nextName === pipelineName) return
@@ -122,7 +119,7 @@ const DashboardProfile = ({ activeCollaborators = [] }) => {
 
       if (error) throw error
       setPipelineName(nextName)
-      localStorage.setItem(DRAFT_PIPELINE_NAME_KEY, nextName)
+      setDraftPipelineName(nextName)
     } catch (error) {
       console.error('Error renaming pipeline:', error)
       setPipelineNameDraft(pipelineName)

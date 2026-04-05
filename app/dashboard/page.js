@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState, useMemo } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { Share2, Trash2, Layout, Clock, User, ExternalLink, Edit2, Check, X, Copy, Search, Filter, Grid, List, SortAsc, SortDesc, Folder, FolderPlus, MoreVertical, ChevronRight, ChevronDown, Database, ImageIcon, FileText, Braces, Globe, Table, Activity, Cpu, Zap } from 'lucide-react'
+import { Share2, Trash2, Layout, Clock, User, ExternalLink, Edit2, Check, X, Copy, Search, Grid, List, SortAsc, SortDesc, Folder, FolderPlus, ChevronRight, ChevronDown, Star, StarOff, GripVertical } from 'lucide-react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useUIStore } from '@/store/useUIStore'
@@ -35,7 +35,6 @@ const TYPE_LABEL_MAP = {
 }
 
 const PipelineThumbnail = React.memo(({ nodes = [], edges = [] }) => {
-	// A real visual representation of the nodes scaled down
 	if (!nodes || nodes.length === 0) {
 		return (
 			<div className="w-full h-32 bg-foreground/[0.03] rounded-xl mb-4 relative overflow-hidden flex items-center justify-center group-hover:bg-foreground/[0.05] transition-colors">
@@ -45,41 +44,38 @@ const PipelineThumbnail = React.memo(({ nodes = [], edges = [] }) => {
 		)
 	}
 
-	// Filter out annotations and nodes without position
-	const validNodes = nodes.filter(n => 
-		n.type !== 'annotationNode' && 
-		n.position && 
+	const validNodes = nodes.filter(n =>
+		n.type !== 'annotationNode' &&
+		n.position &&
 		typeof n.position.x === 'number'
 	)
-	
+
 	if (validNodes.length === 0) return <div className="w-full h-32 bg-foreground/[0.03] rounded-xl mb-4" />
 
-	// Calculate bounds
 	const minX = Math.min(...validNodes.map(n => n.position.x))
 	const minY = Math.min(...validNodes.map(n => n.position.y))
 	const maxX = Math.max(...validNodes.map(n => n.position.x + 180))
 	const maxY = Math.max(...validNodes.map(n => n.position.y + 80))
-	
+
 	const width = Math.max(maxX - minX, 1)
 	const height = Math.max(maxY - minY, 1)
 	const padding = 20
-	
+
 	const scale = Math.min((300 - padding * 2) / width, (128 - padding * 2) / height, 0.4)
 
 	return (
 		<div className="w-full h-32 bg-foreground/[0.03] rounded-xl mb-4 relative overflow-hidden group-hover:bg-foreground/[0.05] transition-colors border border-foreground/5">
 			<div className="absolute inset-0 opacity-[0.03]" style={{ backgroundImage: 'radial-gradient(circle, currentColor 1px, transparent 1px)', backgroundSize: '6px 6px' }} />
-			
+
 			<div className="relative w-full h-full flex items-center justify-center">
-				<div 
-					className="relative" 
-					style={{ 
-						width: width * scale, 
+				<div
+					className="relative"
+					style={{
+						width: width * scale,
 						height: height * scale,
 					}}
 				>
-					{/* Edges */}
-					<svg 
+					<svg
 						className="absolute inset-0 overflow-visible pointer-events-none opacity-40"
 						style={{ width: '100%', height: '100%' }}
 					>
@@ -94,7 +90,7 @@ const PipelineThumbnail = React.memo(({ nodes = [], edges = [] }) => {
 							const ty = (target.position.y - minY + 40) * scale
 
 							return (
-								<path 
+								<path
 									key={i}
 									d={`M ${sx} ${sy} C ${sx + 20 * scale} ${sy}, ${tx - 20 * scale} ${ty}, ${tx} ${ty}`}
 									stroke="currentColor"
@@ -105,25 +101,24 @@ const PipelineThumbnail = React.memo(({ nodes = [], edges = [] }) => {
 						})}
 					</svg>
 
-					{/* Nodes */}
 					{validNodes.map((node, i) => {
 						const model = node.data?.nodeModel || {}
 						const type = model.type || node.type || ''
 						const color = THUMBNAIL_COLOR_MAP[type] || THUMBNAIL_COLOR_MAP[node.type] || '#faebd7'
 						const label = model.label || node.data?.label || 'Untitled'
 						const typeLabel = TYPE_LABEL_MAP[node.type] || 'NODE'
-						
+
 						const left = (node.position.x - minX) * scale
 						const top = (node.position.y - minY) * scale
-						
+
 						return (
-							<div 
-								key={i} 
+							<div
+								key={i}
 								className="absolute rounded-md border-[0.5px] shadow-sm p-1.5 flex flex-col justify-center gap-0.5 overflow-hidden"
-								style={{ 
-									left, 
-									top, 
-									width: 180 * scale, 
+								style={{
+									left,
+									top,
+									width: 180 * scale,
 									height: 80 * scale,
 									borderColor: `${color}40`,
 									backgroundColor: `${color}20`,
@@ -131,7 +126,7 @@ const PipelineThumbnail = React.memo(({ nodes = [], edges = [] }) => {
 								}}
 							>
 								<div className="flex items-center gap-1 min-w-0">
-									<div 
+									<div
 										className="w-2.5 h-2.5 rounded-sm flex-shrink-0"
 										style={{ backgroundColor: color }}
 									/>
@@ -139,7 +134,7 @@ const PipelineThumbnail = React.memo(({ nodes = [], edges = [] }) => {
 										{label}
 									</span>
 								</div>
-								<div 
+								<div
 									className="text-[3.5px] font-bold opacity-40 tracking-widest truncate pl-3.5"
 									style={{ color }}
 								>
@@ -153,13 +148,14 @@ const PipelineThumbnail = React.memo(({ nodes = [], edges = [] }) => {
 		</div>
 	)
 }, (prevProps, nextProps) => {
-	// Only re-render if node count or edge count changes
-	return prevProps.nodes.length === nextProps.nodes.length && 
-		   prevProps.edges.length === nextProps.edges.length;
+	return prevProps.nodes.length === nextProps.nodes.length &&
+		prevProps.edges.length === nextProps.edges.length
 })
 
 const ACTIVE_PIPELINE_ID_KEY = 'protoMlActivePipelineId'
 const DRAFT_PIPELINE_NAME_KEY = 'protoMlDraftPipelineName'
+const STARRED_FOLDER_NAME = 'Starred'
+const UNCATEGORIZED_FOLDER_NAME = 'Uncategorized'
 
 const DashboardPage = () => {
 	const [myPipelines, setMyPipelines] = useState([])
@@ -178,35 +174,40 @@ const DashboardPage = () => {
 	const [isSharing, setIsSharing] = useState(false)
 	const [copied, setCopied] = useState(false)
 	const [searchQuery, setSearchQuery] = useState('')
-	const [viewMode, setViewMode] = useState('grid') // 'grid' or 'list'
-	const [sortBy, setSortBy] = useState('updated_at') // 'name', 'updated_at'
-	const [sortOrder, setSortOrder] = useState('desc') // 'asc', 'desc'
+	const [viewMode, setViewMode] = useState('grid')
+	const [sortBy, setSortBy] = useState('updated_at')
+	const [sortOrder, setSortOrder] = useState('desc')
 	const [expandedFolders, setExpandedFolders] = useState(['Uncategorized'])
-	const [movingToFolder, setMovingToFolder] = useState(null) // ID of pipeline being moved
+	const [movingToFolder, setMovingToFolder] = useState(null)
 	const [isAddingFolder, setIsAddingFolder] = useState(false)
 	const [newFolderName, setNewFolderName] = useState('')
 	const [customFolders, setCustomFolders] = useState([])
 	const [renamingFolder, setRenamingFolder] = useState(null)
 	const [renameFolderValue, setRenameFolderValue] = useState('')
-	const [confirmDelete, setConfirmDelete] = useState({ type: null, id: null, name: null }) // { type: 'pipeline' | 'folder', id, name }
-	const [movingPipelineId, setMovingPipelineId] = useState(null) // for popover
+	const [confirmDelete, setConfirmDelete] = useState({ type: null, id: null, name: null })
+	const [movingPipelineId, setMovingPipelineId] = useState(null)
+	const [draggedPipelineId, setDraggedPipelineId] = useState(null)
+	const [dragOverFolder, setDragOverFolder] = useState(null)
 
 	const { addToast, setNodes, setEdges, setDrawings } = useUIStore()
 	const router = useRouter()
 	const supabase = createClient()
 
 	const folders = useMemo(() => {
-		const f = new Set(['Uncategorized', ...customFolders])
+		const f = new Set([UNCATEGORIZED_FOLDER_NAME, ...customFolders])
 		myPipelines.forEach(p => {
-			if (p.folder) f.add(p.folder)
+			if (!p.is_starred && p.folder) f.add(p.folder)
 		})
-		return Array.from(f).sort()
+		return [STARRED_FOLDER_NAME, ...Array.from(f).sort().filter(folder => folder !== STARRED_FOLDER_NAME)]
 	}, [myPipelines, customFolders])
 
 	const filteredMyPipelines = useMemo(() => {
 		return myPipelines
 			.filter(p => (p.name || '').toLowerCase().includes(searchQuery.toLowerCase()))
 			.sort((a, b) => {
+				if ((a.is_starred ? 1 : 0) !== (b.is_starred ? 1 : 0)) {
+					return (a.is_starred ? -1 : 0) - (b.is_starred ? -1 : 0)
+				}
 				const valA = a[sortBy] || ''
 				const valB = b[sortBy] || ''
 				if (sortOrder === 'asc') return valA > valB ? 1 : -1
@@ -217,9 +218,9 @@ const DashboardPage = () => {
 	const groupedPipelines = useMemo(() => {
 		const groups = {}
 		folders.forEach(f => groups[f] = [])
-		
+
 		filteredMyPipelines.forEach(p => {
-			const f = p.folder || 'Uncategorized'
+			const f = p.is_starred ? STARRED_FOLDER_NAME : (p.folder || UNCATEGORIZED_FOLDER_NAME)
 			if (groups[f]) groups[f].push(p)
 		})
 		return groups
@@ -265,9 +266,11 @@ const DashboardPage = () => {
 				if (errorMine) console.error('Error fetching mine:', errorMine)
 				else {
 					setMyPipelines(mine)
-					// Expand all found folders by default
-					const foundFolders = new Set(['Uncategorized'])
-					mine.forEach(p => { if (p.folder) foundFolders.add(p.folder) })
+					const foundFolders = new Set([UNCATEGORIZED_FOLDER_NAME])
+					mine.forEach(p => {
+						if (p.is_starred) foundFolders.add(STARRED_FOLDER_NAME)
+						else if (p.folder) foundFolders.add(p.folder)
+					})
 					setExpandedFolders(prev => Array.from(new Set([...prev, ...foundFolders])))
 				}
 
@@ -300,19 +303,18 @@ const DashboardPage = () => {
 			e.preventDefault()
 			e.stopPropagation()
 		}
-		
-		const targetFolder = folderName === 'Uncategorized' ? null : folderName
-		console.log(`Moving pipeline ${pipelineId} to ${folderName}`)
+
+		const targetFolder = folderName === UNCATEGORIZED_FOLDER_NAME ? null : folderName
 
 		try {
 			const { error } = await supabase
 				.from('pipelines')
-				.update({ folder: targetFolder })
+				.update({ folder: targetFolder, original_folder: null })
 				.eq('id', pipelineId)
 
 			if (error) throw error
 
-			setMyPipelines(prev => prev.map(p => p.id === pipelineId ? { ...p, folder: targetFolder } : p))
+			setMyPipelines(prev => prev.map(p => p.id === pipelineId ? { ...p, folder: targetFolder, original_folder: null } : p))
 			setMovingToFolder(null)
 			addToast(`Pipeline moved to ${folderName}.`, 'success')
 		} catch (err) {
@@ -321,10 +323,84 @@ const DashboardPage = () => {
 		}
 	}
 
+	const handleStarPipeline = async (pipeline) => {
+		try {
+			const nextStarState = !pipeline.is_starred
+			const restoreFolder = pipeline.original_folder ?? (pipeline.folder === STARRED_FOLDER_NAME ? null : pipeline.folder || null)
+			const nextFolder = nextStarState ? STARRED_FOLDER_NAME : restoreFolder
+			const { error } = await supabase
+				.from('pipelines')
+				.update({
+					is_starred: nextStarState,
+					folder: nextFolder,
+					original_folder: nextStarState ? restoreFolder : null,
+				})
+				.eq('id', pipeline.id)
+				.eq('user_id', user.id)
+
+			if (error) throw error
+
+			setMyPipelines(prev => prev.map(item => (
+				item.id === pipeline.id
+					? {
+						...item,
+						is_starred: nextStarState,
+						folder: nextFolder,
+						original_folder: nextStarState ? restoreFolder : null,
+					}
+					: item
+			)))
+			addToast(nextStarState ? 'Pipeline starred.' : 'Pipeline unstarred.', 'success')
+		} catch (err) {
+			console.error('Star error:', err)
+			addToast('Failed to update star state.', 'error')
+		}
+	}
+
+	const handlePipelineDragStart = (pipelineId) => (event) => {
+		setDraggedPipelineId(pipelineId)
+		if (event.dataTransfer) {
+			event.dataTransfer.effectAllowed = 'move'
+			event.dataTransfer.setData('text/plain', pipelineId)
+		}
+	}
+
+	const handlePipelineDragEnd = () => {
+		setDraggedPipelineId(null)
+		setDragOverFolder(null)
+	}
+
+	const handleFolderDragOver = (folderName) => (event) => {
+		event.preventDefault()
+		if (event.dataTransfer) event.dataTransfer.dropEffect = 'move'
+		setDragOverFolder(folderName)
+	}
+
+	const handleFolderDragLeave = () => {
+		setDragOverFolder(null)
+	}
+
+	const handleFolderDrop = (folderName) => async (event) => {
+		event.preventDefault()
+		const pipelineId = event.dataTransfer?.getData('text/plain') || draggedPipelineId
+		setDragOverFolder(null)
+		setDraggedPipelineId(null)
+		if (!pipelineId) return
+
+		if (folderName === STARRED_FOLDER_NAME) {
+			const pipeline = myPipelines.find(p => p.id === pipelineId)
+			if (pipeline && !pipeline.is_starred) {
+				await handleStarPipeline(pipeline)
+			}
+		} else {
+			await handleMoveToFolder(event, pipelineId, folderName)
+		}
+	}
+
 	const toggleFolder = (folderName) => {
-		setExpandedFolders(prev => 
-			prev.includes(folderName) 
-				? prev.filter(f => f !== folderName) 
+		setExpandedFolders(prev =>
+			prev.includes(folderName)
+				? prev.filter(f => f !== folderName)
 				: [...prev, folderName]
 		)
 	}
@@ -351,7 +427,6 @@ const DashboardPage = () => {
 		}
 
 		try {
-			// Update all pipelines in this folder to the new name
 			const { error } = await supabase
 				.from('pipelines')
 				.update({ folder: newName })
@@ -369,14 +444,7 @@ const DashboardPage = () => {
 	}
 
 	const handleDeleteFolder = async (folderName) => {
-		const itemsInFolder = groupedPipelines[folderName] || []
-		
 		try {
-			// Option 1: Just clear the folder reference from pipelines (don't delete pipelines)
-			// OR Option 2: Delete pipelines as well? 
-			// User said: "delete folder with even a single piple line to ask again if deleted as it will be gone forever"
-			// This implies deleting the pipelines within too.
-			
 			const { error } = await supabase
 				.from('pipelines')
 				.delete()
@@ -399,11 +467,8 @@ const DashboardPage = () => {
 			addToast('Cannot share an empty folder.', 'error')
 			return
 		}
-		// Open share modal with the first pipeline but with a flag that we're sharing the folder?
-		// For now, let's just pick the first one or prompt that folder sharing is batching.
 		setSelectedPipeline(items[0])
 		setShareModalOpen(true)
-		// We can extend the share function to apply to all IDs in groupedPipelines[folderName]
 	}
 
 	const handleDelete = async (id) => {
@@ -591,6 +656,7 @@ const DashboardPage = () => {
 	return (
 		<div className="min-h-screen bg-background text-foreground font-mono p-8">
 			<div className="max-w-6xl mx-auto">
+
 				<header className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 border-b border-foreground/10 pb-6 gap-4">
 					<div>
 						<h1 className="text-4xl font-bold tracking-tighter uppercase">My Pipelines</h1>
@@ -678,7 +744,7 @@ const DashboardPage = () => {
 									<button onClick={() => setIsAddingFolder(false)} className="p-1 hover:text-red-400"><X size={16} /></button>
 								</div>
 							) : (
-								<button 
+								<button
 									onClick={() => setIsAddingFolder(true)}
 									className="text-xs font-bold uppercase tracking-widest text-foreground/40 hover:text-foreground flex items-center gap-2 bg-foreground/5 px-3 py-1 rounded-lg transition-all"
 								>
@@ -698,8 +764,8 @@ const DashboardPage = () => {
 									{searchQuery ? `No pipelines matching "${searchQuery}"` : 'Your workspace is empty'}
 								</p>
 								<p className="text-foreground/50 text-sm">
-									{searchQuery 
-										? 'Try adjusting your search terms or filters to find what you are looking for.' 
+									{searchQuery
+										? 'Try adjusting your search terms or filters to find what you are looking for.'
 										: 'Start by creating your first ML pipeline. You can drag and drop nodes to build your workflow.'}
 								</p>
 							</div>
@@ -723,17 +789,20 @@ const DashboardPage = () => {
 					) : (
 						<div className="space-y-6">
 							{Object.entries(groupedPipelines).map(([folderName, items]) => {
-								if (folderName === 'Uncategorized' && items.length === 0) return null
-								
+								if (folderName === UNCATEGORIZED_FOLDER_NAME && items.length === 0) return null
+
 								return (
 									<div key={folderName} className="space-y-4">
 										<div className="flex items-center gap-2 group w-full">
-											<button 
+											<button
 												onClick={() => toggleFolder(folderName)}
-												className="flex items-center gap-2 flex-1"
+												onDragOver={handleFolderDragOver(folderName)}
+												onDragLeave={handleFolderDragLeave}
+												onDrop={handleFolderDrop(folderName)}
+												className={`flex items-center gap-2 flex-1 rounded-xl px-2 py-1 transition-colors ${dragOverFolder === folderName ? 'bg-amber-400/10 border border-amber-400/30' : ''}`}
 											>
 												{expandedFolders.includes(folderName) ? <ChevronDown size={18} className="text-foreground/20" /> : <ChevronRight size={18} className="text-foreground/20" />}
-												<Folder size={18} className={folderName === 'Uncategorized' ? "text-foreground/20" : "text-amber-400/60"} />
+												{folderName === STARRED_FOLDER_NAME ? <Star size={18} className="text-amber-400/80" /> : <Folder size={18} className={folderName === UNCATEGORIZED_FOLDER_NAME ? "text-foreground/20" : "text-amber-400/60"} />}
 												{renamingFolder === folderName ? (
 													<input
 														value={renameFolderValue}
@@ -750,31 +819,47 @@ const DashboardPage = () => {
 												)}
 												<span className="text-[10px] text-foreground/20 bg-foreground/5 px-1.5 py-0.5 rounded-full">{items.length}</span>
 											</button>
-											
-											{folderName !== 'Uncategorized' && (
+
+											{folderName !== UNCATEGORIZED_FOLDER_NAME && folderName !== STARRED_FOLDER_NAME && (
 												<div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
 													{renamingFolder === folderName ? (
 														<button onClick={() => handleRenameFolder(folderName)} className="p-1 text-emerald-400"><Check size={14} /></button>
 													) : (
-														<button onClick={() => {setRenamingFolder(folderName); setRenameFolderValue(folderName)}} className="p-1 text-foreground/40 hover:text-foreground"><Edit2 size={14} /></button>
+														<button onClick={() => { setRenamingFolder(folderName); setRenameFolderValue(folderName) }} className="p-1 text-foreground/40 hover:text-foreground"><Edit2 size={14} /></button>
 													)}
 													<button onClick={() => handleShareFolder(folderName)} className="p-1 text-foreground/40 hover:text-blue-400" title="Share Folder"><Share2 size={14} /></button>
 													<button onClick={() => setConfirmDelete({ type: 'folder', name: folderName })} className="p-1 text-foreground/40 hover:text-red-400" title="Delete Folder"><Trash2 size={14} /></button>
 												</div>
 											)}
-											<div className="flex-1 h-px bg-foreground/5" />
+											<div className={`flex-1 h-px transition-colors ${dragOverFolder === folderName ? 'bg-amber-400/40' : 'bg-foreground/5'}`} />
 										</div>
 
 										{expandedFolders.includes(folderName) && (
 											<>
 												{items.length === 0 ? (
-													<div className="border border-dashed border-foreground/10 rounded-2xl py-8 text-center text-foreground/20 text-xs font-bold uppercase tracking-widest">
-														Empty Folder — Move projects here
+													<div
+														onDragOver={handleFolderDragOver(folderName)}
+														onDragLeave={handleFolderDragLeave}
+														onDrop={handleFolderDrop(folderName)}
+														className={`border border-dashed rounded-2xl py-8 text-center text-xs font-bold uppercase tracking-widest transition-colors ${dragOverFolder === folderName ? 'border-amber-400/40 bg-amber-400/5 text-amber-400/60' : 'border-foreground/10 text-foreground/20'}`}
+													>
+														{folderName === STARRED_FOLDER_NAME ? 'Drop here to star' : 'Empty Folder — Move projects here'}
 													</div>
 												) : (
-													<div className={viewMode === 'grid' ? "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" : "flex flex-col gap-3"}>
+													<div
+														onDragOver={handleFolderDragOver(folderName)}
+														onDragLeave={handleFolderDragLeave}
+														onDrop={handleFolderDrop(folderName)}
+														className={`rounded-2xl transition-colors ${dragOverFolder === folderName ? 'ring-1 ring-amber-400/30 bg-amber-400/[0.02]' : ''} ${viewMode === 'grid' ? "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" : "flex flex-col gap-3"}`}
+													>
 														{items.map(p => (
-															<div key={p.id} className={`group bg-foreground/5 border border-foreground/10 rounded-2xl hover:border-foreground/30 transition-all shadow-sm ${viewMode === 'list' ? 'flex items-center justify-between p-4' : 'p-6'}`}>
+															<div
+																key={p.id}
+																draggable
+																onDragStart={handlePipelineDragStart(p.id)}
+																onDragEnd={handlePipelineDragEnd}
+																className={`group bg-foreground/5 border border-foreground/10 rounded-2xl hover:border-foreground/30 transition-all shadow-sm cursor-grab active:cursor-grabbing ${draggedPipelineId === p.id ? 'opacity-60 scale-[0.99]' : ''} ${viewMode === 'list' ? 'flex items-center justify-between p-4' : 'p-6'}`}
+															>
 																<div className={viewMode === 'list' ? "flex items-center gap-6 flex-1 min-w-0" : ""}>
 																	{viewMode === 'grid' && <PipelineThumbnail nodes={p.nodes} edges={p.edges} />}
 																	<div className={`flex justify-between items-start ${viewMode === 'list' ? 'mb-0 flex-1' : 'mb-4'}`}>
@@ -792,47 +877,60 @@ const DashboardPage = () => {
 																				/>
 																				<div className="flex gap-1">
 																					<button onClick={() => handleRename(p.id)} className="p-2 text-foreground/40 hover:text-emerald-400 transition-colors" title="Save name"><Check size={16} /></button>
-																					<button onClick={() => {setRenamingId(null); setRenameValue('')}} className="p-2 text-foreground/40 hover:text-foreground transition-colors" title="Cancel rename"><X size={16} /></button>
+																					<button onClick={() => { setRenamingId(null); setRenameValue('') }} className="p-2 text-foreground/40 hover:text-foreground transition-colors" title="Cancel rename"><X size={16} /></button>
 																				</div>
 																			</div>
 																		) : (
 																			<>
-																				<h3 className={`text-lg font-bold truncate pr-4 ${viewMode === 'list' ? 'max-w-[200px] md:max-w-md' : ''}`}>{p.name || 'Untitled Pipeline'}</h3>
+																				<div className="flex items-center gap-2 min-w-0 pr-4">
+																					<h3 className={`text-lg font-bold truncate ${viewMode === 'list' ? 'max-w-[200px] md:max-w-md' : ''}`}>{p.name || 'Untitled Pipeline'}</h3>
+																					{p.is_starred && <Star size={14} className="text-amber-400 shrink-0" title="Starred" />}
+																				</div>
 																				<div className="flex gap-1">
-																					<div className="relative">
-																						<button 
-																							onClick={(e) => {
-																								e.stopPropagation()
-																								setMovingPipelineId(movingPipelineId === p.id ? null : p.id)
-																							}} 
-																							className={`p-2 transition-colors ${movingPipelineId === p.id ? 'text-amber-400' : 'text-foreground/40 hover:text-amber-400'}`} 
-																							title="Move to folder"
-																						>
-																							<Folder size={16} />
-																						</button>
-																						
-																						{movingPipelineId === p.id && (
-																							<div className="absolute right-0 top-full mt-2 bg-background border border-foreground/10 rounded-2xl shadow-2xl py-3 z-[100] min-w-[180px] animate-in fade-in slide-in-from-top-2 duration-200">
-																								<div className="px-4 pb-2 mb-2 border-b border-foreground/5 text-[8px] font-bold uppercase tracking-widest text-foreground/30">Select Folder</div>
-																								<div className="max-h-[200px] overflow-y-auto px-2">
-																									{folders.map(f => (
-																										<button 
-																											key={f} 
-																											type="button"
-																											onClick={(e) => {
-																												handleMoveToFolder(e, p.id, f)
-																												setMovingPipelineId(null)
-																											}}
-																											className={`w-full text-left px-3 py-2 rounded-lg text-[10px] font-bold uppercase tracking-widest hover:bg-foreground/5 transition-colors flex items-center gap-2 ${p.folder === (f === 'Uncategorized' ? null : f) ? 'text-amber-400 bg-amber-400/5' : 'text-foreground/60'}`}
-																										>
-																											<Folder size={12} className={f === 'Uncategorized' ? 'opacity-20' : 'text-amber-400/40'} />
-																											{f}
-																										</button>
-																									))}
+																					<button
+																						onClick={(e) => { e.stopPropagation(); handleStarPipeline(p) }}
+																						className={`p-2 transition-colors ${p.is_starred ? 'text-amber-400 hover:text-amber-300' : 'text-foreground/40 hover:text-amber-400'}`}
+																						title={p.is_starred ? 'Unstar' : 'Star'}
+																					>
+																						{p.is_starred ? <StarOff size={16} /> : <Star size={16} />}
+																					</button>
+
+																					{!p.is_starred ? (
+																						<div className="relative">
+																							<button
+																								onClick={(e) => {
+																									e.stopPropagation()
+																									setMovingPipelineId(movingPipelineId === p.id ? null : p.id)
+																								}}
+																								className={`p-2 transition-colors ${movingPipelineId === p.id ? 'text-amber-400' : 'text-foreground/40 hover:text-amber-400'}`}
+																								title="Move to folder"
+																							>
+																								<Folder size={16} />
+																							</button>
+																							{movingPipelineId === p.id && (
+																								<div className="absolute right-0 top-full mt-2 bg-background border border-foreground/10 rounded-2xl shadow-2xl py-3 z-[100] min-w-[180px] animate-in fade-in slide-in-from-top-2 duration-200">
+																									<div className="px-4 pb-2 mb-2 border-b border-foreground/5 text-[8px] font-bold uppercase tracking-widest text-foreground/30">Select Folder</div>
+																									<div className="max-h-[200px] overflow-y-auto px-2">
+																										{folders.filter(f => f !== STARRED_FOLDER_NAME).map(f => (
+																											<button
+																												key={f}
+																												type="button"
+																												onClick={(e) => {
+																													handleMoveToFolder(e, p.id, f)
+																													setMovingPipelineId(null)
+																												}}
+																												className={`w-full text-left px-3 py-2 rounded-lg text-[10px] font-bold uppercase tracking-widest hover:bg-foreground/5 transition-colors flex items-center gap-2 ${p.folder === (f === UNCATEGORIZED_FOLDER_NAME ? null : f) ? 'text-amber-400 bg-amber-400/5' : 'text-foreground/60'}`}
+																											>
+																												<Folder size={12} className={f === UNCATEGORIZED_FOLDER_NAME ? 'opacity-20' : 'text-amber-400/40'} />
+																												{f}
+																											</button>
+																										))}
+																									</div>
 																								</div>
-																							</div>
-																						)}
-																					</div>
+																							)}
+																						</div>
+																					) : null}
+
 																					<button onClick={() => handleStartRename(p)} className="p-2 text-foreground/40 hover:text-foreground transition-colors" title="Rename"><Edit2 size={16} /></button>
 																					<button onClick={() => openShareModal(p)} className="p-2 text-foreground/40 hover:text-blue-400 transition-colors" title="Share"><Share2 size={16} /></button>
 																					<button onClick={() => handleDuplicate(p)} className="p-2 text-foreground/40 hover:text-emerald-400 transition-colors" title="Duplicate"><Copy size={16} /></button>
@@ -845,6 +943,7 @@ const DashboardPage = () => {
 																	<div className={`flex items-center gap-4 text-[10px] text-foreground/50 ${viewMode === 'list' ? 'mb-0' : 'mb-6'}`}>
 																		<span className="flex items-center gap-1 whitespace-nowrap"><Clock size={12} /> {new Date(p.updated_at).toLocaleDateString()}</span>
 																		<span className="flex items-center gap-1 whitespace-nowrap"><User size={12} /> Me</span>
+																		<span className="flex items-center gap-1 whitespace-nowrap"><GripVertical size={12} /> Drag to folder</span>
 																	</div>
 																</div>
 
@@ -948,6 +1047,7 @@ const DashboardPage = () => {
 						</div>
 					)}
 				</section>
+
 				{/* Confirmation Modal */}
 				{confirmDelete.type && (
 					<div className="fixed inset-0 z-[2000] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
@@ -957,17 +1057,17 @@ const DashboardPage = () => {
 							</div>
 							<h3 className="text-xl font-bold mb-2">Delete {confirmDelete.type === 'folder' ? 'Folder' : 'Pipeline'}?</h3>
 							<p className="text-foreground/50 text-sm mb-8">
-								Are you sure you want to delete <span className="text-foreground font-bold">"{confirmDelete.name}"</span>? 
+								Are you sure you want to delete <span className="text-foreground font-bold">"{confirmDelete.name}"</span>?
 								{confirmDelete.type === 'folder' ? " All pipelines inside will be gone forever." : " This action cannot be undone."}
 							</p>
 							<div className="flex gap-3">
-								<button 
+								<button
 									onClick={() => setConfirmDelete({ type: null, id: null, name: null })}
 									className="flex-1 py-3 bg-foreground/5 hover:bg-foreground/10 text-foreground font-bold rounded-xl transition-colors"
 								>
 									Cancel
 								</button>
-								<button 
+								<button
 									onClick={() => confirmDelete.type === 'folder' ? handleDeleteFolder(confirmDelete.name) : handleDelete(confirmDelete.id)}
 									className="flex-1 py-3 bg-red-500 text-white font-bold rounded-xl hover:bg-red-600 transition-colors"
 								>

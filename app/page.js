@@ -9,6 +9,7 @@ import RegisterForm from "@/components/RegisterForm"
 import { ShaderAnimation } from "@/components/ShaderAnimation"
 import { Features } from "@/components/Features"
 import { ProjectTimelineDemo } from "@/components/ProjectTimelineDemo"
+import MiniPlayground from "@/components/MiniPlayground"
 import LandingFooter from "@/components/LandingFooter"
 import { LogoCloud } from "@/components/ui/logo-cloud"
 
@@ -319,6 +320,18 @@ function HomeContent() {
             </p>
           </div>
           <Features />
+        </section>
+
+        <section className="pt-6 px-8 max-w-7xl mx-auto">
+          <div className="text-center mb-10">
+            <h2 style={{ color: FG }} className="font-headline text-3xl md:text-4xl font-bold mb-3 tracking-tight">
+              Try the Canvas
+            </h2>
+            <p style={{ color: `${FG}70` }} className="max-w-xl mx-auto">
+              Drag nodes to preview how data flows through a visual pipeline.
+            </p>
+          </div>
+          <MiniPlayground />
         </section>
 
         {/* ── Pipeline Protocol ── */}

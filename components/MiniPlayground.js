@@ -1,10 +1,35 @@
 'use client'
 
-import React, { useState, useRef, useEffect } from 'react'
-import { motion, useMotionValue, useTransform } from 'motion/react'
+import React, { useState, useEffect } from 'react'
+import { motion, useMotionValue } from 'motion/react'
 import { Database, Zap, FileCode } from 'lucide-react'
 
-const Node = ({ id, label, icon: Icon, color, initialX, initialY, onMove }) => {
+const INPUT_DATASET_LINES = [
+  '1. Aster Labs, west, $1200, churn=no',
+  '2. Nova Retail, east, $640, churn=yes',
+  '3. Pixel Foods, north, $820, churn=no',
+  '4. Helio Health, west, $1480, churn=no',
+  '5. Orbit Motors, south, $530, churn=yes',
+  '6. Quill Media, east, $910, churn=no'
+]
+
+const TRANSFORM_PREVIEW_LINES = [
+  '{region:"WEST", spend_band:"high", churn_label:0}',
+  '{region:"EAST", spend_band:"low", churn_label:1}',
+  '{region:"NORTH", spend_band:"mid", churn_label:0}',
+  '{region:"WEST", spend_band:"high", churn_label:0}',
+  '{region:"SOUTH", spend_band:"low", churn_label:1}',
+  '{region:"EAST", spend_band:"mid", churn_label:0}'
+]
+
+const OUTPUT_SUMMARY_LINES = [
+  'rows_processed: 6',
+  'churn_rate: 33%',
+  'high_spend_share: 33%',
+  'artifact: rea'
+]
+
+const Node = ({ id, label, icon: Icon, color, initialX, initialY, onMove, expanded, onToggle, previewTitle, previewLines }) => {
   const x = useMotionValue(initialX)
   const y = useMotionValue(initialY)
 
@@ -22,16 +47,46 @@ const Node = ({ id, label, icon: Icon, color, initialX, initialY, onMove }) => {
       drag
       dragMomentum={false}
       style={{ x, y }}
-      className="absolute z-10 cursor-grab active:cursor-grabbing"
+      className={`absolute cursor-grab active:cursor-grabbing ${expanded ? 'z-20' : 'z-10'}`}
     >
-      <div className={`flex items-center gap-3 p-4 bg-background border-2 rounded-2xl shadow-xl min-w-[180px] transition-colors`} style={{ borderColor: `${color}40` }}>
-        <div className="p-2 rounded-lg" style={{ backgroundColor: `${color}15`, color }}>
-          <Icon size={20} />
-        </div>
-        <div>
-          <p className="text-xs font-bold uppercase tracking-widest text-foreground/40">{id}</p>
-          <p className="text-sm font-bold text-foreground">{label}</p>
-        </div>
+      <div
+        className={`bg-background border-2 rounded-2xl shadow-xl min-w-56 transition-all duration-200 ${expanded ? 'ring-1 ring-foreground/15' : ''}`}
+        style={{ borderColor: `${color}40` }}
+      >
+        <button
+          type="button"
+          onPointerDown={(event) => event.stopPropagation()}
+          onClick={(event) => {
+            event.stopPropagation()
+            onToggle(id)
+          }}
+          className="w-full flex items-center justify-between gap-3 p-4 text-left"
+        >
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-lg" style={{ backgroundColor: `${color}15`, color }}>
+              <Icon size={20} />
+            </div>
+            <div>
+              <p className="text-xs font-bold uppercase tracking-widest text-foreground/40">{id}</p>
+              <p className="text-sm font-bold text-foreground">{label}</p>
+            </div>
+          </div>
+          <span className="text-[10px] font-bold uppercase tracking-wider text-foreground/50">
+            {expanded ? 'Collapse' : 'Expand'}
+          </span>
+        </button>
+
+        {expanded && (
+          <div className="px-4 pb-4">
+            <div className="h-px bg-foreground/10 mb-3" />
+            <p className="text-[10px] font-bold uppercase tracking-widest text-foreground/50 mb-2">{previewTitle}</p>
+            <div className="space-y-1 font-mono text-[11px] leading-relaxed text-foreground/85 max-w-85">
+              {previewLines.map((line, index) => (
+                <div key={`${id}-${index}`}>{line}</div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </motion.div>
   )
@@ -43,9 +98,14 @@ const MiniPlayground = () => {
     transform: { x: 400, y: 150 },
     output: { x: 700, y: 100 }
   })
+  const [expandedNode, setExpandedNode] = useState('dataset')
 
   const handleMove = (id, pos) => {
     setNodes(prev => ({ ...prev, [id]: pos }))
+  }
+
+  const handleToggleNode = (id) => {
+    setExpandedNode((prev) => (prev === id ? null : id))
   }
 
   // Calculate paths for connections
@@ -62,7 +122,8 @@ const MiniPlayground = () => {
   }
 
   return (
-    <div className="w-full max-w-5xl mx-auto h-[400px] relative bg-foreground/[0.02] border border-foreground/5 rounded-3xl overflow-hidden mb-20 group">
+    <div className="w-full max-w-5xl mx-auto mb-16">
+      <div className="h-100 relative bg-foreground/2 border border-foreground/5 rounded-3xl overflow-hidden group">
       {/* Grid Background */}
       <div className="absolute inset-0 opacity-[0.03] pointer-events-none" 
            style={{ backgroundImage: 'radial-gradient(circle, currentColor 1px, transparent 1px)', backgroundSize: '30px 30px' }} />
@@ -83,12 +144,50 @@ const MiniPlayground = () => {
         <path d={getPath(nodes.transform, nodes.output)} stroke="url(#grad2)" strokeWidth="3" fill="none" strokeDasharray="8 4" className="animate-[dash_20s_linear_infinite]" />
       </svg>
 
-      <Node id="dataset" label="Clean_Data.csv" icon={Database} color="#3b82f6" initialX={nodes.dataset.x} initialY={nodes.dataset.y} onMove={handleMove} />
-      <Node id="transform" label="Standard_Scaler" icon={Zap} color="#8b5cf6" initialX={nodes.transform.x} initialY={nodes.transform.y} onMove={handleMove} />
-      <Node id="output" label="Compiled_Model" icon={FileCode} color="#10b981" initialX={nodes.output.x} initialY={nodes.output.y} onMove={handleMove} />
+      <Node
+        id="dataset"
+        label="customers.csv (6 rows)"
+        icon={Database}
+        color="#3b82f6"
+        initialX={nodes.dataset.x}
+        initialY={nodes.dataset.y}
+        onMove={handleMove}
+        expanded={expandedNode === 'dataset'}
+        onToggle={handleToggleNode}
+        previewTitle="Input Dataset"
+        previewLines={INPUT_DATASET_LINES}
+      />
+      <Node
+        id="transform"
+        label="Encode + Banding"
+        icon={Zap}
+        color="#8b5cf6"
+        initialX={nodes.transform.x}
+        initialY={nodes.transform.y}
+        onMove={handleMove}
+        expanded={expandedNode === 'transform'}
+        onToggle={handleToggleNode}
+        previewTitle="Transform Preview"
+        previewLines={TRANSFORM_PREVIEW_LINES}
+      />
+      <Node
+        id="output"
+        label="ready_features.parquet"
+        icon={FileCode}
+        color="#10b981"
+        initialX={nodes.output.x}
+        initialY={nodes.output.y}
+        onMove={handleMove}
+        expanded={expandedNode === 'output'}
+        onToggle={handleToggleNode}
+        previewTitle="Output Summary"
+        previewLines={OUTPUT_SUMMARY_LINES}
+      />
 
       <div className="absolute bottom-6 left-1/2 -translate-x-1/2 px-4 py-2 bg-background/80 backdrop-blur-md border border-foreground/10 rounded-full text-[10px] font-bold uppercase tracking-widest text-foreground/40 opacity-0 group-hover:opacity-100 transition-opacity">
-        Interactive Demo: Try dragging the nodes
+        Interactive Demo: Click a node to expand details
+      </div>
+
       </div>
 
       <style dangerouslySetInnerHTML={{ __html: `

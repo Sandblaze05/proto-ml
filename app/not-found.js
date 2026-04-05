@@ -48,7 +48,7 @@ export default function NotFound() {
         <Link
           href="/"
           style={{ backgroundColor: FG, color: BG }}
-          className="inline-block px-10 py-4 font-bold rounded-lg hover:-translate-y-1 transition-all duration-300 shadow-xl"
+          className="inline-block px-10 py-4 font-bold rounded-full hover:-translate-y-1 transition-all duration-300 shadow-xl"
         >
           Return to Canvas
         </Link>

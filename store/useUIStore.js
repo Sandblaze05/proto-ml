@@ -11,6 +11,8 @@ export const useUIStore = create((set, get) => ({
   nodes: [],
   edges: [],
   drawings: [],
+  draftPipelineName: '',
+  setDraftPipelineName: (name) => set({ draftPipelineName: name }),
   canvasViewport: { x: 0, y: 0, zoom: 1, width: 1280, height: 720 },
   history: [],
   future: [],
