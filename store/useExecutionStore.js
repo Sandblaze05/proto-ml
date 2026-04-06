@@ -217,9 +217,6 @@ export const useExecutionStore = create((set, get) => ({
 
   canConnect: (sourceId, targetId, sourceHandle, targetHandle) => {
     const result = get().validateConnection(sourceId, targetId, sourceHandle, targetHandle);
-    if (!result.ok) {
-      console.warn('[ExecutionStore] canConnect: rejected connection.', result);
-    }
     return result.ok;
   },
 }));

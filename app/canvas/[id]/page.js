@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { Share2, Layout, Copy } from 'lucide-react';
+import { Share2, Layout, Copy, GitFork, Eye } from 'lucide-react';
 import InfiniteCanvas from '@/components/InfiniteCanvas';
 import DashboardNav from '@/components/DashboardNav';
 import DashboardProfile from '@/components/DashboardProfile';
@@ -11,6 +11,7 @@ import PipelineCompilerPanel from '@/components/PipelineCompilerPanel';
 import { useUIStore } from '@/store/useUIStore';
 import { createClient } from '@/lib/supabase/client';
 import { bootstrapClientPlugins } from '@/lib/plugins/clientPluginBootstrap';
+import { forkPipeline } from '@/lib/community';
 
 const CURSOR_COLORS = ['#67e8f9', '#f472b6', '#f59e0b', '#34d399', '#a78bfa', '#fb7185', '#22c55e', '#60a5fa'];
 
@@ -25,6 +26,8 @@ const pickCursorColor = (seed) => {
   return CURSOR_COLORS[hash % CURSOR_COLORS.length];
 };
 
+const supabase = createClient();
+
 const SharedCanvasPage = () => {
   const pathname = usePathname();
   const router = useRouter();
@@ -32,6 +35,7 @@ const SharedCanvasPage = () => {
   const setNodes = useUIStore(state => state.setNodes);
   const setEdges = useUIStore(state => state.setEdges);
   const setDrawings = useUIStore(state => state.setDrawings);
+  const { addToast } = useUIStore();
   const nodes = useUIStore(state => state.nodes);
   const edges = useUIStore(state => state.edges);
   const [loading, setLoading] = useState(true);
@@ -39,10 +43,10 @@ const SharedCanvasPage = () => {
   const [collaborators, setCollaborators] = useState([]);
   const [channel, setChannel] = useState(null);
   const [canEdit, setCanEdit] = useState(false);
+  const [isSnapshot, setIsSnapshot] = useState(false);
   const [isCopying, setIsCopying] = useState(false);
   const [remoteCursors, setRemoteCursors] = useState([]);
   const [remoteNodeEditors, setRemoteNodeEditors] = useState([]);
-  const supabase = createClient();
   const isUpdatingFromRemote = useRef(false);
   const lastSavedState = useRef(null);
   const pendingSaveSnapshot = useRef(null);
@@ -235,7 +239,7 @@ const SharedCanvasPage = () => {
     });
   }, [canEdit, channel]);
 
-  const handleCreateCopy = useCallback(async () => {
+  const handleFork = useCallback(async () => {
     const pipelineId = pathname.split('/').pop();
     if (!pipelineId) return;
 
@@ -243,30 +247,33 @@ const SharedCanvasPage = () => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
-        setError('You must be logged in to create a copy.');
+        addToast('You must be logged in to fork pipelines.', 'error');
         return;
       }
 
-      const { data, error: insertError } = await supabase
+      // We need the full pipeline object to fork it
+      const { data: pipeline, error: fetchError } = await supabase
         .from('pipelines')
-        .insert({
-          user_id: user.id,
-          name: 'Copied Pipeline',
-          nodes,
-          edges,
-        })
-        .select('id')
+        .select('*')
+        .eq('id', pipelineId)
         .single();
+        
+      if (fetchError) throw fetchError;
 
-      if (insertError) throw insertError;
-      router.push(`/canvas/${data.id}`);
+      await forkPipeline(supabase, user.id, pipeline);
+      addToast('Pipeline forked successfully! Returning to dashboard...', 'success');
+      
+      // Delay slightly for toast visibility
+      setTimeout(() => {
+        router.push('/dashboard');
+      }, 1500);
     } catch (err) {
-      console.error('Error creating copy:', err);
-      setError('Failed to create a copy of this pipeline.');
+      console.error('Error forking pipeline:', err);
+      addToast(`Fork error: ${err.message || 'Failed to fork'}`, 'error');
     } finally {
       setIsCopying(false);
     }
-  }, [edges, nodes, pathname, router, supabase]);
+  }, [pathname, router, supabase, addToast]);
 
   const claimPublicShare = useCallback(async ({ pipelineId, ownerId, userEmail, permission }) => {
     if (!pipelineId || !ownerId || !userEmail) return;
@@ -321,196 +328,231 @@ const SharedCanvasPage = () => {
 
   useEffect(() => {
     const pipelineId = pathname.split('/').pop();
+    if (!pipelineId) return;
 
-    if (pipelineId) {
-      const fetchPipeline = async () => {
-        try {
-          hasHydratedPipeline.current = false;
-          setRemoteCursors([]);
-          setRemoteNodeEditors([]);
-          const { data: { user } } = await supabase.auth.getUser();
+    let channelRef = null;
+    let isMounted = true;
 
-          // Redirect to landing page if not logged in
-          if (!user) {
+    const bootstrap = async () => {
+      // ── 1. Fetch pipeline data ───────────────────────────────────────────
+      try {
+        hasHydratedPipeline.current = false;
+        if (isMounted) setRemoteCursors([]);
+        if (isMounted) setRemoteNodeEditors([]);
+        
+        const { data: authData, error: authError } = await supabase.auth.getUser();
+        if (authError) throw authError;
+        
+        if (!isMounted) return;
+
+        const user = authData?.user;
+
+        if (!user) {
+          setLoading(false);
+          router.push('/?signup=true');
+          return;
+        }
+
+        const { data, error } = await supabase
+          .from('pipelines')
+          .select('*')
+          .eq('id', pipelineId)
+          .single();
+
+        if (error) throw error;
+        if (!isMounted) return;
+
+        if (!data) {
+          setError('Pipeline not found.');
+          setLoading(false);
+          return;
+        }
+
+        const owner = user?.id === data.user_id;
+        const pipelineIsSnapshot = Boolean(data.is_snapshot);
+        setIsSnapshot(pipelineIsSnapshot);
+        let sharedPermission = null;
+
+        if (!owner) {
+          if (!user?.email) {
+            setError('You do not have access to this pipeline.');
             setLoading(false);
-            router.push('/?signup=true');
             return;
           }
 
-          const { data, error } = await supabase
-            .from('pipelines')
-            .select('*')
-            .eq('id', pipelineId)
-            .single();
+          const { data: shareData, error: shareError } = await supabase
+            .from('pipeline_shares')
+            .select('permission, share_scope, shared_with_email')
+            .eq('pipeline_id', pipelineId)
+            .in('share_scope', ['email', 'public']);
 
-          if (error) throw error;
+          if (shareError) throw shareError;
+          if (!isMounted) return;
 
-          if (data) {
-            const owner = user?.id === data.user_id;
-            let sharedPermission = null;
+          const normalizedEmail = user.email.toLowerCase();
+          const directShare = (shareData || []).find(
+            (share) => share.share_scope === 'email' && (share.shared_with_email || '').toLowerCase() === normalizedEmail
+          );
+          const publicShare = (shareData || []).find((share) => share.share_scope === 'public');
+          const effectiveShare = directShare || publicShare || null;
 
-            if (!owner) {
-              if (!user?.email) {
-                setError('You do not have access to this pipeline.');
-                setLoading(false);
-                return;
-              }
-
-              const { data: shareData, error: shareError } = await supabase
-                .from('pipeline_shares')
-                .select('permission, share_scope, shared_with_email')
-                .eq('pipeline_id', pipelineId)
-                .in('share_scope', ['email', 'public']);
-
-              if (shareError) throw shareError;
-              const normalizedEmail = user.email.toLowerCase();
-              const directShare = (shareData || []).find(
-                (share) => share.share_scope === 'email' && (share.shared_with_email || '').toLowerCase() === normalizedEmail
-              );
-              const publicShare = (shareData || []).find((share) => share.share_scope === 'public');
-              const effectiveShare = directShare || publicShare || null;
-
-              if (!effectiveShare) {
-                setError('You do not have access to this pipeline.');
-                setLoading(false);
-                return;
-              }
-
-              if (!directShare && publicShare) {
-                claimPublicShare({
-                  pipelineId,
-                  ownerId: data.user_id,
-                  userEmail: user.email,
-                  permission: publicShare.permission,
-                });
-              }
-
-              sharedPermission = effectiveShare.permission;
-            }
-
-            const hasEditPermission = owner || (sharedPermission === 'edit' && requestedAccess === 'edit');
-
-            setCanEdit(hasEditPermission);
-            isUpdatingFromRemote.current = true;
-            const normalizedNodes = normalizeGraphData(data.nodes);
-            const normalizedEdges = normalizeGraphData(data.edges);
-            const normalizedDrawings = normalizeGraphData(data.drawings);
-            setNodes(normalizedNodes);
-            setEdges(normalizedEdges);
-            setDrawings(normalizedDrawings);
-            lastSavedState.current = JSON.stringify({ nodes: normalizedNodes, edges: normalizedEdges });
-            pendingSaveSnapshot.current = null;
-            hasHydratedPipeline.current = true;
-            setTimeout(() => { isUpdatingFromRemote.current = false; }, 100);
-          } else {
-            setError('Pipeline not found.');
+          if (!effectiveShare && !data.is_public) {
+            setError('You do not have access to this pipeline.');
+            setLoading(false);
+            return;
           }
-        } catch (err) {
-          const errorDetails = {
-            message: err?.message || 'Unknown error',
-            status: err?.status || null,
-            code: err?.code || null,
-            details: err?.details || null,
-            hint: err?.hint || null,
-          };
-          console.error('Error fetching pipeline:', errorDetails);
-          setError('Failed to load pipeline. Please check your login status.');
-        } finally {
-          setLoading(false);
-        }
-      };
 
-      fetchPipeline();
-
-      // Real-time channel for both presence and canvas updates
-      const newChannel = supabase.channel(`pipeline:${pipelineId}`);
-
-      newChannel
-        .on('presence', { event: 'sync' }, () => {
-          const newState = newChannel.presenceState();
-          const collaborators = Object.values(newState).map(p => p[0]);
-          setCollaborators(collaborators);
-        })
-        .on('broadcast', { event: 'canvas-update' }, ({ payload }) => {
-          isUpdatingFromRemote.current = true;
-          if (payload?.reason === 'drag-end') {
-            animateRemoteGraphTo(payload.nodes || [], payload.edges || []);
-            setDrawings(Array.isArray(payload.drawings) ? payload.drawings : []);
-          } else {
-            if (remoteAnimationFrame.current) {
-              cancelAnimationFrame(remoteAnimationFrame.current);
-              remoteAnimationFrame.current = null;
-            }
-            setNodes(payload.nodes || []);
-            setEdges(payload.edges || []);
-            setDrawings(Array.isArray(payload.drawings) ? payload.drawings : []);
-          }
-          setTimeout(() => { isUpdatingFromRemote.current = false; }, 100);
-        })
-        .on('broadcast', { event: 'cursor-update' }, ({ payload }) => {
-          if (!payload || !payload.userId || payload.userId === activeUserId.current) return;
-
-          setRemoteCursors((prev) => {
-            const withoutSender = prev.filter((cursor) => cursor.userId !== payload.userId);
-            return [
-              ...withoutSender,
-              {
-                userId: payload.userId,
-                x: payload.x,
-                y: payload.y,
-                space: payload.space || 'screen',
-                label: payload.label,
-                color: payload.color,
-                ts: payload.ts || Date.now(),
-              },
-            ];
-          });
-        })
-        .on('broadcast', { event: 'node-focus-update' }, ({ payload }) => {
-          if (!payload || !payload.userId || payload.userId === activeUserId.current) return;
-
-          setRemoteNodeEditors((prev) => {
-            const withoutSender = prev.filter((entry) => entry.userId !== payload.userId);
-            if (!payload.nodeId) return withoutSender;
-
-            return [
-              ...withoutSender,
-              {
-                userId: payload.userId,
-                nodeId: payload.nodeId,
-                label: payload.label,
-                color: payload.color,
-                ts: payload.ts || Date.now(),
-              },
-            ];
-          });
-        })
-        .subscribe(async (status) => {
-          if (status === 'SUBSCRIBED') {
-            const { data: { user } } = await supabase.auth.getUser();
-            activeUserId.current = user?.id || `anon-${Math.random().toString(36).slice(2, 10)}`;
-            const emailLabel = user?.email ? user.email.split('@')[0] : 'Collaborator';
-            activeUserLabel.current = emailLabel;
-            activeUserColor.current = pickCursorColor(user?.id || user?.email || activeUserId.current);
-            await newChannel.track({ 
-              user: user ? user.email : 'Anonymous',
-              user_id: activeUserId.current,
-              avatar_url: user?.user_metadata.avatar_url,
+          if (!directShare && publicShare) {
+            claimPublicShare({
+              pipelineId,
+              ownerId: data.user_id,
+              userEmail: user.email,
+              permission: publicShare.permission,
             });
           }
-        });
 
-      setChannel(newChannel);
-
-      return () => {
-        if (remoteAnimationFrame.current) {
-          cancelAnimationFrame(remoteAnimationFrame.current);
-          remoteAnimationFrame.current = null;
+          sharedPermission = effectiveShare?.permission || 'view';
         }
-        supabase.removeChannel(newChannel);
-      };
-    }
-  }, [animateRemoteGraphTo, claimPublicShare, normalizeGraphData, pathname, requestedAccess, setNodes, setEdges, setDrawings, supabase]);
+
+        // Snapshots (community copies) are always read-only, even for the owner.
+        // This prevents cursor/node movement from leaking to community viewers.
+        const canEdit = pipelineIsSnapshot
+          ? false
+          : (owner || (sharedPermission === 'edit' && requestedAccess === 'edit'));
+
+        if (!isMounted) return;
+        useUIStore.getState().setReadOnly(!canEdit);
+        setCanEdit(canEdit);
+
+        isUpdatingFromRemote.current = true;
+        const normalizedNodes = normalizeGraphData(data.nodes);
+        const normalizedEdges = normalizeGraphData(data.edges);
+        const normalizedDrawings = normalizeGraphData(data.drawings);
+        setNodes(normalizedNodes);
+        setEdges(normalizedEdges);
+        setDrawings(normalizedDrawings);
+        lastSavedState.current = JSON.stringify({ nodes: normalizedNodes, edges: normalizedEdges });
+        pendingSaveSnapshot.current = null;
+        hasHydratedPipeline.current = true;
+        setTimeout(() => { if (isMounted) isUpdatingFromRemote.current = false; }, 100);
+
+        // ── 2. Real-time channel (only for non-snapshot pipelines) ────────
+        // Snapshots are frozen community copies — no cursors, no live sync.
+        if (pipelineIsSnapshot) {
+          setLoading(false);
+          return;
+        }
+
+        const newChannel = supabase.channel(`pipeline:${pipelineId}`);
+        channelRef = newChannel;
+
+        newChannel
+          .on('presence', { event: 'sync' }, () => {
+            if (!isMounted) return;
+            const newState = newChannel.presenceState();
+            const collaborators = Object.values(newState).map(p => p[0]);
+            setCollaborators(collaborators);
+          })
+          .on('broadcast', { event: 'canvas-update' }, ({ payload }) => {
+            if (!isMounted) return;
+            isUpdatingFromRemote.current = true;
+            if (payload?.reason === 'drag-end') {
+              animateRemoteGraphTo(payload.nodes || [], payload.edges || []);
+              setDrawings(Array.isArray(payload.drawings) ? payload.drawings : []);
+            } else {
+              if (remoteAnimationFrame.current) {
+                cancelAnimationFrame(remoteAnimationFrame.current);
+                remoteAnimationFrame.current = null;
+              }
+              setNodes(payload.nodes || []);
+              setEdges(payload.edges || []);
+              setDrawings(Array.isArray(payload.drawings) ? payload.drawings : []);
+            }
+            setTimeout(() => { if (isMounted) isUpdatingFromRemote.current = false; }, 100);
+          })
+          .on('broadcast', { event: 'cursor-update' }, ({ payload }) => {
+            if (!isMounted || !payload || !payload.userId || payload.userId === activeUserId.current) return;
+
+            setRemoteCursors((prev) => {
+              const withoutSender = prev.filter((cursor) => cursor.userId !== payload.userId);
+              return [
+                ...withoutSender,
+                {
+                  userId: payload.userId,
+                  x: payload.x,
+                  y: payload.y,
+                  space: payload.space || 'screen',
+                  label: payload.label,
+                  color: payload.color,
+                  ts: payload.ts || Date.now(),
+                },
+              ];
+            });
+          })
+          .on('broadcast', { event: 'node-focus-update' }, ({ payload }) => {
+            if (!isMounted || !payload || !payload.userId || payload.userId === activeUserId.current) return;
+
+            setRemoteNodeEditors((prev) => {
+              const withoutSender = prev.filter((entry) => entry.userId !== payload.userId);
+              if (!payload.nodeId) return withoutSender;
+
+              return [
+                ...withoutSender,
+                {
+                  userId: payload.userId,
+                  nodeId: payload.nodeId,
+                  label: payload.label,
+                  color: payload.color,
+                  ts: payload.ts || Date.now(),
+                },
+              ];
+            });
+          })
+          .subscribe(async (status) => {
+            if (status === 'SUBSCRIBED' && isMounted) {
+              activeUserId.current = user?.id || `anon-${Math.random().toString(36).slice(2, 10)}`;
+              const emailLabel = user?.email ? user.email.split('@')[0] : 'Collaborator';
+              activeUserLabel.current = emailLabel;
+              activeUserColor.current = pickCursorColor(user?.id || user?.email || activeUserId.current);
+              await newChannel.track({
+                user: user ? user.email : 'Anonymous',
+                user_id: activeUserId.current,
+                avatar_url: user?.user_metadata.avatar_url,
+              });
+            }
+          });
+
+        if (isMounted) setChannel(newChannel);
+      } catch (err) {
+        if (!isMounted) return;
+        console.error('Error fetching pipeline raw:', err);
+        const errorDetails = {
+          message: err?.message || (typeof err === 'string' ? err : 'Unknown error'),
+          status: err?.status || null,
+          code: err?.code || null,
+          details: err?.details || null,
+          hint: err?.hint || null,
+        };
+        console.error('Error fetching pipeline details:', errorDetails);
+        setError('Failed to load pipeline. Please check your login status.');
+      } finally {
+        if (isMounted) setLoading(false);
+      }
+    };
+
+    bootstrap();
+
+    return () => {
+      isMounted = false;
+      if (remoteAnimationFrame.current) {
+        cancelAnimationFrame(remoteAnimationFrame.current);
+        remoteAnimationFrame.current = null;
+      }
+      if (channelRef) {
+        supabase.removeChannel(channelRef);
+      }
+    };
+  }, [animateRemoteGraphTo, claimPublicShare, normalizeGraphData, pathname, requestedAccess, setNodes, setEdges, setDrawings]);
 
   useEffect(() => {
     const cleanupId = setInterval(() => {
@@ -532,12 +574,14 @@ const SharedCanvasPage = () => {
 
   return (
     <div className="w-full h-screen relative">
-      {canEdit && (
+      {canEdit ? (
         <>
           <DashboardNav />
           <DashboardProfile activeCollaborators={collaborators} />
           <PipelineCompilerPanel />
         </>
+      ) : (
+        <DashboardProfile activeCollaborators={collaborators} />
       )}
 
       <InfiniteCanvas
@@ -549,21 +593,20 @@ const SharedCanvasPage = () => {
         readOnly={!canEdit}
       />
       
-      {/* Share Restriction Overlay for non-owners */}
+      {/* Shared View Controls (Read Only Badge + Fork Action) */}
       {!canEdit && (
-        <div className="absolute top-4 left-4 z-100 flex items-center gap-2 px-3 py-1.5 bg-blue-500/10 text-blue-400 text-[10px] font-bold uppercase rounded-full border border-blue-500/20 backdrop-blur-md">
-          <Share2 size={12} className="opacity-60" /> Read Only Mode
+        <div className="absolute top-4 left-4 z-100 flex items-center gap-3">
+          <div className="flex items-center gap-2 px-3 py-1.5 bg-cyan-500/10 text-cyan-400 text-[10px] font-bold uppercase rounded-full border border-cyan-500/20 backdrop-blur-md shadow-[0_5px_15px_rgba(0,0,0,0.3)]">
+            <Eye size={12} className="opacity-60" /> Read Only Mode
+          </div>
+          <button
+            onClick={handleFork}
+            disabled={isCopying}
+            className="flex items-center gap-2 px-4 py-1.5 bg-amber-400 text-black text-[10px] font-black rounded-full hover:bg-amber-500 transition-all shadow-xl disabled:opacity-40 uppercase border border-amber-300/30"
+          >
+            <GitFork size={13} /> {isCopying ? 'Forking...' : 'Fork & Edit'}
+          </button>
         </div>
-      )}
-
-      {!canEdit && (
-        <button
-          onClick={handleCreateCopy}
-          disabled={isCopying}
-          className="absolute top-4 right-4 z-100 flex items-center gap-2 px-4 py-2 bg-foreground text-background text-xs font-bold rounded-full hover:opacity-90 transition-all shadow-xl disabled:opacity-40"
-        >
-          <Copy size={14} /> {isCopying ? 'Creating Copy...' : 'Create Editable Copy'}
-        </button>
       )}
 
       {/* Projects Button */}

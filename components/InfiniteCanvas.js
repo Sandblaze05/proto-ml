@@ -34,7 +34,7 @@ import { generateTransformPythonCode } from '@/lib/pythonTemplates/transformNode
 import { generateLifecyclePythonCode } from '@/lib/pythonTemplates/lifecycleNodeTemplate';
 import { CursorMark } from '@/components/ui/cursor';
 
-function ZoomControls() {
+function ZoomControls({ readOnly }) {
   const { zoomIn, zoomOut, fitView, getNodes, getEdges } = useReactFlow();
   const setCanvasNodes = useUIStore(s => s.setNodes);
   const addToast = useUIStore(s => s.addToast);
@@ -142,15 +142,17 @@ function ZoomControls() {
 
   return (
     <div style={containerStyle}>
-      <button 
-        aria-label="Tidy Layout" 
-        title="Tidy Layout" 
-        style={{ ...buttonStyle, background: 'var(--color-foreground)', color: 'var(--color-background)' }} 
-        onClick={onLayout}
-        className="hover:scale-110 active:scale-95 shadow-[0_0_20px_rgba(250,235,215,0.3)] border-none"
-      >
-        <Wand2 size={20} />
-      </button>
+      {!readOnly && (
+        <button 
+          aria-label="Tidy Layout" 
+          title="Tidy Layout" 
+          style={{ ...buttonStyle, background: 'var(--color-foreground)', color: 'var(--color-background)' }} 
+          onClick={onLayout}
+          className="hover:scale-110 active:scale-95 shadow-[0_0_20px_rgba(250,235,215,0.3)] border-none"
+        >
+          <Wand2 size={20} />
+        </button>
+      )}
       <button aria-label="Zoom in" title="Zoom in" style={buttonStyle} onClick={() => zoomIn()} className="hover:bg-foreground/10">
         <Plus size={20} />
       </button>
@@ -165,59 +167,7 @@ function ZoomControls() {
 }
 
 
-function ToastContainer() {
-  const { toasts, removeToast } = useUIStore();
-  
-  return (
-    <div className="fixed top-6 left-0 right-0 z-5000 flex flex-col items-center gap-3 pointer-events-none">
-      {toasts.map((toast) => (
-        <ToastItem key={toast.id} toast={toast} onRemove={() => removeToast(toast.id)} />
-      ))}
-    </div>
-  );
-}
 
-function ToastItem({ toast, onRemove }) {
-  const itemRef = useRef(null);
-
-  useEffect(() => {
-    gsap.fromTo(itemRef.current,
-      { y: -20, opacity: 0, scale: 0.9 },
-      { y: 0, opacity: 1, scale: 1, duration: 0.4, ease: 'back.out(1.7)' }
-    );
-  }, []);
-
-  return (
-    <div 
-      ref={itemRef}
-      className="flex items-center gap-4 px-6 py-3 bg-background/90 backdrop-blur-3xl border border-foreground/20 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.3)] min-w-[340px] pointer-events-auto"
-    >
-      <div className={`shrink-0 w-10 h-10 rounded-xl flex items-center justify-center ${
-        toast.type === 'success' ? 'bg-emerald-500/20 text-emerald-400' : 
-        toast.type === 'error' ? 'bg-red-500/20 text-red-400' : 
-        'bg-blue-500/20 text-blue-400'
-      }`}>
-        {toast.type === 'success' ? <CheckCircle2 size={20} /> : 
-         toast.type === 'error' ? <AlertCircle size={20} /> : 
-         <Info size={20} />}
-      </div>
-      <div className="flex-1">
-        <div className="text-xs font-bold font-mono text-foreground uppercase tracking-tight">
-          {toast.type}
-        </div>
-        <div className="text-[13px] text-foreground/70 font-medium leading-tight">
-          {toast.message}
-        </div>
-      </div>
-      <button 
-        onClick={onRemove}
-        className="p-1 hover:bg-foreground/10 rounded-lg transition-colors text-foreground/30 hover:text-foreground"
-      >
-        <X size={18} />
-      </button>
-    </div>
-  );
-}
 
 // Generic CustomNode for non-dataset nodes (Process / Model / Optimize)
 function CustomNode({ id, data }) {
@@ -1321,7 +1271,7 @@ function InteractiveCanvas({ onCanvasChange, onPointerMove, onEditingNodeChange,
     onCanvasChange(nodes, edges, drawings, { reason: 'graph-change' });
   }, [nodes, edges, drawings, onCanvasChange]);
 
-  const { addExecutionNode, addExecutionEdge, canConnect, validateConnection, removeExecutionNode } = useExecutionStore();
+  const { addExecutionNode, addExecutionEdge, validateConnection, removeExecutionNode } = useExecutionStore();
   const { setNodeRef } = useDroppable({ id: 'canvas-droppable' });
   const { project, screenToFlowPosition } = useReactFlow();
   const transform = useStore((s) => s.transform);
@@ -1459,7 +1409,7 @@ function InteractiveCanvas({ onCanvasChange, onPointerMove, onEditingNodeChange,
     );
 
     // 1. Verify in Execution Store
-    if (diagnostic.ok && canConnect(connection.source, connection.target, connection.sourceHandle, connection.targetHandle)) {
+    if (diagnostic.ok) {
       // 2. Add to UI
       addEdge(connection);
       // 3. Add to Execution Graph
@@ -1477,7 +1427,7 @@ function InteractiveCanvas({ onCanvasChange, onPointerMove, onEditingNodeChange,
       const fixHint = diagnostic?.details?.suggestedFix ? ` ${diagnostic.details.suggestedFix}` : '';
       addToast(`Incompatible connection: ${diagnostic?.message || 'validation failed.'}${fixHint}`, 'error');
     }
-  }, [readOnly, addEdge, addExecutionEdge, canConnect, validateConnection, addToast]);
+  }, [readOnly, addEdge, addExecutionEdge, validateConnection, addToast]);
 
   const onConnectStart = useCallback(() => setIsConnecting(true), []);
   const onConnectEnd = useCallback(() => setIsConnecting(false), []);
@@ -1723,12 +1673,12 @@ function InteractiveCanvas({ onCanvasChange, onPointerMove, onEditingNodeChange,
         edges={edges}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
-        onConnect={onConnect}
-        onConnectStart={onConnectStart}
-        onConnectEnd={onConnectEnd}
-        onNodeContextMenu={onNodeContextMenu}
-        onEdgeContextMenu={onEdgeContextMenu}
-        onPaneContextMenu={onPaneContextMenu}
+        onConnect={readOnly ? undefined : onConnect}
+        onConnectStart={readOnly ? undefined : onConnectStart}
+        onConnectEnd={readOnly ? undefined : onConnectEnd}
+        onNodeContextMenu={readOnly ? undefined : onNodeContextMenu}
+        onEdgeContextMenu={readOnly ? undefined : onEdgeContextMenu}
+        onPaneContextMenu={readOnly ? undefined : onPaneContextMenu}
         onPaneClick={onPaneClick}
         fitView
         fitViewOptions={{ padding: 0.2 }}
@@ -1752,19 +1702,19 @@ function InteractiveCanvas({ onCanvasChange, onPointerMove, onEditingNodeChange,
         proOptions={{ hideAttribution: true }}
       >
         <Background gap={16} size={1} color="#faebd7" opacity={0.1} />
-        <ZoomControls />
+        <ZoomControls readOnly={readOnly} />
         <EdgeAwareMiniMap />
         <DrawingLayer />
       </ReactFlow>
 
-      <ToastContainer />
+
       <Spotlight isOpen={isSpotlightOpen} onClose={() => setIsSpotlightOpen(false)} />
       {!readOnly && <FloatingToolbar />}
       <ShapeLayerComponents />
       <LiveCursors cursors={remoteCursors} viewportTransform={transform} />
       <LiveNodeEditors editors={remoteNodeEditors} nodes={nodes} viewportTransform={transform} />
 
-      {nodes.length === 0 && (
+      {!readOnly && nodes.length === 0 && (
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
           <div className="max-w-md text-center bg-black/40 backdrop-blur-sm p-6 rounded-3xl border border-foreground/20 shadow-[0_15px_30px_rgba(0,0,0,0.5)]">
             <p className="font-mono text-foreground/70 text-sm leading-relaxed">

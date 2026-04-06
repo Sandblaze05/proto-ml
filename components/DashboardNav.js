@@ -70,22 +70,45 @@ const DashboardNav = () => {
   const handleSave = async () => {
     setIsSaving(true);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
       
+      if (userError) throw userError;
       if (!user) {
         addToast('You must be logged in to save a pipeline.', 'error');
         return;
       }
 
-      const cleanNodes = JSON.parse(JSON.stringify(nodes, (key, val) => key === '_gsap' ? undefined : val));
-      const cleanEdges = JSON.parse(JSON.stringify(edges, (key, val) => key === '_gsap' ? undefined : val));
-      const pipelineName = draftPipelineName.trim() || 'Untitled Pipeline';
+      // Safety check: ensure the user has a profile record to satisfy foreign key constraints.
+      // This is especially important for accounts created before current migrations or on first save.
+      const { error: profileCheckError } = await supabase
+        .from('profiles')
+        .upsert({ 
+          id: user.id,
+          username: user.user_metadata?.full_name || user.email?.split('@')[0] || 'User'
+        }, { onConflict: 'id' });
+      
+      if (profileCheckError) {
+        console.warn('Profile sync warning (you might need to create a profile manually):', profileCheckError);
+      }
 
+      // Safety check for nodes/edges to prevent save failures if one is corrupted or cyclic
+      let cleanNodes, cleanEdges;
+      try {
+        const replacer = (key, val) => key === '_gsap' ? undefined : val;
+        cleanNodes = JSON.parse(JSON.stringify(nodes, replacer));
+        cleanEdges = JSON.parse(JSON.stringify(edges, replacer));
+      } catch (err) {
+        console.error('State serialization error:', err);
+        throw new Error('Could not prepare pipeline data for saving. Please check for circular references in custom node data.');
+      }
+
+      const pipelineName = draftPipelineName.trim() || 'Untitled Pipeline';
       let activeId = effectivePipelineId;
-      let error = null;
+      let finalError = null;
 
       if (activeId) {
-        const response = await supabase
+        // Try updating existing pipeline
+        const { data, error } = await supabase
           .from('pipelines')
           .update({
             name: pipelineName,
@@ -98,13 +121,18 @@ const DashboardNav = () => {
           .select('id')
           .maybeSingle();
 
-        error = response.error;
-        if (!error && !response.data) {
-          // Stale active id (e.g. shared/non-owned row in local storage): create a fresh owned pipeline.
+        if (error) {
+          finalError = error;
+        } else if (!data) {
+          // If we couldn't update (e.g. not the owner or ID doesn't exist), 
+          // we treat it as a new pipeline save.
           activeId = null;
         }
-      } else {
-        const response = await supabase
+      }
+
+      // If we don't have an activeId or the update fallback to insert
+      if (!activeId && !finalError) {
+        const { data, error } = await supabase
           .from('pipelines')
           .insert({
             user_id: user.id,
@@ -116,41 +144,30 @@ const DashboardNav = () => {
           .select('id')
           .single();
 
-        error = response.error;
-        if (!error && response.data?.id) {
-          activeId = response.data.id;
+        if (error) {
+          finalError = error;
+        } else if (data?.id) {
+          activeId = data.id;
           setCurrentPipelineId(activeId);
         }
       }
 
-      if (!activeId && !error) {
-        const response = await supabase
-          .from('pipelines')
-          .insert({
-            user_id: user.id,
-            name: pipelineName,
-            nodes: cleanNodes,
-            edges: cleanEdges,
-            updated_at: new Date().toISOString(),
-          })
-          .select('id')
-          .single();
-
-        error = response.error;
-        if (!error && response.data?.id) {
-          activeId = response.data.id;
-          setCurrentPipelineId(activeId);
-        }
-      }
-
-      if (error) throw error;
+      if (finalError) throw finalError;
+      
       addToast('Pipeline saved successfully!', 'success');
 
+      // If we're on a new canvas (/canvas), redirect to the specific ID
       if (activeId && !pathPipelineId) {
         router.push(`/canvas/${activeId}`);
       }
     } catch (error) {
-      console.error('Error saving pipeline:', error);
+      console.error('Detailed Save Error:', {
+        message: error.message,
+        details: error.details,
+        hint: error.hint,
+        code: error.code,
+        fullError: error
+      });
       addToast(`Error: ${error.message || 'Failed to save pipeline.'}`, 'error');
     } finally {
       setIsSaving(false);

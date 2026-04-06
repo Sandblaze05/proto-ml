@@ -12,7 +12,7 @@ import MonacoCodeEditor from './MonacoCodeEditor';
 const TABS = ['Config', 'Code', 'Preview'];
 const TAB_ICONS = { Config: Settings2, Code: Code2, Preview: Eye };
 
-function ConfigField({ label, value, onChange, schema = {} }) {
+function ConfigField({ label, value, onChange, schema = {}, disabled = false }) {
   const isArray = Array.isArray(value);
   const valueType = isArray ? 'array' : typeof value;
   const schemaType = schema?.type;
@@ -34,8 +34,9 @@ function ConfigField({ label, value, onChange, schema = {} }) {
       {effectiveType === 'enum' && (
         <select
           value={String(value ?? '')}
-          onChange={(e) => onChange(e.target.value)}
-          className="w-full bg-black/60 border border-[#faebd7]/10 rounded text-[#faebd7] text-[10px] font-mono px-1.5 py-1"
+          onChange={(e) => !disabled && onChange(e.target.value)}
+          disabled={disabled}
+          className={`w-full bg-black/60 border border-[#faebd7]/10 rounded text-[#faebd7] text-[10px] font-mono px-1.5 py-1 ${disabled ? 'cursor-not-allowed opacity-40' : ''}`}
         >
           {(schema.options || []).map((opt) => (
             <option key={String(opt)} value={String(opt)}>{String(opt)}</option>
@@ -45,8 +46,9 @@ function ConfigField({ label, value, onChange, schema = {} }) {
 
       {(effectiveType === 'boolean' || valueType === 'boolean') && (
         <button
-          onClick={(e) => { e.stopPropagation(); onChange(!value); }}
-          className={`px-2 py-1 text-[10px] rounded ${value ? 'bg-cyan-700/40' : 'bg-slate-700/35'}`}
+          disabled={disabled}
+          onClick={(e) => { e.stopPropagation(); !disabled && onChange(!value); }}
+          className={`px-2 py-1 text-[10px] rounded transition-colors ${value ? 'bg-cyan-700/40' : 'bg-slate-700/35'} ${disabled ? 'cursor-not-allowed opacity-40' : ''}`}
         >
           {value ? 'True' : 'False'}
         </button>
@@ -59,8 +61,9 @@ function ConfigField({ label, value, onChange, schema = {} }) {
           min={schema.min}
           max={schema.max}
           step={schema.step}
-          onChange={(e) => onChange(Number(e.target.value))}
-          className="w-full bg-black/60 border border-[#faebd7]/10 rounded text-[#faebd7] text-[10px] font-mono px-1.5 py-1"
+          onChange={(e) => !disabled && onChange(Number(e.target.value))}
+          disabled={disabled}
+          className={`w-full bg-black/60 border border-[#faebd7]/10 rounded text-[#faebd7] text-[10px] font-mono px-1.5 py-1 ${disabled ? 'cursor-not-allowed opacity-40' : ''}`}
         />
       )}
 
@@ -98,8 +101,9 @@ function ConfigField({ label, value, onChange, schema = {} }) {
         <input
           type="text"
           value={value}
-          onChange={(e) => onChange(e.target.value)}
-          className="w-full bg-black/60 border border-[#faebd7]/10 rounded text-[#faebd7] text-[10px] font-mono px-1.5 py-1"
+          onChange={(e) => !disabled && onChange(e.target.value)}
+          disabled={disabled}
+          className={`w-full bg-black/60 border border-[#faebd7]/10 rounded text-[#faebd7] text-[10px] font-mono px-1.5 py-1 ${disabled ? 'cursor-not-allowed opacity-40' : ''}`}
         />
       )}
 
@@ -107,20 +111,22 @@ function ConfigField({ label, value, onChange, schema = {} }) {
         <textarea
           value={JSON.stringify(value, null, 2)}
           onChange={(e) => {
+            if (disabled) return;
             try {
               onChange(JSON.parse(e.target.value));
             } catch {
               // Ignore temporary invalid JSON while typing.
             }
           }}
-          className="w-full min-h-14 bg-black/60 border border-[#faebd7]/10 rounded text-[#faebd7] text-[10px] font-mono px-1.5 py-1"
+          disabled={disabled}
+          className={`w-full min-h-14 bg-black/60 border border-[#faebd7]/10 rounded text-[#faebd7] text-[10px] font-mono px-1.5 py-1 ${disabled ? 'cursor-not-allowed opacity-40' : ''}`}
         />
       )}
     </div>
   );
 }
 
-function PreviewTab({ previewing, onRunPreview, previewResult }) {
+function PreviewTab({ previewing, onRunPreview, previewResult, disabled = false }) {
   const analysis = useMemo(() => {
     if (!previewResult || previewResult.error) return null;
 
@@ -165,9 +171,9 @@ function PreviewTab({ previewing, onRunPreview, previewResult }) {
   return (
     <div className="space-y-2">
       <button
-        onClick={(e) => { e.stopPropagation(); onRunPreview(); }}
-        disabled={previewing}
-        className="w-full px-2 py-1 rounded text-[10px] font-mono bg-cyan-700/30 hover:bg-cyan-700/45 border border-cyan-300/25 disabled:opacity-50"
+        onClick={(e) => { e.stopPropagation(); !disabled && onRunPreview(); }}
+        disabled={previewing || disabled}
+        className={`w-full px-2 py-1 rounded text-[10px] font-mono bg-cyan-700/30 border border-cyan-300/25 transition-all ${disabled ? 'cursor-not-allowed opacity-40' : 'hover:bg-cyan-700/45'} `}
       >
         {previewing ? 'Previewing...' : 'Run Preview'}
       </button>
@@ -201,6 +207,7 @@ function PreviewTab({ previewing, onRunPreview, previewResult }) {
 
 export default function TransformNode({ data, id, selected }) {
   const isLocked = useStore(s => s.nodeInternals.get(id)?.draggable === false);
+  const readOnly = useUIStore(s => s.readOnly);
   const { nodeModel, collapsed: storeCollapsed } = data;
   const {
     type,
@@ -390,6 +397,7 @@ export default function TransformNode({ data, id, selected }) {
                   value={localConfig?.[k]}
                   schema={uiSchema?.[k]}
                   onChange={(next) => updateConfig(k, next)}
+                  disabled={readOnly}
                 />
               ))}
             </div>
@@ -399,9 +407,9 @@ export default function TransformNode({ data, id, selected }) {
                 title="Generated Python Transform"
                 language="python"
                 value={displayedCode}
-                onChange={isDockReadOnly ? undefined : handleCodeChange}
-                onReset={resetCodeFromTemplate}
-                readOnly={isDockReadOnly}
+                onChange={isDockReadOnly || readOnly ? undefined : handleCodeChange}
+                onReset={readOnly ? undefined : resetCodeFromTemplate}
+                readOnly={isDockReadOnly || readOnly}
                 height={180}
                 dockItems={dockItems}
                 activeDockId={codeViewNodeId}
@@ -414,6 +422,7 @@ export default function TransformNode({ data, id, selected }) {
                 previewing={previewing}
                 onRunPreview={() => runPreview(5)}
                 previewResult={previewResult}
+                disabled={readOnly}
               />
             </div>
           </div>

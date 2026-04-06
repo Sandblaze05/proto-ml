@@ -116,14 +116,15 @@ function Field({ label, children }) {
   );
 }
 
-function NodeInput({ value, onChange, type = 'text', placeholder = '' }) {
+function NodeInput({ value, onChange, type = 'text', placeholder = '', disabled = false }) {
   return (
     <input
       type={type}
       value={value ?? ''}
       placeholder={placeholder}
-      onChange={(e) => onChange(e.target.value)}
-      className="w-full bg-black/60 border border-[#faebd7]/10 rounded text-[#faebd7] text-[10px] font-mono px-1.5 py-1 outline-none focus:border-[#faebd7]/30 placeholder:text-[#faebd7]/20"
+      onChange={(e) => !disabled && onChange(e.target.value)}
+      disabled={disabled}
+      className={`w-full bg-black/60 border border-[#faebd7]/10 rounded text-[#faebd7] text-[10px] font-mono px-1.5 py-1 outline-none focus:border-[#faebd7]/30 placeholder:text-[#faebd7]/20 ${disabled ? 'opacity-40 cursor-not-allowed' : ''}`}
     />
   );
 }
@@ -132,9 +133,9 @@ function NodeSelect({ value, onChange, options, disabled = false }) {
   return (
     <select
       value={value ?? ''}
-      onChange={(e) => onChange(e.target.value)}
+      onChange={(e) => !disabled && onChange(e.target.value)}
       disabled={disabled}
-      className="w-full bg-black/60 border border-[#faebd7]/10 rounded text-[#faebd7] text-[10px] font-mono px-1.5 py-1 outline-none focus:border-[#faebd7]/30 disabled:opacity-50"
+      className={`w-full bg-black/60 border border-[#faebd7]/10 rounded text-[#faebd7] text-[10px] font-mono px-1.5 py-1 outline-none focus:border-[#faebd7]/30 disabled:opacity-50 ${disabled ? 'cursor-not-allowed opacity-40' : ''}`}
     >
       {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
     </select>
@@ -204,13 +205,14 @@ function MultiCheckboxDropdown({ options, value = [], onChange, disabled = false
   );
 }
 
-function Toggle({ label, value, onChange }) {
+function Toggle({ label, value, onChange, disabled = false }) {
   return (
-    <div className="flex items-center justify-between mb-2">
+    <div className={`flex items-center justify-between mb-2 ${disabled ? 'opacity-40 pointer-events-none' : ''}`}>
       <span className="text-[10px] text-[#faebd7]/70 font-mono">{label}</span>
       <button
-        onClick={(e) => { e.stopPropagation(); onChange(!value); }}
-        className={`relative w-8 h-4 rounded-full border-none cursor-pointer transition-colors duration-200 shrink-0 ${value ? 'bg-purple-500' : 'bg-[#2a2a2a]'}`}
+        disabled={disabled}
+        onClick={(e) => { e.stopPropagation(); !disabled && onChange(!value); }}
+        className={`relative w-8 h-4 rounded-full border-none transition-colors duration-200 shrink-0 ${value ? 'bg-purple-500' : 'bg-[#2a2a2a]'} ${disabled ? 'cursor-not-allowed' : 'cursor-pointer'}`}
       >
         <div className={`absolute top-0.5 w-3 h-3 rounded-full bg-[#faebd7] transition-all duration-200 ${value ? 'left-4.5' : 'left-0.5'}`} />
       </button>
@@ -229,14 +231,16 @@ function IconHoverAction({ icon: Icon, label, onClick, disabled = false, tone = 
 
   return (
     <button
-      onClick={(e) => { e.stopPropagation(); onClick?.(); }}
+      onClick={(e) => { e.stopPropagation(); !disabled && onClick?.(); }}
       disabled={disabled}
-      className={`group relative inline-flex items-center px-2 py-1 text-[10px] rounded transition-colors disabled:opacity-50 ${toneClass}`}
+      className={`group relative inline-flex items-center px-2 py-1 text-[10px] rounded transition-colors disabled:opacity-40 ${toneClass} ${disabled ? 'cursor-not-allowed' : ''}`}
     >
       <Icon size={12} />
-      <span className="pointer-events-none absolute left-0 top-full mt-1 whitespace-nowrap rounded-md border border-[#faebd7]/15 bg-[#101014] px-2 py-1 text-[10px] text-[#faebd7] opacity-0 shadow-lg transition-opacity duration-150 group-hover:opacity-100">
-        {label}
-      </span>
+      {!disabled && (
+        <span className="pointer-events-none absolute left-0 top-full mt-1 whitespace-nowrap rounded-md border border-[#faebd7]/15 bg-[#101014] px-2 py-1 text-[10px] text-[#faebd7] opacity-0 shadow-lg transition-opacity duration-150 group-hover:opacity-100">
+          {label}
+        </span>
+      )}
     </button>
   );
 }
@@ -256,6 +260,7 @@ function SourceTab({
   inspectResult,
   onValidateJoins,
   uploadsList,
+  disabled = false,
 }) {
   const fileRef = useRef(null);
   const [uploading, setUploading] = useState(false);
@@ -302,7 +307,7 @@ function SourceTab({
     return (
       <>
         <Field label="Folder Path">
-          <NodeInput value={config.path} onChange={(v) => onChange('path', v)} placeholder="./data/uploads/... or /data/images" />
+          <NodeInput value={config.path} onChange={(v) => onChange('path', v)} placeholder="./data/uploads/... or /data/images" disabled={disabled} />
           <div className="mt-2 flex flex-wrap items-center gap-1.5">
             <IconHoverAction icon={Upload} label="Upload Folder" onClick={triggerUpload} disabled={uploading || busy} tone="success" />
             <IconHoverAction icon={ShieldCheck} label="Validate" onClick={onValidate} disabled={busy} tone="accent" />
@@ -321,12 +326,12 @@ function SourceTab({
           )}
         </Field>
         <Field label="Format">
-          <NodeSelect value={config.format} onChange={(v) => onChange('format', v)} options={[{ value: 'jpg', label: 'JPG' }, { value: 'png', label: 'PNG' }, { value: 'webp', label: 'WebP' }, { value: 'tiff', label: 'TIFF' }]} />
+          <NodeSelect value={config.format} onChange={(v) => onChange('format', v)} options={[{ value: 'jpg', label: 'JPG' }, { value: 'png', label: 'PNG' }, { value: 'webp', label: 'WebP' }, { value: 'tiff', label: 'TIFF' }]} disabled={disabled} />
         </Field>
         <Field label="Label Strategy">
-          <NodeSelect value={config.label_strategy} onChange={(v) => onChange('label_strategy', v)} options={[{ value: 'folder_name', label: 'Folder Name' }, { value: 'csv_mapping', label: 'CSV Mapping' }, { value: 'json_mapping', label: 'JSON Mapping' }, { value: 'none', label: 'Unlabeled' }]} />
+          <NodeSelect value={config.label_strategy} onChange={(v) => onChange('label_strategy', v)} options={[{ value: 'folder_name', label: 'Folder Name' }, { value: 'csv_mapping', label: 'CSV Mapping' }, { value: 'json_mapping', label: 'JSON Mapping' }, { value: 'none', label: 'Unlabeled' }]} disabled={disabled} />
         </Field>
-        <Toggle label="Recursive" value={config.recursive} onChange={(v) => onChange('recursive', v)} />
+        <Toggle label="Recursive" value={config.recursive} onChange={(v) => onChange('recursive', v)} disabled={disabled} />
       </>
     );
   }
@@ -983,6 +988,7 @@ function CodeTab({ pythonCode, onCodeChange, onResetCode, readOnly = false, dock
 
 export default function DatasetNode({ data, id, selected }) {
   const isLocked = useStore(s => s.nodeInternals.get(id)?.draggable === false);
+  const readOnly = useUIStore(s => s.readOnly);
   const { nodeModel, collapsed: storeCollapsed } = data;
   const { type, inputs = [], outputs = [], config = {}, label } = nodeModel;
   const normalizedInputs = useMemo(
@@ -1554,6 +1560,7 @@ export default function DatasetNode({ data, id, selected }) {
                 inspectResult={inspectResult}
                 onValidateJoins={validateJoins}
                 uploadsList={uploadsList}
+                disabled={readOnly}
               />
             )}
             <div className={activeTab === 'Code' ? '' : 'hidden'}>

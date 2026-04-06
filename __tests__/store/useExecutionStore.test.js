@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { useExecutionStore } from '../../store/useExecutionStore.js';
 
 function resetExecutionStore() {
@@ -102,6 +102,24 @@ describe('useExecutionStore', () => {
       expect(state.canConnect('src', 'tgt', 'features', 'batches')).toBe(false);
     });
 
+    it('accepts canonical batch loader input handle', () => {
+      resetExecutionStore();
+      const state = useExecutionStore.getState();
+
+      state.addExecutionNode('src', {
+        type: 'dataset.csv',
+        outputs: [{ name: 'features', datatype: 'tensor' }],
+      });
+      state.addExecutionNode('tgt', {
+        type: 'lifecycle.batch_loader',
+        inputs: [{ name: 'dataset', datatype: 'any' }],
+      });
+
+      const result = state.validateConnection('src', 'tgt', 'features', 'dataset');
+      expect(result.ok).toBe(true);
+      expect(state.canConnect('src', 'tgt', 'features', 'dataset')).toBe(true);
+    });
+
     it('returns capability mismatch diagnostics', () => {
       resetExecutionStore();
       const state = useExecutionStore.getState();
@@ -139,6 +157,25 @@ describe('useExecutionStore', () => {
       const result = state.validateConnection('src', 'tgt', 'features', 'in');
       expect(result.ok).toBe(true);
       expect(state.canConnect('src', 'tgt', 'features', 'in')).toBe(true);
+    });
+
+    it('canConnect is side-effect free for rejected connections', () => {
+      resetExecutionStore();
+      const state = useExecutionStore.getState();
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      state.addExecutionNode('src', {
+        type: 'dataset.csv',
+        outputs: [{ name: 'features', datatype: 'tensor' }],
+      });
+      state.addExecutionNode('tgt', {
+        type: 'lifecycle.batch_loader',
+        inputs: [{ name: 'dataset', datatype: 'any' }],
+      });
+
+      expect(state.canConnect('src', 'tgt', 'features', 'batches')).toBe(false);
+      expect(warnSpy).not.toHaveBeenCalled();
+      warnSpy.mockRestore();
     });
   });
 });

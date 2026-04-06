@@ -17,6 +17,8 @@ export const metadata = {
   description: "Create ML pipelines on the go",
 };
 
+import ToastContainer from "@/components/ToastContainer";
+
 export default function RootLayout({ children }) {
   return (
     <html lang="en" suppressHydrationWarning data-scroll-behavior="smooth">
@@ -30,6 +32,7 @@ export default function RootLayout({ children }) {
         suppressHydrationWarning
       >
         {children}
+        <ToastContainer />
       </body>
     </html>
   );

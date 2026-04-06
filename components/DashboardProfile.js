@@ -17,6 +17,7 @@ const DashboardProfile = ({ activeCollaborators = [] }) => {
   const [pipelineName, setPipelineName] = useState('Unsaved Pipeline')
   const [pipelineNameDraft, setPipelineNameDraft] = useState('')
   const [isRenaming, setIsRenaming] = useState(false)
+  const [isSnapshot, setIsSnapshot] = useState(false)
 
   const panelRef = useRef(null)
   const contentRef = useRef(null)
@@ -49,7 +50,7 @@ const DashboardProfile = ({ activeCollaborators = [] }) => {
       const { data: { user: authedUser } } = await supabase.auth.getUser()
       const { data, error } = await supabase
         .from('pipelines')
-        .select('user_id, name')
+        .select('user_id, name, is_snapshot')
         .eq('id', currentPipelineId)
         .single()
 
@@ -66,7 +67,12 @@ const DashboardProfile = ({ activeCollaborators = [] }) => {
       setPipelineName(loadedName)
       setPipelineNameDraft(loadedName)
       setDraftPipelineName(loadedName)
-      setIsOwner(Boolean(authedUser?.id) && authedUser.id === data.user_id)
+      
+      const ownerMatch = Boolean(authedUser?.id) && authedUser.id === data.user_id;
+      const pipelineIsSnapshot = Boolean(data.is_snapshot);
+      // Snapshots (community copies) are read-only even for the owner.
+      setIsOwner(ownerMatch && !pipelineIsSnapshot);
+      setIsSnapshot(pipelineIsSnapshot);
     }
 
     hydratePipelineMeta()
@@ -209,7 +215,11 @@ const DashboardProfile = ({ activeCollaborators = [] }) => {
           disabled={isRenaming || (pipelineId && !isOwner)}
           placeholder='Unsaved Pipeline'
           className='h-10 w-full rounded-full border-2 border-foreground/40 bg-background/95 px-4 text-xs font-bold uppercase tracking-wide text-foreground outline-none transition-colors focus:border-foreground/70 disabled:cursor-not-allowed disabled:opacity-50'
-          title={pipelineId && !isOwner ? 'Only owner can rename' : 'Name this pipeline'}
+          title={
+            isSnapshot 
+              ? 'Snapshots cannot be renamed' 
+              : (pipelineId && !isOwner ? 'Only owner can rename' : 'Name this pipeline')
+          }
         />
       </div>
 

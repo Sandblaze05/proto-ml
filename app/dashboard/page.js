@@ -2,10 +2,11 @@
 
 import React, { useEffect, useState, useMemo } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { Share2, Trash2, Layout, Clock, User, ExternalLink, Edit2, Check, X, Copy, Search, Grid, List, SortAsc, SortDesc, Folder, FolderPlus, ChevronRight, ChevronDown, Star, StarOff, GripVertical } from 'lucide-react'
+import { Share2, Trash2, Layout, Clock, User, ExternalLink, Edit2, Check, X, Copy, Search, Grid, List, SortAsc, SortDesc, Folder, FolderPlus, ChevronRight, ChevronDown, Star, StarOff, GripVertical, Users } from 'lucide-react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useUIStore } from '@/store/useUIStore'
+import { publishToCommunity } from '@/lib/community'
 
 const THUMBNAIL_COLOR_MAP = {
 	'dataset.image': '#c084fc',
@@ -160,8 +161,10 @@ const UNCATEGORIZED_FOLDER_NAME = 'Uncategorized'
 const DashboardPage = () => {
 	const [myPipelines, setMyPipelines] = useState([])
 	const [sharedPipelines, setSharedPipelines] = useState([])
+	const [communityPipelines, setCommunityPipelines] = useState([])
 	const [loading, setLoading] = useState(true)
 	const [user, setUser] = useState(null)
+	const [profile, setProfile] = useState(null)
 	const [renamingId, setRenamingId] = useState(null)
 	const [renameValue, setRenameValue] = useState('')
 	const [shareModalOpen, setShareModalOpen] = useState(false)
@@ -188,6 +191,10 @@ const DashboardPage = () => {
 	const [movingPipelineId, setMovingPipelineId] = useState(null)
 	const [draggedPipelineId, setDraggedPipelineId] = useState(null)
 	const [dragOverFolder, setDragOverFolder] = useState(null)
+	const [contextMenu, setContextMenu] = useState(null)
+	const [publishModal, setPublishModal] = useState(null)
+	const [publishDesc, setPublishDesc] = useState('')
+	const [publishTags, setPublishTags] = useState('')
 
 	const { addToast, setNodes, setEdges, setDrawings } = useUIStore()
 	const router = useRouter()
@@ -237,6 +244,41 @@ const DashboardPage = () => {
 			})
 	}, [sharedPipelines, searchQuery, sortBy, sortOrder])
 
+	const recentlyEdited = useMemo(() => {
+		return [...myPipelines]
+			.sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at))
+			.slice(0, 5)
+	}, [myPipelines])
+
+	useEffect(() => {
+		const handleClickOutside = () => {
+			if (contextMenu) setContextMenu(null)
+		}
+		document.addEventListener('click', handleClickOutside)
+		return () => document.removeEventListener('click', handleClickOutside)
+	}, [contextMenu])
+
+	const handleContextMenu = (e, pipeline, type) => {
+		e.preventDefault()
+		e.stopPropagation()
+		
+		let x = e.clientX
+		let y = e.clientY
+		
+		if (typeof window !== 'undefined') {
+			if (x + 220 > window.innerWidth) x = window.innerWidth - 220
+			if (y + 300 > window.innerHeight) y = window.innerHeight - 300
+		}
+		
+		setContextMenu({
+			x,
+			y,
+			pipelineId: pipeline.id,
+			pipeline,
+			type,
+		})
+	}
+
 	const handleNewCanvas = () => {
 		setNodes([])
 		setEdges([])
@@ -257,10 +299,20 @@ const DashboardPage = () => {
 			setUser(user)
 
 			if (user) {
+				// Fetch profile
+				const { data: profileData } = await supabase
+					.from('profiles')
+					.select('*')
+					.eq('id', user.id)
+					.single()
+				
+				setProfile(profileData)
+
 				const { data: mine, error: errorMine } = await supabase
 					.from('pipelines')
 					.select('*')
 					.eq('user_id', user.id)
+					.eq('is_snapshot', false)
 					.order('updated_at', { ascending: false })
 
 				if (errorMine) console.error('Error fetching mine:', errorMine)
@@ -292,11 +344,63 @@ const DashboardPage = () => {
 						}))
 					setSharedPipelines(shared)
 				}
+
+				// Fetch folders from DB
+				const { data: dbFolders, error: folderError } = await supabase
+					.from('folders')
+					.select('name')
+					.eq('user_id', user.id)
+					.order('name', { ascending: true })
+				
+				if (!folderError && dbFolders) {
+					const folderNames = dbFolders.map(f => f.name)
+					setCustomFolders(folderNames)
+				}
 			}
+
+			// Fetch community pipelines
+			const { data: community, error: errorCommunity } = await supabase
+				.from('pipelines')
+				.select('*, profiles(username, avatar_url)')
+				.eq('is_public', true)
+				.eq('is_snapshot', true)
+				.order('updated_at', { ascending: false })
+				.limit(6)
+			
+			if (errorCommunity) console.error('Error fetching community:', errorCommunity)
+			else setCommunityPipelines(community || [])
+
 			setLoading(false)
 		}
 		fetchData()
 	}, [supabase])
+
+	const openPublishModal = (pipeline) => {
+		setPublishModal(pipeline)
+		setPublishDesc(pipeline.description || '')
+		setPublishTags((pipeline.tags || []).join(', '))
+	}
+
+	const submitPublishToCommunity = async () => {
+		try {
+			const { data: { user } } = await supabase.auth.getUser()
+			if (!user) throw new Error('User not found')
+
+			await publishToCommunity(supabase, publishModal, {
+				description: publishDesc,
+				tags: publishTags
+			})
+			
+			// No need to update local myPipelines because we published a separate snapshot
+			// The original pipeline remains unchanged in the author's dashboard.
+			
+			addToast('Pipeline published! View in Community.', 'success')
+			setPublishModal(null)
+		} catch (err) {
+			console.error('Publish error:', err)
+			addToast('Failed to publish pipeline.', 'error')
+		}
+	}
 
 	const handleMoveToFolder = async (e, pipelineId, folderName) => {
 		if (e) {
@@ -405,18 +509,32 @@ const DashboardPage = () => {
 		)
 	}
 
-	const handleAddFolder = () => {
+	const handleAddFolder = async () => {
 		const name = newFolderName.trim()
 		if (!name) return
 		if (folders.includes(name)) {
 			addToast('Folder already exists.', 'error')
 			return
 		}
-		setCustomFolders(prev => [...prev, name])
-		setExpandedFolders(prev => [...prev, name])
-		setIsAddingFolder(false)
-		setNewFolderName('')
-		addToast(`Folder "${name}" created.`, 'success')
+
+		try {
+			const { data, error } = await supabase
+				.from('folders')
+				.insert({ user_id: user.id, name })
+				.select()
+				.single()
+
+			if (error) throw error
+
+			setCustomFolders(prev => [...prev, name].sort())
+			setExpandedFolders(prev => [...prev, name])
+			setIsAddingFolder(false)
+			setNewFolderName('')
+			addToast(`Folder "${name}" created.`, 'success')
+		} catch (err) {
+			console.error('Add folder error:', err)
+			addToast('Failed to create folder in database.', 'error')
+		}
 	}
 
 	const handleRenameFolder = async (oldName) => {
@@ -427,37 +545,62 @@ const DashboardPage = () => {
 		}
 
 		try {
-			const { error } = await supabase
+			// 1. Update the folder record itself
+			const { error: folderError } = await supabase
+				.from('folders')
+				.update({ name: newName })
+				.eq('user_id', user.id)
+				.eq('name', oldName)
+
+			if (folderError) throw folderError
+
+			// 2. Update all pipelines that were in this folder
+			const { error: pipelineError } = await supabase
 				.from('pipelines')
 				.update({ folder: newName })
+				.eq('user_id', user.id)
 				.eq('folder', oldName)
 
-			if (error) throw error
+			if (pipelineError) throw pipelineError
 
 			setMyPipelines(prev => prev.map(p => p.folder === oldName ? { ...p, folder: newName } : p))
-			setCustomFolders(prev => prev.map(f => f === oldName ? newName : f))
+			setCustomFolders(prev => prev.map(f => f === oldName ? newName : f).sort())
 			setRenamingFolder(null)
 			addToast(`Folder renamed to ${newName}.`, 'success')
 		} catch (err) {
-			addToast('Failed to rename folder.', 'error')
+			console.error('Rename folder error:', err)
+			addToast('Failed to rename folder in database.', 'error')
 		}
 	}
 
 	const handleDeleteFolder = async (folderName) => {
 		try {
-			const { error } = await supabase
-				.from('pipelines')
+			// 1. Delete the persistent folder record
+			const { error: folderError } = await supabase
+				.from('folders')
 				.delete()
+				.eq('user_id', user.id)
+				.eq('name', folderName)
+			
+			if (folderError) throw folderError
+
+			// 2. Decide whether to delete pipelines or just un-folder them
+			// For the sake of data safety, we'll un-folder them (move to Uncategorized)
+			const { error: pipelineError } = await supabase
+				.from('pipelines')
+				.update({ folder: null })
+				.eq('user_id', user.id)
 				.eq('folder', folderName)
 
-			if (error) throw error
+			if (pipelineError) throw pipelineError
 
-			setMyPipelines(prev => prev.filter(p => p.folder !== folderName))
+			setMyPipelines(prev => prev.map(p => p.folder === folderName ? { ...p, folder: null } : p))
 			setCustomFolders(prev => prev.filter(f => f !== folderName))
 			setConfirmDelete({ type: null, id: null, name: null })
-			addToast(`Folder "${folderName}" and its pipelines deleted.`, 'success')
+			addToast(`Folder "${folderName}" removed. Pipelines moved to Uncategorized.`, 'success')
 		} catch (err) {
-			addToast('Failed to delete folder.', 'error')
+			console.error('Delete folder error:', err)
+			addToast('Failed to remove folder from database.', 'error')
 		}
 	}
 
@@ -662,12 +805,34 @@ const DashboardPage = () => {
 						<h1 className="text-4xl font-bold tracking-tighter uppercase">My Pipelines</h1>
 						<p className="text-foreground/50 text-sm mt-2">Manage your saved and shared ML workflows</p>
 					</div>
+					<div className="flex flex-wrap gap-3 w-full md:w-auto mt-4 md:mt-0">
+						<Link
+							href="/profile"
+							className="px-4 py-2 border border-foreground/20 text-foreground font-bold rounded-xl hover:bg-foreground/10 transition-all cursor-pointer flex-1 md:flex-none text-center flex items-center justify-center gap-3 group"
+							title="Customize Your Profile"
+						>
+							<div className="w-8 h-8 rounded-full border border-foreground/10 bg-foreground/5 flex items-center justify-center overflow-hidden shrink-0">
+								{profile?.avatar_url || user?.user_metadata?.avatar_url ? (
+									<img src={profile?.avatar_url || user?.user_metadata?.avatar_url} alt="Profile" className="w-full h-full object-cover" />
+								) : (
+									<User size={16} />
+								)}
+							</div>
+							<span className="hidden sm:inline">Profile</span>
+						</Link>
+						<Link
+							href="/community"
+							className="px-6 py-2 border border-amber-400 text-amber-400 font-bold rounded-full hover:bg-amber-400/10 transition-all cursor-pointer flex-1 md:flex-none text-center flex items-center justify-center gap-2"
+						>
+							<Users size={16} /> Community
+						</Link>
 					<button
 						onClick={handleNewCanvas}
 						className="px-6 py-2 bg-foreground text-background font-bold rounded-full hover:opacity-90 transition-all cursor-pointer w-full md:w-auto text-center"
 					>
 						New Canvas
 					</button>
+					</div>
 				</header>
 
 				{/* Controls Section */}
@@ -722,6 +887,42 @@ const DashboardPage = () => {
 						</div>
 					</div>
 				</div>
+
+				{/* Recently Edited Section */}
+				{!searchQuery && recentlyEdited.length > 0 && (
+					<section className="mb-12">
+						<h2 className="text-xl font-bold mb-4 flex items-center gap-2">
+							<Clock size={20} /> Recently Edited
+						</h2>
+						<div className="flex gap-4 overflow-x-auto pb-4 snap-x [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+							{recentlyEdited.map(p => (
+								<div 
+									key={`recent-${p.id}`}
+									onContextMenu={(e) => handleContextMenu(e, p, 'my')}
+									className="group bg-foreground/5 border border-foreground/10 rounded-2xl hover:border-foreground/30 transition-all shadow-sm snap-start shrink-0 w-72 flex flex-col p-4 relative cursor-context-menu"
+								>
+									<PipelineThumbnail nodes={p.nodes} edges={p.edges} />
+									<div className="mt-2 flex justify-between items-start">
+										<div className="min-w-0 pr-2">
+											<div className="flex items-center gap-1.5 mb-0.5">
+												<h3 className="text-sm font-bold truncate">{p.name || 'Untitled Pipeline'}</h3>
+												{p.is_public && <span className="bg-amber-400/20 text-amber-400 border border-amber-400/30 px-1.5 py-0.5 rounded text-[8px] font-bold uppercase tracking-wider shrink-0" title="Published to Community">Public</span>}
+											</div>
+											<p className="text-[10px] text-foreground/50 flex items-center gap-1 mt-1">
+												<Clock size={10} /> Edited {new Date(p.updated_at).toLocaleDateString()}
+											</p>
+										</div>
+									</div>
+									<Link
+										href={`/canvas/${p.id}`}
+										className="absolute inset-0 z-10"
+										title="Open Workspace"
+									/>
+								</div>
+							))}
+						</div>
+					</section>
+				)}
 
 				<section className="mb-16">
 					<div className="flex justify-between items-center mb-6">
@@ -858,6 +1059,7 @@ const DashboardPage = () => {
 																draggable
 																onDragStart={handlePipelineDragStart(p.id)}
 																onDragEnd={handlePipelineDragEnd}
+																onContextMenu={(e) => handleContextMenu(e, p, 'my')}
 																className={`group bg-foreground/5 border border-foreground/10 rounded-2xl hover:border-foreground/30 transition-all shadow-sm cursor-grab active:cursor-grabbing ${draggedPipelineId === p.id ? 'opacity-60 scale-[0.99]' : ''} ${viewMode === 'list' ? 'flex items-center justify-between p-4' : 'p-6'}`}
 															>
 																<div className={viewMode === 'list' ? "flex items-center gap-6 flex-1 min-w-0" : ""}>
@@ -882,8 +1084,9 @@ const DashboardPage = () => {
 																			</div>
 																		) : (
 																			<>
-																				<div className="flex items-center gap-2 min-w-0 pr-4">
+																				<div className="flex items-center gap-2 min-w-0 pr-4 relative">
 																					<h3 className={`text-lg font-bold truncate ${viewMode === 'list' ? 'max-w-[200px] md:max-w-md' : ''}`}>{p.name || 'Untitled Pipeline'}</h3>
+																					{p.is_public && <span className="bg-amber-400/20 text-amber-400 border border-amber-400/30 px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider shrink-0 z-20" title="Published to Community">Public</span>}
 																					{p.is_starred && <Star size={14} className="text-amber-400 shrink-0" title="Starred" />}
 																				</div>
 																				<div className="flex gap-1">
@@ -930,11 +1133,6 @@ const DashboardPage = () => {
 																							)}
 																						</div>
 																					) : null}
-
-																					<button onClick={() => handleStartRename(p)} className="p-2 text-foreground/40 hover:text-foreground transition-colors" title="Rename"><Edit2 size={16} /></button>
-																					<button onClick={() => openShareModal(p)} className="p-2 text-foreground/40 hover:text-blue-400 transition-colors" title="Share"><Share2 size={16} /></button>
-																					<button onClick={() => handleDuplicate(p)} className="p-2 text-foreground/40 hover:text-emerald-400 transition-colors" title="Duplicate"><Copy size={16} /></button>
-																					<button onClick={() => setConfirmDelete({ type: 'pipeline', id: p.id, name: p.name })} className="p-2 text-foreground/40 hover:text-red-400 transition-colors" title="Delete"><Trash2 size={16} /></button>
 																				</div>
 																			</>
 																		)}
@@ -943,7 +1141,6 @@ const DashboardPage = () => {
 																	<div className={`flex items-center gap-4 text-[10px] text-foreground/50 ${viewMode === 'list' ? 'mb-0' : 'mb-6'}`}>
 																		<span className="flex items-center gap-1 whitespace-nowrap"><Clock size={12} /> {new Date(p.updated_at).toLocaleDateString()}</span>
 																		<span className="flex items-center gap-1 whitespace-nowrap"><User size={12} /> Me</span>
-																		<span className="flex items-center gap-1 whitespace-nowrap"><GripVertical size={12} /> Drag to folder</span>
 																	</div>
 																</div>
 
@@ -1010,7 +1207,11 @@ const DashboardPage = () => {
 					) : (
 						<div className={viewMode === 'grid' ? "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" : "flex flex-col gap-3"}>
 							{filteredSharedPipelines.map(p => (
-								<div key={p.id} className={`group bg-foreground/5 border border-foreground/10 rounded-2xl hover:border-foreground/30 transition-all shadow-sm ${viewMode === 'list' ? 'flex items-center justify-between p-4' : 'p-6'}`}>
+								<div 
+									key={p.id} 
+									onContextMenu={(e) => handleContextMenu(e, p, 'shared')}
+									className={`group bg-foreground/5 border border-foreground/10 rounded-2xl hover:border-foreground/30 transition-all shadow-sm ${viewMode === 'list' ? 'flex items-center justify-between p-4' : 'p-6'}`}
+								>
 									<div className={viewMode === 'list' ? "flex items-center gap-6 flex-1 min-w-0" : ""}>
 										{viewMode === 'grid' && <PipelineThumbnail nodes={p.nodes} edges={p.edges} />}
 										<div className={`flex justify-between items-start ${viewMode === 'list' ? 'mb-0 flex-1' : 'mb-4'}`}>
@@ -1032,21 +1233,115 @@ const DashboardPage = () => {
 										>
 											{viewMode === 'list' ? 'Open' : (p.share_permission === 'edit' ? 'Open Pipeline' : 'View Pipeline')} <ExternalLink size={14} />
 										</Link>
-										{p.share_permission !== 'edit' && (
-											<button
-												onClick={() => handleCreateCopy(p)}
-												className={`bg-blue-500/10 text-blue-400 rounded-xl hover:bg-blue-500/20 transition-colors flex items-center justify-center ${viewMode === 'list' ? 'w-10 h-10' : 'px-3 py-3'}`}
-												title="Create editable copy"
-											>
-												<Copy size={14} />
-											</button>
-										)}
 									</div>
 								</div>
 							))}
 						</div>
 					)}
 				</section>
+
+				{/* Context Menu */}
+				{contextMenu && (
+					<div 
+						className="fixed z-[3000] min-w-[200px] bg-background border border-foreground/10 rounded-2xl shadow-2xl py-2 animate-in fade-in zoom-in-95 duration-100"
+						style={{ top: contextMenu.y, left: contextMenu.x }}
+						onContextMenu={(e) => e.preventDefault()}
+					>
+						<div className="px-4 pb-2 mb-2 border-b border-foreground/5 flex items-center justify-between gap-2">
+							<span className="text-xs font-bold text-foreground/50 truncate">
+								{contextMenu.pipeline?.name || 'Pipeline'}
+							</span>
+							{contextMenu.type === 'my' && (
+								<button
+									onClick={(e) => { e.stopPropagation(); handleStarPipeline(contextMenu.pipeline); setContextMenu(null) }}
+									className={`p-1 -mr-1 transition-colors ${contextMenu.pipeline.is_starred ? 'text-amber-400 hover:text-amber-300' : 'text-foreground/40 hover:text-amber-400'}`}
+									title={contextMenu.pipeline.is_starred ? 'Unstar' : 'Star'}
+								>
+									{contextMenu.pipeline.is_starred ? <StarOff size={14} /> : <Star size={14} />}
+								</button>
+							)}
+						</div>
+						
+						{contextMenu.type === 'my' ? (
+							<>
+								<button onClick={() => { router.push(`/canvas/${contextMenu.pipeline.id}`); setContextMenu(null) }} className="w-full text-left px-4 py-2 text-sm hover:bg-foreground/5 flex items-center gap-3 transition-colors text-foreground/80 hover:text-foreground">
+									<ExternalLink size={16} /> Open
+								</button>
+								<button onClick={() => { handleStartRename(contextMenu.pipeline); setContextMenu(null) }} className="w-full text-left px-4 py-2 text-sm hover:bg-foreground/5 flex items-center gap-3 transition-colors text-foreground/80 hover:text-foreground">
+									<Edit2 size={16} /> Rename
+								</button>
+								<button onClick={(e) => { 
+									e.stopPropagation(); 
+									setMovingPipelineId(contextMenu.pipeline.id); 
+									setContextMenu(null) 
+								}} className="w-full text-left px-4 py-2 text-sm hover:bg-foreground/5 flex items-center gap-3 transition-colors text-foreground/80 hover:text-foreground">
+									<Folder size={16} /> Move to folder
+								</button>
+								<button onClick={() => { handleDuplicate(contextMenu.pipeline); setContextMenu(null) }} className="w-full text-left px-4 py-2 text-sm hover:bg-emerald-500/10 flex items-center gap-3 transition-colors text-emerald-400/80 hover:text-emerald-400">
+									<Copy size={16} /> Duplicate
+								</button>
+								<button onClick={() => { openShareModal(contextMenu.pipeline); setContextMenu(null) }} className="w-full text-left px-4 py-2 text-sm hover:bg-blue-500/10 flex items-center gap-3 transition-colors text-blue-400/80 hover:text-blue-400">
+									<Share2 size={16} /> Share
+								</button>
+								<button onClick={() => { openPublishModal(contextMenu.pipeline); setContextMenu(null) }} className="w-full text-left px-4 py-2 text-sm hover:bg-amber-400/10 flex items-center gap-3 transition-colors text-amber-400/80 hover:text-amber-400">
+									<Users size={16} /> Publish to Community
+								</button>
+								<div className="h-px bg-foreground/5 my-1" />
+								<button onClick={() => { setConfirmDelete({ type: 'pipeline', id: contextMenu.pipeline.id, name: contextMenu.pipeline.name }); setContextMenu(null) }} className="w-full text-left px-4 py-2 text-sm hover:bg-red-500/20 text-red-400 hover:text-red-300 flex items-center gap-3 transition-colors font-bold">
+									<Trash2 size={16} /> Delete
+								</button>
+							</>
+						) : (
+							<>
+								<button onClick={() => { router.push(`/canvas/${contextMenu.pipeline.id}?access=${contextMenu.pipeline.share_permission === 'edit' ? 'edit' : 'view'}`); setContextMenu(null) }} className="w-full text-left px-4 py-2 text-sm hover:bg-foreground/5 flex items-center gap-3 transition-colors text-foreground/80 hover:text-foreground">
+									<ExternalLink size={16} /> Open
+								</button>
+								{contextMenu.pipeline.share_permission !== 'edit' && (
+									<button onClick={() => { handleCreateCopy(contextMenu.pipeline); setContextMenu(null) }} className="w-full text-left px-4 py-2 text-sm hover:bg-blue-500/10 flex items-center gap-3 transition-colors text-blue-400/80 hover:text-blue-400">
+										<Copy size={16} /> Create Editable Copy
+									</button>
+								)}
+							</>
+						)}
+					</div>
+				)}
+
+				{/* Publish to Community Modal */}
+				{publishModal && (
+					<div className="fixed inset-0 z-[2000] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+						<div className="bg-background border border-foreground/20 rounded-3xl p-8 shadow-2xl max-w-md w-full">
+							<h3 className="text-xl font-bold mb-2 flex items-center gap-2"><Users size={20} className="text-amber-400" /> Publish Pipeline</h3>
+							<p className="text-foreground/50 text-sm mb-6">Make "{publishModal.name}" visible to the community gallery.</p>
+							
+							<div className="space-y-4 mb-8">
+								<div>
+									<label className="block text-xs font-bold text-foreground/50 uppercase tracking-wider mb-2">Description</label>
+									<textarea 
+										value={publishDesc}
+										onChange={(e) => setPublishDesc(e.target.value)}
+										className="w-full bg-foreground/5 border border-foreground/10 rounded-xl p-3 text-sm outline-none focus:border-foreground/30 min-h-[100px]"
+										placeholder="What does this pipeline do?"
+									/>
+								</div>
+								<div>
+									<label className="block text-xs font-bold text-foreground/50 uppercase tracking-wider mb-2">Tags (Comma-separated)</label>
+									<input 
+										type="text"
+										value={publishTags}
+										onChange={(e) => setPublishTags(e.target.value)}
+										className="w-full bg-foreground/5 border border-foreground/10 rounded-xl p-3 text-sm outline-none focus:border-foreground/30"
+										placeholder="e.g. nlp, yolo, computer vision"
+									/>
+								</div>
+							</div>
+
+							<div className="flex gap-3">
+								<button onClick={() => setPublishModal(null)} className="flex-1 py-3 bg-foreground/5 hover:bg-foreground/10 rounded-xl font-bold transition-colors">Cancel</button>
+								<button onClick={submitPublishToCommunity} className="flex-1 py-3 bg-amber-400 hover:bg-amber-300 text-black rounded-xl font-bold transition-colors shadow-[0_0_20px_rgba(251,191,36,0.3)] hover:shadow-[0_0_30px_rgba(251,191,36,0.5)]">Publish Now</button>
+							</div>
+						</div>
+					</div>
+				)}
 
 				{/* Confirmation Modal */}
 				{confirmDelete.type && (
