@@ -13,7 +13,9 @@ const PipelineCompilerPanel = () => {
   const [panelHover, setPanelHover] = useState(false)
   const [compiledCode, setCompiledCode] = useState('')
   const [compileErrors, setCompileErrors] = useState([])
+  const [compileWarnings, setCompileWarnings] = useState([])
   const [compileMeta, setCompileMeta] = useState(null)
+  const [validationMode, setValidationMode] = useState('strict')
 
   const uiNodes = useUIStore(s => s.nodes)
   const uiEdges = useUIStore(s => s.edges)
@@ -69,9 +71,10 @@ const PipelineCompilerPanel = () => {
 
   const handleCompile = () => {
     const uiGraph = buildCompilerGraphFromUI()
-    const result = compileExecutionGraph(uiGraph)
+    const result = compileExecutionGraph(uiGraph, { validationMode })
     setCompiledCode(result.code || '')
     setCompileErrors(result.errors || [])
+    setCompileWarnings(result.warnings || [])
     setCompileMeta(result.metadata || null)
   }
 
@@ -120,12 +123,23 @@ const PipelineCompilerPanel = () => {
             <div className='text-[12px] font-bold font-mono text-foreground/80 flex items-center gap-1.5'>
               <Code2 size={16} /> Compile to Python
             </div>
-            <button
-              onClick={handleCompile}
-              className='px-3 py-1.5 rounded text-[11px] font-mono bg-cyan-700/35 hover:bg-cyan-700/50 border border-cyan-300/30 flex items-center gap-1.5 shadow-md transition-all cursor-pointer'
-            >
-              <PlayCircle size={14} /> Compile
-            </button>
+            <div className='flex items-center gap-2'>
+              <select
+                value={validationMode}
+                onChange={(e) => setValidationMode(e.target.value === 'relax' ? 'relax' : 'strict')}
+                className='px-2 py-1 rounded text-[11px] font-mono bg-black/40 border border-foreground/30 text-foreground/85'
+                title='Validation Mode'
+              >
+                <option value='strict'>Strict</option>
+                <option value='relax'>Relax</option>
+              </select>
+              <button
+                onClick={handleCompile}
+                className='px-3 py-1.5 rounded text-[11px] font-mono bg-cyan-700/35 hover:bg-cyan-700/50 border border-cyan-300/30 flex items-center gap-1.5 shadow-md transition-all cursor-pointer'
+              >
+                <PlayCircle size={14} /> Compile
+              </button>
+            </div>
           </div>
 
           {compileMeta && (
@@ -139,6 +153,15 @@ const PipelineCompilerPanel = () => {
               <div className='flex items-center gap-1.5 mb-2 font-bold text-[12px]'><AlertCircle size={14} /> Compile Errors</div>
               {compileErrors.map((err, i) => (
                 <div key={i} className="mb-1 leading-relaxed">- {err}</div>
+              ))}
+            </div>
+          )}
+
+          {compileWarnings.length > 0 && (
+            <div className='mt-3 p-3 rounded bg-amber-900/20 border border-amber-500/30 text-[11px] font-mono text-amber-200 shadow-inner shrink-0 overflow-y-auto max-h-[120px]'>
+              <div className='flex items-center gap-1.5 mb-2 font-bold text-[12px]'><AlertCircle size={14} /> Compile Warnings</div>
+              {compileWarnings.map((warn, i) => (
+                <div key={i} className="mb-1 leading-relaxed">- {warn}</div>
               ))}
             </div>
           )}

@@ -12,6 +12,7 @@ export const JSONDatasetDef = {
   inputs: [],
 
   outputs: [
+    { name: 'out',          datatype: 'any',        shape: [] },
     { name: 'data',         datatype: 'tensor',     shape: ['B', 'feature_dim'] },
     { name: 'labels',       datatype: 'tensor',     shape: ['B'] },
     { name: 'schema',       datatype: 'dict',        shape: [] },

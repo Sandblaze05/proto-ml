@@ -14,6 +14,7 @@ export const ImageFolderDatasetDef = {
 
   // Typed output ports — downstream nodes validate against these
   outputs: [
+    { name: 'out',         datatype: 'any',        shape: [] },
     { name: 'images',      datatype: 'tensor',     shape: ['B', 'C', 'H', 'W'] },
     { name: 'labels',      datatype: 'tensor',     shape: ['B'] },
     { name: 'classes',     datatype: 'list',        shape: ['num_classes'] },

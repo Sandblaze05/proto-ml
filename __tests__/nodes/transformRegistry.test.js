@@ -43,4 +43,30 @@ describe('transformRegistry', () => {
       expect.arrayContaining(['tensor', 'sequence', 'dict', 'fallback']),
     );
   });
+
+  it('registers runtime-backed tabular, image, and text transforms', () => {
+    const types = TRANSFORM_NODES.map((node) => node.type);
+
+    expect(types).toEqual(expect.arrayContaining([
+      'transform.tabular.drop_columns',
+      'transform.tabular.fill_missing',
+      'transform.tabular.standard_scaler',
+      'transform.tabular.minmax_scaler',
+      'transform.tabular.label_encoding',
+      'transform.tabular.one_hot_encoding',
+      'transform.image.resize',
+      'transform.image.normalize',
+      'transform.image.grayscale',
+      'transform.image.center_crop',
+      'transform.image.random_flip',
+      'transform.image.color_jitter',
+      'transform.image.gaussian_blur',
+      'transform.image.random_rotation',
+      'transform.text.lowercase',
+      'transform.text.remove_punctuation',
+      'transform.text.tokenize',
+      'transform.text.stopword_removal',
+      'transform.text.truncation',
+    ]));
+  });
 });

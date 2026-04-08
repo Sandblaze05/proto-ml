@@ -818,7 +818,7 @@ const DashboardPage = () => {
 
 			{filteredMyPipelines.length === 0 ? (
 				<div className="border-2 border-dashed border-foreground/10 rounded-3xl p-16 text-center bg-foreground/5 flex flex-col items-center gap-6">
-					<div className="w-16 h-16 bg-foreground/5 rounded-2xl flex items-center justify-center text-foreground/20">
+					<div className="w-16 h-16 bg-foreground/5 rounded-2xl flex items-center justify-center text-foreground">
 						<Layout size={32} />
 					</div>
 					<div className="max-w-sm">

@@ -1,18 +1,19 @@
 'use client';
 
 import React, { useCallback, useEffect, useRef, useState, useMemo } from 'react';
-import ReactFlow, { 
-  Background, 
-  useReactFlow, 
-  ReactFlowProvider, 
-  Handle, 
-  Position, 
-  useStore, 
+import ReactFlow, {
+  Background,
+  useReactFlow,
+  ReactFlowProvider,
+  Handle,
+  Position,
+  useStore,
   useOnSelectionChange
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 import dagre from 'dagre';
-import { View, Minus, Plus, Maximize, Minimize2, Trash2, 
+import {
+  View, Minus, Plus, Maximize, Minimize2, Trash2,
   AlignCenterHorizontal, AlignCenterVertical,
   CheckCircle2, AlertCircle, Info, X, Wand2,
   MousePointer2, Pencil, Eraser, Type, Undo2, Redo2, ChevronLeft, ChevronRight, Lock, Unlock
@@ -143,10 +144,10 @@ function ZoomControls({ readOnly }) {
   return (
     <div style={containerStyle}>
       {!readOnly && (
-        <button 
-          aria-label="Tidy Layout" 
-          title="Tidy Layout" 
-          style={{ ...buttonStyle, background: 'var(--color-foreground)', color: 'var(--color-background)' }} 
+        <button
+          aria-label="Tidy Layout"
+          title="Tidy Layout"
+          style={{ ...buttonStyle, background: 'var(--color-foreground)', color: 'var(--color-background)' }}
           onClick={onLayout}
           className="hover:scale-110 active:scale-95 shadow-[0_0_20px_rgba(250,235,215,0.3)] border-none"
         >
@@ -230,8 +231,8 @@ function CustomNode({ id, data }) {
   );
 }
 
-const nodeTypes = { 
-  custom: CustomNode,  
+const nodeTypes = {
+  custom: CustomNode,
   datasetNode: DatasetNode,
   transformNode: TransformNode,
   annotationNode: AnnotationNode,
@@ -242,7 +243,7 @@ const edgeTypes = {};
 function EdgeAwareMiniMap() {
   const { nodes, edges, showMinimap, drawings } = useUIStore();
   const { setViewport } = useReactFlow();
-  const transform = useStore(s => s.transform); 
+  const transform = useStore(s => s.transform);
   const rfWidth = useStore(s => s.width);
   const rfHeight = useStore(s => s.height);
   const nodeColorByType = useMemo(() => {
@@ -360,14 +361,14 @@ function EdgeAwareMiniMap() {
 
   return (
     <div className="absolute bottom-[80px] right-[16px] w-[220px] h-[140px] bg-background border border-foreground/40 rounded-xl overflow-hidden z-50 shadow-2xl cursor-crosshair group active:scale-95 transition-transform duration-200 pointer-events-auto">
-      <svg 
-        viewBox={`${minX} ${minY} ${mapW} ${mapH}`} 
+      <svg
+        viewBox={`${minX} ${minY} ${mapW} ${mapH}`}
         className="w-full h-full"
         preserveAspectRatio="xMidYMid meet"
         onClick={onMapClick}
       >
         <rect x={minX} y={minY} width={mapW} height={mapH} fill="var(--color-background)" opacity="1" />
-        
+
         {/* Edges */}
         {edges.map(e => {
           const source = nodes.find(n => n.id === e.source);
@@ -381,36 +382,36 @@ function EdgeAwareMiniMap() {
           const y1 = source.position.y + sH / 2;
           const x2 = target.position.x;
           const y2 = target.position.y + tH / 2;
-          
+
           const cx1 = x1 + (x2 - x1) / 2;
           const cy1 = y1;
           const cx2 = x1 + (x2 - x1) / 2;
           const cy2 = y2;
 
           return (
-            <path 
-              key={e.id} 
-              d={`M ${x1} ${y1} C ${cx1} ${cy1}, ${cx2} ${cy2}, ${x2} ${y2}`} 
-              fill="none" 
-              stroke="var(--color-foreground)" 
-              strokeWidth="2" 
+            <path
+              key={e.id}
+              d={`M ${x1} ${y1} C ${cx1} ${cy1}, ${cx2} ${cy2}, ${x2} ${y2}`}
+              fill="none"
+              stroke="var(--color-foreground)"
+              strokeWidth="2"
               vectorEffect="non-scaling-stroke"
-              opacity="0.34" 
+              opacity="0.34"
             />
           );
         })}
 
         {/* Drawings */}
         {drawings.map((draw, i) => (
-          <path 
-            key={`draw-${i}`} 
-            d={draw.path} 
-            stroke={draw.color} 
-            strokeWidth={1} 
-            fill="none" 
+          <path
+            key={`draw-${i}`}
+            d={draw.path}
+            stroke={draw.color}
+            strokeWidth={1}
+            fill="none"
             opacity={0.5}
-            strokeLinecap="round" 
-            strokeLinejoin="round" 
+            strokeLinecap="round"
+            strokeLinejoin="round"
           />
         ))}
 
@@ -480,8 +481,8 @@ function Spotlight({ isOpen, onClose }) {
 
   const filtered = useMemo(() => {
     if (!search) return flatNodes.slice(0, 5);
-    return flatNodes.filter(n => 
-      n.label.toLowerCase().includes(search.toLowerCase()) || 
+    return flatNodes.filter(n =>
+      n.label.toLowerCase().includes(search.toLowerCase()) ||
       n.type.toLowerCase().includes(search.toLowerCase())
     );
   }, [search, flatNodes]);
@@ -492,7 +493,7 @@ function Spotlight({ isOpen, onClose }) {
     if (isOpen) {
       setSearch('');
       setSelectedIndex(0);
-      gsap.fromTo(containerRef.current, 
+      gsap.fromTo(containerRef.current,
         { scale: 0.9, opacity: 0, y: -20 },
         { scale: 1, opacity: 1, y: 0, duration: 0.3, ease: 'power3.out' }
       );
@@ -508,7 +509,7 @@ function Spotlight({ isOpen, onClose }) {
       x: (-x + safeWidth / 2) / zoom,
       y: (-y + safeHeight / 2) / zoom,
     };
-    
+
     // Logic copied from NodePalette.js handleAdd
     const isDataset = node.id.startsWith('dataset.');
     const isLifecycle = node.id.startsWith('lifecycle.');
@@ -584,14 +585,14 @@ function Spotlight({ isOpen, onClose }) {
 
   return (
     <div className="fixed inset-0 z-1000 flex items-start justify-center pt-32 bg-black/60 backdrop-blur-sm px-4" onClick={onClose}>
-      <div 
+      <div
         ref={containerRef}
         className="w-full max-w-xl bg-background/95 backdrop-blur-2xl border border-foreground/20 rounded-2xl shadow-2xl overflow-hidden"
         onClick={e => e.stopPropagation()}
       >
         <div className="flex items-center gap-3 p-4 border-b border-foreground/10">
           <Wand2 className="text-foreground/40" size={20} />
-          <input 
+          <input
             autoFocus
             className="flex-1 bg-transparent border-none outline-none text-lg font-mono placeholder:text-foreground/20"
             placeholder="Search nodes or type 'transform'..."
@@ -603,12 +604,11 @@ function Spotlight({ isOpen, onClose }) {
         </div>
         <div className="max-h-[350px] overflow-y-auto p-2">
           {filtered.map((node, i) => (
-            <div 
+            <div
               key={node.id}
               onClick={() => onAddNode(node)}
-              className={`flex items-center justify-between p-3 rounded-xl cursor-pointer transition-all ${
-                i === selectedIndex ? 'bg-foreground/10 shadow-inner' : 'hover:bg-foreground/5'
-              }`}
+              className={`flex items-center justify-between p-3 rounded-xl cursor-pointer transition-all ${i === selectedIndex ? 'bg-foreground/10 shadow-inner' : 'hover:bg-foreground/5'
+                }`}
             >
               <div className="flex items-center gap-3">
                 <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: node.color + '22' }}>
@@ -701,9 +701,9 @@ const ArrowStyleIcon = ({ type, active }) => {
 };
 
 function FloatingToolbar() {
-  const { 
-    undo, redo, history, future, 
-    activeTool, setActiveTool, 
+  const {
+    undo, redo, history, future,
+    activeTool, setActiveTool,
     activeAnnotationShape, setActiveAnnotationShape,
     annotationColor, setAnnotationColor,
     addToast, setNodes, nodes
@@ -730,16 +730,16 @@ function FloatingToolbar() {
     const onMove = (me) => {
       const dist = Math.sqrt(Math.pow(me.clientX - e.clientX, 2) + Math.pow(me.clientY - e.clientY, 2));
       if (dist > 3) hasMoved = true;
-      
+
       setIsDragging(true);
-      
+
       // Approximate dimensions for clamping
       const width = isCollapsed ? 60 : 340;
       const height = isCollapsed ? 60 : 70;
-      
+
       const newX = Math.max(0, Math.min(me.clientX - startX, window.innerWidth - width));
       const newY = Math.max(0, Math.min(me.clientY - startY, window.innerHeight - height));
-      
+
       setPos({ x: newX, y: newY });
     };
     const onUp = () => {
@@ -794,7 +794,7 @@ function FloatingToolbar() {
   const shapeType = d.shapeType;
 
   return (
-    <div 
+    <div
       ref={dragRef}
       className={`fixed z-1100 transition-shadow duration-300 ${isDragging ? 'shadow-2xl scale-[1.02]' : 'shadow-xl'}`}
       style={{ left: pos.x, top: pos.y }}
@@ -802,7 +802,7 @@ function FloatingToolbar() {
       <div className="flex flex-col bg-background/90 backdrop-blur-2xl border border-foreground/20 rounded-2xl p-1 shadow-2xl">
         <div className="flex items-center">
           {/* Drag Handle */}
-          <div 
+          <div
             onMouseDown={onStartDrag}
             className="px-2 py-4 cursor-grab active:cursor-grabbing hover:bg-foreground/5 transition-colors rounded-l-xl"
           >
@@ -815,37 +815,37 @@ function FloatingToolbar() {
 
           <div className="flex items-center gap-1 px-1">
             <div className="flex bg-foreground/5 rounded-xl p-1 gap-1">
-              <button 
-              onClick={() => { setActiveTool('select'); setActiveAnnotationShape(null); setShowShapes(false); }}
-              className={`p-2 rounded-lg transition-all ${activeTool === 'select' && !activeAnnotationShape ? 'bg-background shadow-sm text-foreground' : 'text-foreground/40 hover:text-foreground hover:bg-foreground/5'}`}
-              title="Select Tool (V)"
-            >
-              <MousePointer2 size={18} />
-            </button>
-            <button 
-              onClick={() => { setActiveTool('draw'); setActiveAnnotationShape(null); setShowShapes(false); }}
-              className={`p-2 rounded-lg transition-all ${activeTool === 'draw' ? 'bg-background shadow-sm text-foreground' : 'text-foreground/40 hover:text-foreground hover:bg-foreground/5'}`}
-              title="Draw Mode (D)"
-            >
-              <Pencil size={18} />
-            </button>
-            <button 
-              onClick={() => { setActiveTool('erase'); setActiveAnnotationShape(null); setShowShapes(false); }}
-              className={`p-2 rounded-lg transition-all ${activeTool === 'erase' ? 'bg-background shadow-sm text-foreground' : 'text-foreground/40 hover:text-foreground hover:bg-foreground/5'}`}
-              title="Eraser (E)"
-            >
-              <Eraser size={18} />
-            </button>
-              
+              <button
+                onClick={() => { setActiveTool('select'); setActiveAnnotationShape(null); setShowShapes(false); }}
+                className={`p-2 rounded-lg transition-all ${activeTool === 'select' && !activeAnnotationShape ? 'bg-background shadow-sm text-foreground' : 'text-foreground/40 hover:text-foreground hover:bg-foreground/5'}`}
+                title="Select Tool (V)"
+              >
+                <MousePointer2 size={18} />
+              </button>
+              <button
+                onClick={() => { setActiveTool('draw'); setActiveAnnotationShape(null); setShowShapes(false); }}
+                className={`p-2 rounded-lg transition-all ${activeTool === 'draw' ? 'bg-background shadow-sm text-foreground' : 'text-foreground/40 hover:text-foreground hover:bg-foreground/5'}`}
+                title="Draw Mode (D)"
+              >
+                <Pencil size={18} />
+              </button>
+              <button
+                onClick={() => { setActiveTool('erase'); setActiveAnnotationShape(null); setShowShapes(false); }}
+                className={`p-2 rounded-lg transition-all ${activeTool === 'erase' ? 'bg-background shadow-sm text-foreground' : 'text-foreground/40 hover:text-foreground hover:bg-foreground/5'}`}
+                title="Eraser (E)"
+              >
+                <Eraser size={18} />
+              </button>
+
               <div className="relative">
-                <button 
+                <button
                   onClick={() => setShowShapes(!showShapes)}
                   className={`p-2 rounded-lg transition-all ${activeAnnotationShape ? 'bg-background shadow-sm text-foreground' : 'text-foreground/40 hover:text-foreground hover:bg-foreground/5'}`}
                   title="Shapes"
                 >
                   <RectIcon color={activeAnnotationShape ? '#67e8f9' : 'currentColor'} />
                 </button>
-                
+
                 {showShapes && (
                   <div className="absolute top-full mt-2 left-1/2 -translate-x-1/2 bg-background/95 backdrop-blur-2xl border border-foreground/20 rounded-xl shadow-2xl p-2 grid grid-cols-4 gap-1 z-1200 min-w-[180px]">
                     {ANNOTATION_SHAPES.map(shape => (
@@ -862,7 +862,7 @@ function FloatingToolbar() {
                 )}
               </div>
 
-              <button 
+              <button
                 onClick={() => {
                   setActiveTool('text');
                   setActiveAnnotationShape(null);
@@ -879,7 +879,7 @@ function FloatingToolbar() {
             <div className="h-6 w-px bg-foreground/10 mx-1" />
 
             <div className="flex gap-1">
-              <button 
+              <button
                 onClick={undo}
                 disabled={history.length === 0}
                 className="p-2 text-foreground/40 hover:text-foreground hover:bg-foreground/5 rounded-lg disabled:opacity-20 transition-all font-bold"
@@ -887,7 +887,7 @@ function FloatingToolbar() {
               >
                 <Undo2 size={18} />
               </button>
-              <button 
+              <button
                 onClick={redo}
                 disabled={future.length === 0}
                 className="p-2 text-foreground/40 hover:text-foreground hover:bg-foreground/5 rounded-lg disabled:opacity-20 transition-all font-bold"
@@ -901,20 +901,20 @@ function FloatingToolbar() {
 
             <div className="flex gap-1 px-1">
               {colors.map(c => (
-                <button 
+                <button
                   key={c}
                   onClick={() => {
                     setAnnotationColor(c);
                     if (selectedShapeNode) updateSelectedNode({ strokeColor: c });
                   }}
-                  className={`w-6 h-6 rounded-full border-2 transition-transform hover:scale-110 ${ (selectedShapeNode ? strokeColor === c : annotationColor === c) ? 'border-foreground' : 'border-transparent'}`}
+                  className={`w-6 h-6 rounded-full border-2 transition-transform hover:scale-110 ${(selectedShapeNode ? strokeColor === c : annotationColor === c) ? 'border-foreground' : 'border-transparent'}`}
                   style={{ backgroundColor: c }}
                 />
               ))}
             </div>
           </div>
 
-          <button 
+          <button
             onClick={() => setIsCollapsed(true)}
             className="p-2 text-foreground/20 hover:text-foreground transition-colors ml-1"
           >
@@ -1063,16 +1063,16 @@ function DrawingLayer() {
 
     // 1. Erase drawings
     const nextDrawings = beforeDrawings.filter((draw) => !pointHitsPath(draw.path, x, y, tolerance));
-    
+
     // 2. Erase shape nodes
     const nextNodes = beforeNodes.filter((node) => {
       if (node.type !== 'shapeNode') return true;
       const { x: nx, y: ny } = node.position;
       const nw = node.width || node.data.width || 180;
       const nh = node.height || node.data.height || 100;
-      
+
       const hit = x >= nx - tolerance && x <= nx + nw + tolerance &&
-                  y >= ny - tolerance && y <= ny + nh + tolerance;
+        y >= ny - tolerance && y <= ny + nh + tolerance;
       return !hit;
     });
 
@@ -1089,7 +1089,7 @@ function DrawingLayer() {
     dragRef.current = null;
     window.removeEventListener('mousemove', onDragMove);
     window.removeEventListener('mouseup', finishDrag);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const onDragMove = useCallback((event) => {
@@ -1244,8 +1244,8 @@ function DrawingLayer() {
 }
 
 function InteractiveCanvas({ onCanvasChange, onPointerMove, onEditingNodeChange, remoteCursors = [], remoteNodeEditors = [], readOnly = false }) {
-  const { 
-    nodes, edges, drawings,  
+  const {
+    nodes, edges, drawings,
     setNodes, setEdges, addNode, addEdge, removeNode, addToast, showMinimap,
     activeTool, setActiveTool, undo, redo, saveToHistory, setCanvasViewport
   } = useUIStore();
@@ -1288,7 +1288,7 @@ function InteractiveCanvas({ onCanvasChange, onPointerMove, onEditingNodeChange,
     const [x, y, zoom] = transform || [0, 0, 1];
     setCanvasViewport({ x, y, zoom, width: rfWidth, height: rfHeight });
   }, [transform, rfWidth, rfHeight, setCanvasViewport]);
-  
+
   useEffect(() => {
     const handleKeys = (e) => {
       const isTyping = ['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName);
@@ -1311,7 +1311,7 @@ function InteractiveCanvas({ onCanvasChange, onPointerMove, onEditingNodeChange,
         if (key === 'e') setActiveTool('erase');
         if (key === 't') setActiveTool('text');
       }
-      
+
       // Undo / Redo
       if ((e.metaKey || e.ctrlKey) && e.key === 'z') {
         if (e.shiftKey) redo();
@@ -1332,7 +1332,7 @@ function InteractiveCanvas({ onCanvasChange, onPointerMove, onEditingNodeChange,
     // Save to history when dragging or significant changes happen
     const isDraggableChange = changes.some(c => c.type === 'position' && c.dragging === false);
     if (isDraggableChange) saveToHistory();
-    
+
     useUIStore.getState().onNodesChange(changes);
   }, [readOnly, saveToHistory]);
 
@@ -1414,12 +1414,12 @@ function InteractiveCanvas({ onCanvasChange, onPointerMove, onEditingNodeChange,
       addEdge(connection);
       // 3. Add to Execution Graph
       addExecutionEdge(connection);
-      
+
       // Haptic-like feedback
       const targetEl = document.querySelector(`[data-id="${connection.target}"]`);
       if (targetEl) {
-        gsap.fromTo(targetEl, 
-          { scale: 1 }, 
+        gsap.fromTo(targetEl,
+          { scale: 1 },
           { scale: 1.05, duration: 0.1, yoyo: true, repeat: 1, ease: 'power2.out' }
         );
       }
@@ -1485,7 +1485,7 @@ function InteractiveCanvas({ onCanvasChange, onPointerMove, onEditingNodeChange,
     if (activeTool === 'text') {
       const position = screenToFlowPosition({ x: event.clientX, y: event.clientY });
       const newId = `note-${uuidv4().slice(0, 6)}`;
-      
+
       addNode({
         id: newId,
         type: 'annotationNode',
@@ -1725,9 +1725,9 @@ function InteractiveCanvas({ onCanvasChange, onPointerMove, onEditingNodeChange,
       )}
 
       {menu && (
-        <ContextMenu 
-          menu={menu} 
-          onClose={() => setMenu(null)} 
+        <ContextMenu
+          menu={menu}
+          onClose={() => setMenu(null)}
           screenToFlowPosition={screenToFlowPosition}
         />
       )}
@@ -1773,12 +1773,12 @@ function LiveNodeEditors({ editors, nodes, viewportTransform }) {
 }
 
 function ContextMenu({ menu, onClose, screenToFlowPosition }) {
-  const { 
-    nodes, edges, removeNode, addNode, addToast, 
+  const {
+    nodes, edges, removeNode, addNode, addToast,
     duplicateNode, clearCanvas, updateEdgeStyle, toggleNodeCollapse, toggleNodeLock
   } = useUIStore();
   const { removeExecutionNode } = useExecutionStore();
-  
+
   const containerRef = useRef(null);
 
   useEffect(() => {
@@ -1915,7 +1915,7 @@ function ShapeLayerComponents() {
 
   const onPointerDown = (e) => {
     if (!activeAnnotationShape) return;
-    
+
     e.preventDefault();
     e.stopPropagation();
 
@@ -1947,7 +1947,7 @@ function ShapeLayerComponents() {
   const onPointerUp = (e) => {
     if (!startPt) return;
     const endPt = { x: e.clientX, y: e.clientY };
-    
+
     const dragDist = Math.hypot(endPt.x - startPt.x, endPt.y - startPt.y);
     if (dragDist < 5) {
       const flowPos = screenToFlowPosition(endPt);
@@ -1958,13 +1958,13 @@ function ShapeLayerComponents() {
         width: 200,
         height: 120,
         zIndex: 10,
-        data: { 
-          shapeType: activeAnnotationShape, 
-          strokeColor: '#67e8f9', 
+        data: {
+          shapeType: activeAnnotationShape,
+          strokeColor: '#67e8f9',
           fillColor: 'none',
           strokeWidth: 2,
           strokeStyle: activeAnnotationShape.startsWith('dotted') ? 'dotted' : 'solid',
-          width: 200, height: 120 
+          width: 200, height: 120
         },
       });
       setStartPt(null); setCurrPt(null); setActiveAnnotationShape(null);

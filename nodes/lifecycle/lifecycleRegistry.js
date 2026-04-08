@@ -9,6 +9,8 @@ function createLifecycleDef({
   defaultConfig = {},
   uiSchema = {},
 }) {
+  const normalizedOutputs = Array.isArray(outputs) ? outputs : [];
+  const hasOutPort = normalizedOutputs.some((port) => port && port.name === 'out');
   return {
     type,
     kind: 'lifecycle',
@@ -18,7 +20,9 @@ function createLifecycleDef({
     accepts,
     produces,
     inputs,
-    outputs,
+    outputs: hasOutPort
+      ? normalizedOutputs
+      : [{ name: 'out', datatype: 'any', shape: [] }, ...normalizedOutputs],
     defaultConfig,
     uiSchema,
     metadata: { stage: category },
@@ -144,6 +148,8 @@ export const LIFECYCLE_NODES = [
     inputs: [
       { name: 'model', datatype: 'model', shape: [], optional: false },
       { name: 'eval_data', datatype: 'any', shape: [], optional: true },
+      { name: 'test_data', datatype: 'any', shape: [], optional: true },
+      { name: 'objective', datatype: 'loss', shape: [], optional: true },
       { name: 'targets', datatype: 'any', shape: [], optional: true },
     ],
     outputs: [
@@ -168,6 +174,7 @@ export const LIFECYCLE_NODES = [
     inputs: [
       { name: 'model', datatype: 'model', shape: [], optional: false },
       { name: 'inference_data', datatype: 'any', shape: [], optional: true },
+      { name: 'test_data', datatype: 'any', shape: [], optional: true },
     ],
     outputs: [
       { name: 'predictions', datatype: 'dict', shape: [] },
@@ -182,6 +189,99 @@ export const LIFECYCLE_NODES = [
       batch_size: { type: 'number', min: 1, max: 4096, step: 1 },
       return_probabilities: { type: 'boolean' },
       threshold: { type: 'number', min: 0, max: 1, step: 0.01 },
+    },
+  }),
+  createLifecycleDef({
+    type: 'lifecycle.core.hyperparameter_tuner',
+    label: 'Hyperparameter Tuner',
+    category: 'core-workflow',
+    inputs: [
+      { name: 'model', datatype: 'model', shape: [], optional: true },
+      { name: 'train_data', datatype: 'any', shape: [], optional: true },
+      { name: 'objective', datatype: 'loss', shape: [], optional: true },
+    ],
+    outputs: [
+      { name: 'best_params', datatype: 'dict', shape: [] },
+      { name: 'search_report', datatype: 'dict', shape: [] },
+    ],
+    defaultConfig: {
+      method: 'random',
+      max_trials: 20,
+      metric: 'accuracy',
+    },
+    uiSchema: {
+      method: { type: 'enum', options: ['random', 'grid', 'bayesian'] },
+      max_trials: { type: 'number', min: 1, max: 1000, step: 1 },
+      metric: { type: 'string' },
+    },
+  }),
+  createLifecycleDef({
+    type: 'lifecycle.core.exporter',
+    label: 'Exporter',
+    category: 'core-workflow',
+    inputs: [
+      { name: 'model', datatype: 'model', shape: [], optional: false },
+      { name: 'artifacts', datatype: 'dict', shape: [], optional: true },
+    ],
+    outputs: [
+      { name: 'export_manifest', datatype: 'dict', shape: [] },
+      { name: 'package', datatype: 'dict', shape: [] },
+    ],
+    defaultConfig: {
+      format: 'onnx',
+      path: 'artifacts/model',
+      include_preprocessing: true,
+    },
+    uiSchema: {
+      format: { type: 'enum', options: ['onnx', 'torchscript', 'pickle', 'joblib'] },
+      path: { type: 'string' },
+      include_preprocessing: { type: 'boolean' },
+    },
+  }),
+  createLifecycleDef({
+    type: 'lifecycle.core.feature_engineer',
+    label: 'Feature Engineer',
+    category: 'core-workflow',
+    inputs: [
+      { name: 'dataset', datatype: 'any', shape: [], optional: false },
+      { name: 'config', datatype: 'dict', shape: [], optional: true },
+    ],
+    outputs: [
+      { name: 'features', datatype: 'any', shape: [] },
+      { name: 'feature_meta', datatype: 'dict', shape: [] },
+    ],
+    defaultConfig: {
+      strategy: 'auto',
+      max_features: 128,
+      include_interactions: false,
+    },
+    uiSchema: {
+      strategy: { type: 'enum', options: ['auto', 'manual', 'polynomial', 'hashing'] },
+      max_features: { type: 'number', min: 1, max: 100000, step: 1 },
+      include_interactions: { type: 'boolean' },
+    },
+  }),
+  createLifecycleDef({
+    type: 'lifecycle.core.ensemble',
+    label: 'Ensemble',
+    category: 'core-workflow',
+    inputs: [
+      { name: 'models', datatype: 'any', shape: [], optional: false },
+      { name: 'validation_data', datatype: 'any', shape: [], optional: true },
+    ],
+    outputs: [
+      { name: 'ensemble_model', datatype: 'model', shape: [] },
+      { name: 'ensemble_metrics', datatype: 'dict', shape: [] },
+    ],
+    defaultConfig: {
+      strategy: 'average',
+      weights: [],
+      optimize_weights: false,
+    },
+    uiSchema: {
+      strategy: { type: 'enum', options: ['average', 'vote', 'stacking'] },
+      weights: { type: 'array:number', label: 'Weights' },
+      optimize_weights: { type: 'boolean' },
     },
   }),
 ];
