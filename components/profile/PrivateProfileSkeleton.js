@@ -67,7 +67,7 @@ const PrivateProfileSkeleton = () => {
 								</div>
 								
 								<div className="px-6 py-4 border-t border-foreground/6 bg-foreground/1">
-									<div className="h-3 w-20 bg-foreground/5 rounded relative overflow-hidden mb-3"><Shimmer /></div>
+									<p className="text-[10px] font-black uppercase tracking-[0.2em] text-foreground/20 mb-3">Banner colors</p>
 									<div className="flex gap-2 flex-wrap">
 										{[1, 2, 3, 4, 5, 6].map(i => (
 											<div key={i} className="w-8 h-8 rounded-lg bg-foreground/5 relative overflow-hidden">
