@@ -12,6 +12,7 @@ import { useUIStore } from '@/store/useUIStore';
 import { createClient } from '@/lib/supabase/client';
 import { bootstrapClientPlugins } from '@/lib/plugins/clientPluginBootstrap';
 import { forkPipeline } from '@/lib/community';
+import CanvasSkeleton from '@/components/canvas/CanvasSkeleton';
 
 const CURSOR_COLORS = ['#67e8f9', '#f472b6', '#f59e0b', '#34d399', '#a78bfa', '#fb7185', '#22c55e', '#60a5fa'];
 
@@ -565,7 +566,7 @@ const SharedCanvasPage = () => {
   }, []);
 
   if (loading) {
-    return <div className="w-full h-screen flex items-center justify-center bg-background text-foreground">Loading...</div>;
+    return <CanvasSkeleton />;
   }
 
   if (error) {

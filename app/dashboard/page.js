@@ -2,156 +2,15 @@
 
 import React, { useEffect, useState, useMemo } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import DashboardSidebar from '@/components/dashboard/DashboardSidebar'
+import DashboardTopBar from '@/components/dashboard/DashboardTopBar'
+import PipelineThumbnail from '@/components/PipelineThumbnail'
 import { Share2, Trash2, Layout, Clock, User, ExternalLink, Edit2, Check, X, Copy, Search, Grid, List, SortAsc, SortDesc, Folder, FolderPlus, ChevronRight, ChevronDown, Star, StarOff, GripVertical, Users } from 'lucide-react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { useUIStore } from '@/store/useUIStore'
 import { publishToCommunity } from '@/lib/community'
-
-const THUMBNAIL_COLOR_MAP = {
-	'dataset.image': '#c084fc',
-	'dataset.csv': '#34d399',
-	'dataset.text': '#60a5fa',
-	'dataset.json': '#fbbf24',
-	'dataset.database': '#f87171',
-	'dataset.api': '#a78bfa',
-	'transform': '#38bdf8',
-	'lifecycle': '#f59e0b',
-	'process': '#10b981',
-	'datasetNode': '#34d399',
-	'transformNode': '#38bdf8',
-	'lifecycleNode': '#f59e0b'
-}
-
-const TYPE_LABEL_MAP = {
-	'datasetNode': 'DATASET NODE',
-	'transformNode': 'TRANSFORM NODE',
-	'lifecycleNode': 'LIFECYCLE NODE',
-	'dataset.image': 'DATASET NODE',
-	'dataset.csv': 'DATASET NODE',
-	'dataset.text': 'DATASET NODE',
-	'dataset.json': 'DATASET NODE',
-	'dataset.database': 'DATASET NODE',
-	'dataset.api': 'DATASET NODE',
-}
-
-const PipelineThumbnail = React.memo(({ nodes = [], edges = [] }) => {
-	if (!nodes || nodes.length === 0) {
-		return (
-			<div className="w-full h-32 bg-foreground/[0.03] rounded-xl mb-4 relative overflow-hidden flex items-center justify-center group-hover:bg-foreground/[0.05] transition-colors">
-				<div className="absolute inset-0 opacity-[0.05]" style={{ backgroundImage: 'radial-gradient(circle, currentColor 1px, transparent 1px)', backgroundSize: '10px 10px' }} />
-				<Layout size={24} className="text-foreground/10" />
-			</div>
-		)
-	}
-
-	const validNodes = nodes.filter(n =>
-		n.type !== 'annotationNode' &&
-		n.position &&
-		typeof n.position.x === 'number'
-	)
-
-	if (validNodes.length === 0) return <div className="w-full h-32 bg-foreground/[0.03] rounded-xl mb-4" />
-
-	const minX = Math.min(...validNodes.map(n => n.position.x))
-	const minY = Math.min(...validNodes.map(n => n.position.y))
-	const maxX = Math.max(...validNodes.map(n => n.position.x + 180))
-	const maxY = Math.max(...validNodes.map(n => n.position.y + 80))
-
-	const width = Math.max(maxX - minX, 1)
-	const height = Math.max(maxY - minY, 1)
-	const padding = 20
-
-	const scale = Math.min((300 - padding * 2) / width, (128 - padding * 2) / height, 0.4)
-
-	return (
-		<div className="w-full h-32 bg-foreground/[0.03] rounded-xl mb-4 relative overflow-hidden group-hover:bg-foreground/[0.05] transition-colors border border-foreground/5">
-			<div className="absolute inset-0 opacity-[0.03]" style={{ backgroundImage: 'radial-gradient(circle, currentColor 1px, transparent 1px)', backgroundSize: '6px 6px' }} />
-
-			<div className="relative w-full h-full flex items-center justify-center">
-				<div
-					className="relative"
-					style={{
-						width: width * scale,
-						height: height * scale,
-					}}
-				>
-					<svg
-						className="absolute inset-0 overflow-visible pointer-events-none opacity-40"
-						style={{ width: '100%', height: '100%' }}
-					>
-						{edges.map((edge, i) => {
-							const source = validNodes.find(n => n.id === edge.source)
-							const target = validNodes.find(n => n.id === edge.target)
-							if (!source || !target) return null
-
-							const sx = (source.position.x - minX + 180) * scale
-							const sy = (source.position.y - minY + 40) * scale
-							const tx = (target.position.x - minX) * scale
-							const ty = (target.position.y - minY + 40) * scale
-
-							return (
-								<path
-									key={i}
-									d={`M ${sx} ${sy} C ${sx + 20 * scale} ${sy}, ${tx - 20 * scale} ${ty}, ${tx} ${ty}`}
-									stroke="currentColor"
-									strokeWidth={1}
-									fill="none"
-								/>
-							)
-						})}
-					</svg>
-
-					{validNodes.map((node, i) => {
-						const model = node.data?.nodeModel || {}
-						const type = model.type || node.type || ''
-						const color = THUMBNAIL_COLOR_MAP[type] || THUMBNAIL_COLOR_MAP[node.type] || '#faebd7'
-						const label = model.label || node.data?.label || 'Untitled'
-						const typeLabel = TYPE_LABEL_MAP[node.type] || 'NODE'
-
-						const left = (node.position.x - minX) * scale
-						const top = (node.position.y - minY) * scale
-
-						return (
-							<div
-								key={i}
-								className="absolute rounded-md border-[0.5px] shadow-sm p-1.5 flex flex-col justify-center gap-0.5 overflow-hidden"
-								style={{
-									left,
-									top,
-									width: 180 * scale,
-									height: 80 * scale,
-									borderColor: `${color}40`,
-									backgroundColor: `${color}20`,
-									backdropFilter: 'blur(2px)'
-								}}
-							>
-								<div className="flex items-center gap-1 min-w-0">
-									<div
-										className="w-2.5 h-2.5 rounded-sm flex-shrink-0"
-										style={{ backgroundColor: color }}
-									/>
-									<span className="text-[5px] font-bold text-foreground truncate uppercase tracking-tighter">
-										{label}
-									</span>
-								</div>
-								<div
-									className="text-[3.5px] font-bold opacity-40 tracking-widest truncate pl-3.5"
-									style={{ color }}
-								>
-									{typeLabel}
-								</div>
-							</div>
-						)
-					})}
-				</div>
-			</div>
-		</div>
-	)
-}, (prevProps, nextProps) => {
-	return prevProps.nodes.length === nextProps.nodes.length &&
-		prevProps.edges.length === nextProps.edges.length
-})
+import DashboardSkeleton from '@/components/dashboard/DashboardSkeleton'
 
 const ACTIVE_PIPELINE_ID_KEY = 'protoMlActivePipelineId'
 const DRAFT_PIPELINE_NAME_KEY = 'protoMlDraftPipelineName'
@@ -198,7 +57,28 @@ const DashboardPage = () => {
 
 	const { addToast, setNodes, setEdges, setDrawings } = useUIStore()
 	const router = useRouter()
+	const searchParams = useSearchParams()
 	const supabase = createClient()
+
+	const [activeTab, setActiveTab] = useState('Home')
+
+	// Sync activeTab with URL
+	useEffect(() => {
+		const tab = searchParams.get('tab')
+		if (tab) {
+			const validTabs = ['Home', 'My Drive', 'Shared with me', 'Recent', 'Starred']
+			if (validTabs.includes(tab)) {
+				setActiveTab(tab)
+			}
+		}
+	}, [searchParams])
+
+	const handleTabChange = (tab) => {
+		setActiveTab(tab)
+		const params = new URLSearchParams(searchParams)
+		params.set('tab', tab)
+		router.push(`/dashboard?${params.toString()}`, { scroll: false })
+	}
 
 	const folders = useMemo(() => {
 		const f = new Set([UNCATEGORIZED_FOLDER_NAME, ...customFolders])
@@ -793,457 +673,314 @@ const DashboardPage = () => {
 			addToast('Failed to create copy.', 'error')
 		}
 	}
+	const handleSignOut = async () => {
+		try {
+			const { error } = await supabase.auth.signOut()
+			if (error) throw error
+			router.push('/login')
+		} catch (err) {
+			console.error('Sign out error:', err)
+			addToast('Failed to sign out.', 'error')
+		}
+	}
 
-	if (loading) return <div className="min-h-screen bg-background flex items-center justify-center text-foreground font-mono">Loading Projects...</div>
+	const renderFlatList = (pipelines, icon = 'layout') => {
+		const LucideIcon = icon === 'star' ? Star : (icon === 'clock' ? Clock : Layout)
+		const filtered = pipelines.filter(p => (p.name || '').toLowerCase().includes(searchQuery.toLowerCase()))
+		
+		if (filtered.length === 0) return (
+			<div className="border-2 border-dashed border-foreground/10 rounded-3xl p-16 text-center bg-foreground/2 flex flex-col items-center gap-6">
+				<div className="w-16 h-16 bg-foreground/5 rounded-2xl flex items-center justify-center text-foreground/20">
+					<LucideIcon size={32} />
+				</div>
+				<div className="max-w-sm">
+					<p className="text-foreground font-bold text-lg mb-2">
+						{searchQuery ? `No pipelines matching "${searchQuery}"` : `No ${activeTab.toLowerCase()} yet`}
+					</p>
+					<p className="text-foreground/50 text-sm">
+						{searchQuery ? 'Try adjusting your search terms.' : `Items you ${activeTab.toLowerCase() === 'starred' ? 'star' : 'interact with'} will appear here.`}
+					</p>
+				</div>
+			</div>
+		)
 
-	return (
-		<div className="min-h-screen bg-background text-foreground font-mono p-8">
-			<div className="max-w-6xl mx-auto">
-
-				<header className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 border-b border-foreground/10 pb-6 gap-4">
-					<div>
-						<h1 className="text-4xl font-bold tracking-tighter uppercase">My Pipelines</h1>
-						<p className="text-foreground/50 text-sm mt-2">Manage your saved and shared ML workflows</p>
-					</div>
-					<div className="flex flex-wrap gap-3 w-full md:w-auto mt-4 md:mt-0">
-						<Link
-							href="/profile"
-							className="px-4 py-2 border border-foreground/20 text-foreground font-bold rounded-xl hover:bg-foreground/10 transition-all cursor-pointer flex-1 md:flex-none text-center flex items-center justify-center gap-3 group"
-							title="Customize Your Profile"
+		return (
+			<div className={viewMode === 'grid' ? "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" : "flex flex-col gap-3"}>
+				{filtered.map(p => (
+					<div
+						key={p.id}
+						onContextMenu={(e) => handleContextMenu(e, p, 'my')}
+						className={`group bg-foreground/5 border border-foreground/10 rounded-2xl hover:border-foreground/30 transition-all shadow-sm cursor-pointer ${viewMode === 'list' ? 'flex items-center justify-between p-4' : 'p-6'}`}
+					>
+						<div className={viewMode === 'list' ? "flex items-center gap-6 flex-1 min-w-0" : ""}>
+							{viewMode === 'grid' && <PipelineThumbnail nodes={p.nodes} edges={p.edges} />}
+							<div className={`flex justify-between items-start ${viewMode === 'list' ? 'mb-0 flex-1' : 'mb-4'}`}>
+								<div className="flex items-center gap-2 min-w-0 pr-4 relative text-foreground">
+									<h3 className={`text-lg font-bold truncate ${viewMode === 'list' ? 'max-w-[200px] md:max-w-md' : ''}`}>{p.name || 'Untitled Pipeline'}</h3>
+									{p.is_starred && <Star size={14} className="text-amber-400 shrink-0" />}
+								</div>
+								<button
+									onClick={(e) => { e.stopPropagation(); handleStarPipeline(p) }}
+									className={`p-2 transition-colors ${p.is_starred ? 'text-amber-400' : 'text-foreground/40 hover:text-amber-400'}`}
+								>
+									{p.is_starred ? <StarOff size={16} /> : <Star size={16} />}
+								</button>
+							</div>
+							<div className="flex items-center gap-4 text-[10px] text-foreground/50">
+								<span className="flex items-center gap-1"><Clock size={12} /> {new Date(p.updated_at).toLocaleDateString()}</span>
+							</div>
+						</div>
+						<Link 
+							href={`/canvas/${p.id}`} 
+							className={viewMode === 'list' ? "ml-4 px-4 py-2 bg-foreground text-background rounded-xl font-bold text-sm" : "mt-6 block w-full py-3 bg-foreground/10 rounded-xl font-bold text-sm text-center group-hover:bg-foreground group-hover:text-background transition-all"}
 						>
-							<div className="w-8 h-8 rounded-full border border-foreground/10 bg-foreground/5 flex items-center justify-center overflow-hidden shrink-0">
-								{profile?.avatar_url || user?.user_metadata?.avatar_url ? (
-									<img src={profile?.avatar_url || user?.user_metadata?.avatar_url} alt="Profile" className="w-full h-full object-cover" />
-								) : (
-									<User size={16} />
+							Open Workspace
+						</Link>
+					</div>
+				))}
+			</div>
+		)
+	}
+
+	const renderSharedTab = () => {
+		if (filteredSharedPipelines.length === 0) return (
+			<div className="border border-foreground/10 rounded-3xl p-12 text-center bg-foreground/5 flex flex-col items-center gap-4">
+				<div className="w-12 h-12 bg-foreground/5 rounded-xl flex items-center justify-center text-foreground/20">
+					<Share2 size={24} />
+				</div>
+				<p className="text-foreground/60 font-bold text-sm">No shared pipelines found</p>
+			</div>
+		)
+
+		return (
+			<div className={viewMode === 'grid' ? "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" : "flex flex-col gap-3"}>
+				{filteredSharedPipelines.map(p => (
+					<div 
+						key={p.id} 
+						onContextMenu={(e) => handleContextMenu(e, p, 'shared')}
+						className={`group bg-foreground/5 border border-foreground/10 rounded-2xl hover:border-foreground/30 transition-all shadow-sm ${viewMode === 'list' ? 'flex items-center justify-between p-4' : 'p-6'}`}
+					>
+						<div className={viewMode === 'list' ? "flex items-center gap-6 flex-1 min-w-0" : ""}>
+							{viewMode === 'grid' && <PipelineThumbnail nodes={p.nodes} edges={p.edges} />}
+							<div className="flex justify-between items-start mb-4">
+								<h3 className="text-lg font-bold truncate text-foreground">{p.name || 'Shared Pipeline'}</h3>
+								<span className="px-2 py-0.5 text-[8px] font-bold uppercase rounded border bg-blue-500/10 text-blue-400 border-blue-500/20">
+									{p.share_permission === 'edit' ? 'Can Edit' : 'Read Only'}
+								</span>
+							</div>
+						</div>
+						<Link href={`/canvas/${p.id}`} className="mt-6 block w-full py-3 bg-foreground/10 rounded-xl font-bold text-sm text-center group-hover:bg-foreground group-hover:text-background transition-all">
+							Open Shared Workspace
+						</Link>
+					</div>
+				))}
+			</div>
+		)
+	}
+
+	const renderHomeTab = () => (
+		<section className="mb-16">
+			<div className="flex justify-between items-center mb-6">
+				<h2 className="text-xl font-bold flex items-center gap-2 text-foreground">
+					<Layout size={20} /> Personal Workspaces
+					<span className="text-xs font-normal text-foreground/40 ml-2 bg-foreground/5 px-2 py-0.5 rounded-full">{filteredMyPipelines.length}</span>
+				</h2>
+				<div className="flex gap-2">
+					{isAddingFolder ? (
+						<div className="flex gap-2">
+							<input
+								value={newFolderName}
+								onChange={(e) => setNewFolderName(e.target.value)}
+								className="text-xs bg-background border border-foreground/20 rounded-lg px-3 py-1 outline-none text-foreground"
+								placeholder="Folder name..."
+								autoFocus
+								onKeyDown={(e) => e.key === 'Enter' && handleAddFolder()}
+							/>
+							<button onClick={handleAddFolder} className="p-1 hover:text-emerald-400"><Check size={16} /></button>
+							<button onClick={() => setIsAddingFolder(false)} className="p-1 hover:text-red-400"><X size={16} /></button>
+						</div>
+					) : (
+						<button
+							onClick={() => setIsAddingFolder(true)}
+							className="text-xs font-bold uppercase tracking-widest text-foreground/40 hover:text-foreground flex items-center gap-2 bg-foreground/5 px-3 py-1 rounded-lg transition-all"
+						>
+							<FolderPlus size={14} /> New Folder
+						</button>
+					)}
+				</div>
+			</div>
+
+			{filteredMyPipelines.length === 0 ? (
+				<div className="border-2 border-dashed border-foreground/10 rounded-3xl p-16 text-center bg-foreground/5 flex flex-col items-center gap-6">
+					<div className="w-16 h-16 bg-foreground/5 rounded-2xl flex items-center justify-center text-foreground/20">
+						<Layout size={32} />
+					</div>
+					<div className="max-w-sm">
+						<p className="text-foreground font-bold text-lg mb-2">Your workspace is empty</p>
+						<button onClick={handleNewCanvas} className="px-8 py-3 bg-foreground text-background font-bold rounded-xl hover:opacity-90 shadow-lg flex items-center gap-2">
+							Create New Pipeline <ExternalLink size={16} />
+						</button>
+					</div>
+				</div>
+			) : (
+				<div className="space-y-6">
+					{Object.entries(groupedPipelines).map(([folderName, items]) => {
+						if (folderName === UNCATEGORIZED_FOLDER_NAME && items.length === 0) return null
+						return (
+							<div key={folderName} className="space-y-4">
+								<div 
+									className={`flex items-center gap-2 group w-full p-1 rounded-xl transition-colors ${dragOverFolder === folderName ? 'bg-amber-400/5 ring-1 ring-amber-400/20' : ''}`}
+									onDragOver={handleFolderDragOver(folderName)}
+									onDragLeave={handleFolderDragLeave}
+									onDrop={handleFolderDrop(folderName)}
+								>
+									<button onClick={() => toggleFolder(folderName)} className="flex items-center gap-2 flex-1 text-foreground hover:text-amber-400 transition-colors">
+										{expandedFolders.includes(folderName) ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
+										<Folder size={18} className={folderName === STARRED_FOLDER_NAME ? 'text-amber-400' : 'text-amber-400/60'} />
+										<span className="font-bold text-sm uppercase tracking-widest">{folderName}</span>
+										<span className="text-[10px] bg-foreground/5 px-1.5 py-0.5 rounded-full">{items.length}</span>
+									</button>
+								</div>
+								{expandedFolders.includes(folderName) && (
+									<div 
+										className={viewMode === 'grid' ? "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" : "flex flex-col gap-3"}
+										onDragOver={handleFolderDragOver(folderName)}
+										onDragLeave={handleFolderDragLeave}
+										onDrop={handleFolderDrop(folderName)}
+									>
+										{items.length === 0 ? (
+											<div className="col-span-full border border-dashed border-foreground/10 rounded-2xl py-8 text-center text-xs font-bold uppercase tracking-widest text-foreground/20 italic">
+												Empty Folder — Drop projects here
+											</div>
+										) : items.map(p => (
+											<div 
+												key={p.id} 
+												draggable
+												onDragStart={handlePipelineDragStart(p.id)}
+												onDragEnd={handlePipelineDragEnd}
+												onContextMenu={(e) => handleContextMenu(e, p, 'my')}
+												className={`group bg-foreground/5 border border-foreground/10 rounded-2xl hover:border-foreground/30 transition-all shadow-sm ${viewMode === 'list' ? 'flex items-center justify-between p-4' : 'p-6'}`}
+											>
+												<div className={viewMode === 'list' ? "flex items-center gap-6 flex-1 min-w-0" : ""}>
+													{viewMode === 'grid' && <PipelineThumbnail nodes={p.nodes} edges={p.edges} />}
+													<div className="flex justify-between items-start mt-4 mb-4">
+														<h3 className="text-lg font-bold truncate text-foreground">{p.name || 'Untitled Pipeline'}</h3>
+														<button onClick={() => handleStarPipeline(p)} className={p.is_starred ? 'text-amber-400' : 'text-foreground/40'}><Star size={18} /></button>
+													</div>
+													<Link href={`/canvas/${p.id}`} className="block w-full py-3 bg-foreground/10 rounded-xl font-bold text-sm text-center group-hover:bg-foreground group-hover:text-background transition-all">Open Workspace</Link>
+												</div>
+											</div>
+										))}
+									</div>
 								)}
 							</div>
-							<span className="hidden sm:inline">Profile</span>
-						</Link>
-						<Link
-							href="/community"
-							className="px-6 py-2 border border-amber-400 text-amber-400 font-bold rounded-full hover:bg-amber-400/10 transition-all cursor-pointer flex-1 md:flex-none text-center flex items-center justify-center gap-2"
-						>
-							<Users size={16} /> Community
-						</Link>
-					<button
-						onClick={handleNewCanvas}
-						className="px-6 py-2 bg-foreground text-background font-bold rounded-full hover:opacity-90 transition-all cursor-pointer w-full md:w-auto text-center"
-					>
-						New Canvas
-					</button>
-					</div>
-				</header>
+						)
+					})}
+				</div>
+			)}
+		</section>
+	)
 
-				{/* Controls Section */}
-				<div className="flex flex-col md:flex-row justify-between items-center mb-12 gap-4 bg-foreground/5 p-4 rounded-2xl border border-foreground/10">
-					<div className="relative w-full md:w-96">
-						<Search className="absolute left-3 top-1/2 -translate-y-1/2 text-foreground/40" size={18} />
-						<input
-							type="text"
-							placeholder="Search pipelines..."
-							value={searchQuery}
-							onChange={(e) => setSearchQuery(e.target.value)}
-							className="w-full bg-background border border-foreground/10 rounded-xl py-2 pl-10 pr-4 text-sm focus:border-foreground/30 outline-none transition-all"
-						/>
-					</div>
+	if (loading) return <DashboardSkeleton />
 
-					<div className="flex items-center gap-3 w-full md:w-auto overflow-x-auto pb-2 md:pb-0">
-						<div className="flex items-center gap-2 bg-background border border-foreground/10 rounded-xl p-1">
+	return (
+		<div className="dashboard-grid bg-background text-foreground font-sans">
+			<DashboardSidebar 
+				onNew={handleNewCanvas} 
+				activeTab={activeTab} 
+				onTabChange={handleTabChange}
+				user={user}
+				profile={profile}
+				groupedPipelines={groupedPipelines}
+				onSignOut={handleSignOut}
+				className="dashboard-sidebar shadow-xl z-20" 
+			/>
+			
+			<DashboardTopBar 
+				user={user} 
+				profile={profile} 
+				searchQuery={searchQuery} 
+				setSearchQuery={setSearchQuery} 
+				sortBy={sortBy}
+				setSortBy={setSortBy}
+				sortOrder={sortOrder}
+				setSortOrder={setSortOrder}
+				className="dashboard-topbar"
+			/>
+
+			<main className="dashboard-main no-scrollbar">
+				<div className="max-w-7xl mx-auto">
+					{/* Suggested Section - Google Drive Style - Only on Home */}
+					{activeTab === 'Home' && !searchQuery && (
+						<section className="mb-10">
+							<h2 className="text-sm font-medium text-foreground/60 mb-4 px-1 uppercase tracking-wider">Suggested</h2>
+							<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+								{recentlyEdited.slice(0, 4).map(p => (
+									<div 
+										key={`suggested-${p.id}`}
+										onContextMenu={(e) => handleContextMenu(e, p, 'my')}
+										className="group bg-background border border-foreground/10 rounded-xl hover:border-amber-400/50 hover:bg-amber-400/20 transition-all p-4 relative cursor-pointer overflow-hidden shadow-sm hover:shadow-md border-l-4 border-l-amber-400"
+									>
+										<div className="h-28 mb-3 overflow-hidden rounded-lg pointer-events-none">
+											<PipelineThumbnail nodes={p.nodes} edges={p.edges} />
+										</div>
+										<div className="flex items-center gap-2">
+											<Folder size={16} className="text-amber-400 shrink-0" />
+											<h3 className="text-sm font-medium truncate">{p.name || 'Untitled Pipeline'}</h3>
+										</div>
+										<p className="text-[10px] text-foreground/40 mt-1 flex items-center gap-1">
+											<Clock size={10} /> Edited {new Date(p.updated_at).toLocaleDateString()}
+										</p>
+										<Link href={`/canvas/${p.id}`} className="absolute inset-0 z-10" />
+									</div>
+								))}
+							</div>
+						</section>
+					)}
+
+					{/* Standard Dashboard Content */}
+					<header className="flex justify-between items-center mb-6">
+						<h1 className="text-2xl font-bold tracking-tight text-foreground">
+							{searchQuery ? `Search results for "${searchQuery}"` : activeTab}
+						</h1>
+						
+						<div className="flex items-center gap-2 bg-foreground/5 p-1 rounded-lg">
 							<button
 								onClick={() => setViewMode('grid')}
-								className={`p-1.5 rounded-lg transition-all ${viewMode === 'grid' ? 'bg-foreground text-background' : 'text-foreground/40 hover:text-foreground'}`}
+								className={`p-1.5 rounded-md transition-all ${viewMode === 'grid' ? 'bg-background shadow-sm text-foreground font-bold' : 'text-foreground/40 hover:text-foreground'}`}
 								title="Grid View"
 							>
 								<Grid size={18} />
 							</button>
 							<button
 								onClick={() => setViewMode('list')}
-								className={`p-1.5 rounded-lg transition-all ${viewMode === 'list' ? 'bg-foreground text-background' : 'text-foreground/40 hover:text-foreground'}`}
+								className={`p-1.5 rounded-md transition-all ${viewMode === 'list' ? 'bg-background shadow-sm text-foreground font-bold' : 'text-foreground/40 hover:text-foreground'}`}
 								title="List View"
 							>
 								<List size={18} />
 							</button>
 						</div>
+					</header>
 
-						<div className="h-6 w-px bg-foreground/10 mx-1" />
+					{/* Tab Content Rendering */}
+					<div className="min-h-[400px]">
+						{/* My Drive / Home Tab */}
+						{activeTab === 'Home' && renderHomeTab()}
 
-						<div className="flex items-center gap-2">
-							<select
-								value={sortBy}
-								onChange={(e) => setSortBy(e.target.value)}
-								className="bg-background border border-foreground/10 rounded-xl py-2 px-3 text-xs font-bold uppercase tracking-wider outline-none focus:border-foreground/30 cursor-pointer"
-							>
-								<option value="updated_at">Last Updated</option>
-								<option value="name">Name</option>
-							</select>
-							<button
-								onClick={() => setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc')}
-								className="p-2 bg-background border border-foreground/10 rounded-xl text-foreground/60 hover:text-foreground transition-all"
-								title={sortOrder === 'asc' ? 'Sort Ascending' : 'Sort Descending'}
-							>
-								{sortOrder === 'asc' ? <SortAsc size={18} /> : <SortDesc size={18} />}
-							</button>
-						</div>
+						{/* Shared Tab */}
+						{activeTab === 'Shared with me' && renderSharedTab()}
+
+						{/* Recent Tab */}
+						{activeTab === 'Recent' && renderFlatList(recentlyEdited, 'clock')}
+
+						{/* Starred Tab */}
+						{activeTab === 'Starred' && renderFlatList(filteredMyPipelines.filter(p => p.is_starred), 'star')}
 					</div>
-				</div>
-
-				{/* Recently Edited Section */}
-				{!searchQuery && recentlyEdited.length > 0 && (
-					<section className="mb-12">
-						<h2 className="text-xl font-bold mb-4 flex items-center gap-2">
-							<Clock size={20} /> Recently Edited
-						</h2>
-						<div className="flex gap-4 overflow-x-auto pb-4 snap-x [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
-							{recentlyEdited.map(p => (
-								<div 
-									key={`recent-${p.id}`}
-									onContextMenu={(e) => handleContextMenu(e, p, 'my')}
-									className="group bg-foreground/5 border border-foreground/10 rounded-2xl hover:border-foreground/30 transition-all shadow-sm snap-start shrink-0 w-72 flex flex-col p-4 relative cursor-context-menu"
-								>
-									<PipelineThumbnail nodes={p.nodes} edges={p.edges} />
-									<div className="mt-2 flex justify-between items-start">
-										<div className="min-w-0 pr-2">
-											<div className="flex items-center gap-1.5 mb-0.5">
-												<h3 className="text-sm font-bold truncate">{p.name || 'Untitled Pipeline'}</h3>
-												{p.is_public && <span className="bg-amber-400/20 text-amber-400 border border-amber-400/30 px-1.5 py-0.5 rounded text-[8px] font-bold uppercase tracking-wider shrink-0" title="Published to Community">Public</span>}
-											</div>
-											<p className="text-[10px] text-foreground/50 flex items-center gap-1 mt-1">
-												<Clock size={10} /> Edited {new Date(p.updated_at).toLocaleDateString()}
-											</p>
-										</div>
-									</div>
-									<Link
-										href={`/canvas/${p.id}`}
-										className="absolute inset-0 z-10"
-										title="Open Workspace"
-									/>
-								</div>
-							))}
-						</div>
-					</section>
-				)}
-
-				<section className="mb-16">
-					<div className="flex justify-between items-center mb-6">
-						<h2 className="text-xl font-bold flex items-center gap-2">
-							<Layout size={20} /> Personal Workspaces
-							<span className="text-xs font-normal text-foreground/40 ml-2 bg-foreground/5 px-2 py-0.5 rounded-full">{filteredMyPipelines.length}</span>
-						</h2>
-						<div className="flex gap-2">
-							{isAddingFolder ? (
-								<div className="flex gap-2">
-									<input
-										value={newFolderName}
-										onChange={(e) => setNewFolderName(e.target.value)}
-										className="text-xs bg-background border border-foreground/20 rounded-lg px-3 py-1 outline-none"
-										placeholder="Folder name..."
-										autoFocus
-										onKeyDown={(e) => e.key === 'Enter' && handleAddFolder()}
-									/>
-									<button onClick={handleAddFolder} className="p-1 hover:text-emerald-400"><Check size={16} /></button>
-									<button onClick={() => setIsAddingFolder(false)} className="p-1 hover:text-red-400"><X size={16} /></button>
-								</div>
-							) : (
-								<button
-									onClick={() => setIsAddingFolder(true)}
-									className="text-xs font-bold uppercase tracking-widest text-foreground/40 hover:text-foreground flex items-center gap-2 bg-foreground/5 px-3 py-1 rounded-lg transition-all"
-								>
-									<FolderPlus size={14} /> New Folder
-								</button>
-							)}
-						</div>
-					</div>
-
-					{filteredMyPipelines.length === 0 ? (
-						<div className="border-2 border-dashed border-foreground/10 rounded-3xl p-16 text-center bg-foreground/[0.02] flex flex-col items-center gap-6">
-							<div className="w-16 h-16 bg-foreground/5 rounded-2xl flex items-center justify-center text-foreground/20">
-								<Layout size={32} />
-							</div>
-							<div className="max-w-sm">
-								<p className="text-foreground font-bold text-lg mb-2">
-									{searchQuery ? `No pipelines matching "${searchQuery}"` : 'Your workspace is empty'}
-								</p>
-								<p className="text-foreground/50 text-sm">
-									{searchQuery
-										? 'Try adjusting your search terms or filters to find what you are looking for.'
-										: 'Start by creating your first ML pipeline. You can drag and drop nodes to build your workflow.'}
-								</p>
-							</div>
-							{!searchQuery && (
-								<button
-									onClick={handleNewCanvas}
-									className="px-8 py-3 bg-foreground text-background font-bold rounded-xl hover:opacity-90 transition-all cursor-pointer shadow-lg flex items-center gap-2"
-								>
-									Create New Pipeline <ExternalLink size={16} />
-								</button>
-							)}
-							{searchQuery && (
-								<button
-									onClick={() => setSearchQuery('')}
-									className="text-foreground/60 hover:text-foreground font-bold text-sm underline underline-offset-4"
-								>
-									Clear search query
-								</button>
-							)}
-						</div>
-					) : (
-						<div className="space-y-6">
-							{Object.entries(groupedPipelines).map(([folderName, items]) => {
-								if (folderName === UNCATEGORIZED_FOLDER_NAME && items.length === 0) return null
-
-								return (
-									<div key={folderName} className="space-y-4">
-										<div className="flex items-center gap-2 group w-full">
-											<button
-												onClick={() => toggleFolder(folderName)}
-												onDragOver={handleFolderDragOver(folderName)}
-												onDragLeave={handleFolderDragLeave}
-												onDrop={handleFolderDrop(folderName)}
-												className={`flex items-center gap-2 flex-1 rounded-xl px-2 py-1 transition-colors ${dragOverFolder === folderName ? 'bg-amber-400/10 border border-amber-400/30' : ''}`}
-											>
-												{expandedFolders.includes(folderName) ? <ChevronDown size={18} className="text-foreground/20" /> : <ChevronRight size={18} className="text-foreground/20" />}
-												{folderName === STARRED_FOLDER_NAME ? <Star size={18} className="text-amber-400/80" /> : <Folder size={18} className={folderName === UNCATEGORIZED_FOLDER_NAME ? "text-foreground/20" : "text-amber-400/60"} />}
-												{renamingFolder === folderName ? (
-													<input
-														value={renameFolderValue}
-														onChange={(e) => setRenameFolderValue(e.target.value)}
-														className="text-xs bg-transparent border-b border-foreground/20 outline-none font-bold uppercase tracking-widest"
-														autoFocus
-														onKeyDown={(e) => {
-															if (e.key === 'Enter') handleRenameFolder(folderName)
-															if (e.key === 'Escape') setRenamingFolder(null)
-														}}
-													/>
-												) : (
-													<span className="font-bold text-sm uppercase tracking-widest">{folderName}</span>
-												)}
-												<span className="text-[10px] text-foreground/20 bg-foreground/5 px-1.5 py-0.5 rounded-full">{items.length}</span>
-											</button>
-
-											{folderName !== UNCATEGORIZED_FOLDER_NAME && folderName !== STARRED_FOLDER_NAME && (
-												<div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-													{renamingFolder === folderName ? (
-														<button onClick={() => handleRenameFolder(folderName)} className="p-1 text-emerald-400"><Check size={14} /></button>
-													) : (
-														<button onClick={() => { setRenamingFolder(folderName); setRenameFolderValue(folderName) }} className="p-1 text-foreground/40 hover:text-foreground"><Edit2 size={14} /></button>
-													)}
-													<button onClick={() => handleShareFolder(folderName)} className="p-1 text-foreground/40 hover:text-blue-400" title="Share Folder"><Share2 size={14} /></button>
-													<button onClick={() => setConfirmDelete({ type: 'folder', name: folderName })} className="p-1 text-foreground/40 hover:text-red-400" title="Delete Folder"><Trash2 size={14} /></button>
-												</div>
-											)}
-											<div className={`flex-1 h-px transition-colors ${dragOverFolder === folderName ? 'bg-amber-400/40' : 'bg-foreground/5'}`} />
-										</div>
-
-										{expandedFolders.includes(folderName) && (
-											<>
-												{items.length === 0 ? (
-													<div
-														onDragOver={handleFolderDragOver(folderName)}
-														onDragLeave={handleFolderDragLeave}
-														onDrop={handleFolderDrop(folderName)}
-														className={`border border-dashed rounded-2xl py-8 text-center text-xs font-bold uppercase tracking-widest transition-colors ${dragOverFolder === folderName ? 'border-amber-400/40 bg-amber-400/5 text-amber-400/60' : 'border-foreground/10 text-foreground/20'}`}
-													>
-														{folderName === STARRED_FOLDER_NAME ? 'Drop here to star' : 'Empty Folder — Move projects here'}
-													</div>
-												) : (
-													<div
-														onDragOver={handleFolderDragOver(folderName)}
-														onDragLeave={handleFolderDragLeave}
-														onDrop={handleFolderDrop(folderName)}
-														className={`rounded-2xl transition-colors ${dragOverFolder === folderName ? 'ring-1 ring-amber-400/30 bg-amber-400/[0.02]' : ''} ${viewMode === 'grid' ? "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" : "flex flex-col gap-3"}`}
-													>
-														{items.map(p => (
-															<div
-																key={p.id}
-																draggable
-																onDragStart={handlePipelineDragStart(p.id)}
-																onDragEnd={handlePipelineDragEnd}
-																onContextMenu={(e) => handleContextMenu(e, p, 'my')}
-																className={`group bg-foreground/5 border border-foreground/10 rounded-2xl hover:border-foreground/30 transition-all shadow-sm cursor-grab active:cursor-grabbing ${draggedPipelineId === p.id ? 'opacity-60 scale-[0.99]' : ''} ${viewMode === 'list' ? 'flex items-center justify-between p-4' : 'p-6'}`}
-															>
-																<div className={viewMode === 'list' ? "flex items-center gap-6 flex-1 min-w-0" : ""}>
-																	{viewMode === 'grid' && <PipelineThumbnail nodes={p.nodes} edges={p.edges} />}
-																	<div className={`flex justify-between items-start ${viewMode === 'list' ? 'mb-0 flex-1' : 'mb-4'}`}>
-																		{renamingId === p.id ? (
-																			<div className="flex items-center gap-2 flex-1 mr-4">
-																				<input
-																					value={renameValue}
-																					onChange={(e) => setRenameValue(e.target.value)}
-																					className="text-lg font-bold bg-transparent border-b border-foreground/20 outline-none w-full"
-																					autoFocus
-																					onKeyDown={(e) => {
-																						if (e.key === 'Enter') handleRename(p.id)
-																						if (e.key === 'Escape') { setRenamingId(null); setRenameValue('') }
-																					}}
-																				/>
-																				<div className="flex gap-1">
-																					<button onClick={() => handleRename(p.id)} className="p-2 text-foreground/40 hover:text-emerald-400 transition-colors" title="Save name"><Check size={16} /></button>
-																					<button onClick={() => { setRenamingId(null); setRenameValue('') }} className="p-2 text-foreground/40 hover:text-foreground transition-colors" title="Cancel rename"><X size={16} /></button>
-																				</div>
-																			</div>
-																		) : (
-																			<>
-																				<div className="flex items-center gap-2 min-w-0 pr-4 relative">
-																					<h3 className={`text-lg font-bold truncate ${viewMode === 'list' ? 'max-w-[200px] md:max-w-md' : ''}`}>{p.name || 'Untitled Pipeline'}</h3>
-																					{p.is_public && <span className="bg-amber-400/20 text-amber-400 border border-amber-400/30 px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider shrink-0 z-20" title="Published to Community">Public</span>}
-																					{p.is_starred && <Star size={14} className="text-amber-400 shrink-0" title="Starred" />}
-																				</div>
-																				<div className="flex gap-1">
-																					<button
-																						onClick={(e) => { e.stopPropagation(); handleStarPipeline(p) }}
-																						className={`p-2 transition-colors ${p.is_starred ? 'text-amber-400 hover:text-amber-300' : 'text-foreground/40 hover:text-amber-400'}`}
-																						title={p.is_starred ? 'Unstar' : 'Star'}
-																					>
-																						{p.is_starred ? <StarOff size={16} /> : <Star size={16} />}
-																					</button>
-
-																					{!p.is_starred ? (
-																						<div className="relative">
-																							<button
-																								onClick={(e) => {
-																									e.stopPropagation()
-																									setMovingPipelineId(movingPipelineId === p.id ? null : p.id)
-																								}}
-																								className={`p-2 transition-colors ${movingPipelineId === p.id ? 'text-amber-400' : 'text-foreground/40 hover:text-amber-400'}`}
-																								title="Move to folder"
-																							>
-																								<Folder size={16} />
-																							</button>
-																							{movingPipelineId === p.id && (
-																								<div className="absolute right-0 top-full mt-2 bg-background border border-foreground/10 rounded-2xl shadow-2xl py-3 z-[100] min-w-[180px] animate-in fade-in slide-in-from-top-2 duration-200">
-																									<div className="px-4 pb-2 mb-2 border-b border-foreground/5 text-[8px] font-bold uppercase tracking-widest text-foreground/30">Select Folder</div>
-																									<div className="max-h-[200px] overflow-y-auto px-2">
-																										{folders.filter(f => f !== STARRED_FOLDER_NAME).map(f => (
-																											<button
-																												key={f}
-																												type="button"
-																												onClick={(e) => {
-																													handleMoveToFolder(e, p.id, f)
-																													setMovingPipelineId(null)
-																												}}
-																												className={`w-full text-left px-3 py-2 rounded-lg text-[10px] font-bold uppercase tracking-widest hover:bg-foreground/5 transition-colors flex items-center gap-2 ${p.folder === (f === UNCATEGORIZED_FOLDER_NAME ? null : f) ? 'text-amber-400 bg-amber-400/5' : 'text-foreground/60'}`}
-																											>
-																												<Folder size={12} className={f === UNCATEGORIZED_FOLDER_NAME ? 'opacity-20' : 'text-amber-400/40'} />
-																												{f}
-																											</button>
-																										))}
-																									</div>
-																								</div>
-																							)}
-																						</div>
-																					) : null}
-																				</div>
-																			</>
-																		)}
-																	</div>
-
-																	<div className={`flex items-center gap-4 text-[10px] text-foreground/50 ${viewMode === 'list' ? 'mb-0' : 'mb-6'}`}>
-																		<span className="flex items-center gap-1 whitespace-nowrap"><Clock size={12} /> {new Date(p.updated_at).toLocaleDateString()}</span>
-																		<span className="flex items-center gap-1 whitespace-nowrap"><User size={12} /> Me</span>
-																	</div>
-																</div>
-
-																<div className={viewMode === 'list' ? "flex items-center gap-4 ml-4" : ""}>
-																	{viewMode === 'list' && (
-																		<Link
-																			href={`/canvas/${p.id}`}
-																			className="flex items-center justify-center gap-2 bg-foreground text-background rounded-xl font-bold text-sm px-4 py-2 hover:opacity-90 transition-all"
-																		>
-																			Open <ExternalLink size={14} />
-																		</Link>
-																	)}
-																	{viewMode === 'grid' && (
-																		<Link
-																			href={`/canvas/${p.id}`}
-																			className="flex items-center justify-center gap-2 w-full py-3 bg-foreground/10 rounded-xl font-bold text-sm group-hover:bg-foreground group-hover:text-background transition-all"
-																		>
-																			Open Workspace <ExternalLink size={14} />
-																		</Link>
-																	)}
-																</div>
-															</div>
-														))}
-													</div>
-												)}
-											</>
-										)}
-									</div>
-								)
-							})}
-						</div>
-					)}
-				</section>
-
-				<section>
-					<h2 className="text-xl font-bold mb-6 flex items-center gap-2">
-						<Share2 size={20} /> Shared With Me
-						<span className="text-xs font-normal text-foreground/40 ml-2 bg-foreground/5 px-2 py-0.5 rounded-full">{filteredSharedPipelines.length}</span>
-					</h2>
-					{filteredSharedPipelines.length === 0 ? (
-						<div className="border border-foreground/10 rounded-3xl p-12 text-center bg-foreground/[0.01] flex flex-col items-center gap-4">
-							<div className="w-12 h-12 bg-foreground/5 rounded-xl flex items-center justify-center text-foreground/20">
-								<Share2 size={24} />
-							</div>
-							<div className="max-w-xs">
-								<p className="text-foreground/60 font-bold text-sm">
-									{searchQuery ? `No shared pipelines matching "${searchQuery}"` : 'No shared pipelines yet'}
-								</p>
-								{!searchQuery && (
-									<p className="text-foreground/40 text-xs mt-1">
-										When others share their pipelines with you, they will appear here.
-									</p>
-								)}
-							</div>
-							{searchQuery && (
-								<button
-									onClick={() => setSearchQuery('')}
-									className="text-foreground/40 hover:text-foreground font-bold text-xs underline underline-offset-4"
-								>
-									Clear search
-								</button>
-							)}
-						</div>
-					) : (
-						<div className={viewMode === 'grid' ? "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" : "flex flex-col gap-3"}>
-							{filteredSharedPipelines.map(p => (
-								<div 
-									key={p.id} 
-									onContextMenu={(e) => handleContextMenu(e, p, 'shared')}
-									className={`group bg-foreground/5 border border-foreground/10 rounded-2xl hover:border-foreground/30 transition-all shadow-sm ${viewMode === 'list' ? 'flex items-center justify-between p-4' : 'p-6'}`}
-								>
-									<div className={viewMode === 'list' ? "flex items-center gap-6 flex-1 min-w-0" : ""}>
-										{viewMode === 'grid' && <PipelineThumbnail nodes={p.nodes} edges={p.edges} />}
-										<div className={`flex justify-between items-start ${viewMode === 'list' ? 'mb-0 flex-1' : 'mb-4'}`}>
-											<h3 className={`text-lg font-bold truncate pr-4 ${viewMode === 'list' ? 'max-w-[200px] md:max-w-md' : ''}`}>{p.name || 'Shared Pipeline'}</h3>
-											<span className={`px-2 py-0.5 text-[8px] font-bold uppercase rounded border ${p.share_permission === 'edit' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-blue-500/10 text-blue-400 border-blue-500/20'}`}>
-												{p.share_permission === 'edit' ? 'Can Edit' : 'Read Only'}
-											</span>
-										</div>
-										<div className={`flex items-center gap-4 text-[10px] text-foreground/50 ${viewMode === 'list' ? 'mb-0' : 'mb-6'}`}>
-											<span className="flex items-center gap-1 whitespace-nowrap"><Clock size={12} /> {new Date(p.updated_at).toLocaleDateString()}</span>
-											<span className="flex items-center gap-1 whitespace-nowrap"><User size={12} /> {p.share_scope === 'public' ? 'Public link' : 'Direct share'}</span>
-										</div>
-									</div>
-
-									<div className={viewMode === 'list' ? "flex items-center gap-2 ml-4" : "flex gap-2"}>
-										<Link
-											href={`/canvas/${p.id}?access=${p.share_permission === 'edit' ? 'edit' : 'view'}`}
-											className={`flex items-center justify-center gap-2 bg-foreground/10 rounded-xl font-bold text-sm hover:bg-foreground hover:text-background transition-all ${viewMode === 'list' ? 'px-4 py-2' : 'w-full py-3'}`}
-										>
-											{viewMode === 'list' ? 'Open' : (p.share_permission === 'edit' ? 'Open Pipeline' : 'View Pipeline')} <ExternalLink size={14} />
-										</Link>
-									</div>
-								</div>
-							))}
-						</div>
-					)}
-				</section>
 
 				{/* Context Menu */}
 				{contextMenu && (
 					<div 
-						className="fixed z-[3000] min-w-[200px] bg-background border border-foreground/10 rounded-2xl shadow-2xl py-2 animate-in fade-in zoom-in-95 duration-100"
+						className="fixed z-50 min-w-[200px] bg-background border border-foreground/10 rounded-2xl shadow-2xl py-2 animate-in fade-in zoom-in-95 duration-100"
 						style={{ top: contextMenu.y, left: contextMenu.x }}
 						onContextMenu={(e) => e.preventDefault()}
 					>
@@ -1308,7 +1045,7 @@ const DashboardPage = () => {
 
 				{/* Publish to Community Modal */}
 				{publishModal && (
-					<div className="fixed inset-0 z-[2000] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+					<div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
 						<div className="bg-background border border-foreground/20 rounded-3xl p-8 shadow-2xl max-w-md w-full">
 							<h3 className="text-xl font-bold mb-2 flex items-center gap-2"><Users size={20} className="text-amber-400" /> Publish Pipeline</h3>
 							<p className="text-foreground/50 text-sm mb-6">Make "{publishModal.name}" visible to the community gallery.</p>
@@ -1345,7 +1082,7 @@ const DashboardPage = () => {
 
 				{/* Confirmation Modal */}
 				{confirmDelete.type && (
-					<div className="fixed inset-0 z-[2000] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+					<div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
 						<div className="bg-background border border-foreground/20 rounded-3xl p-8 shadow-2xl max-w-sm w-full text-center">
 							<div className="w-16 h-16 bg-red-500/10 text-red-500 rounded-2xl flex items-center justify-center mx-auto mb-6">
 								<Trash2 size={32} />
@@ -1375,7 +1112,7 @@ const DashboardPage = () => {
 			</div>
 
 			{shareModalOpen && (
-				<div className="fixed inset-0 z-1000 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+				<div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
 					<div className="bg-background border border-foreground/20 rounded-2xl p-6 shadow-2xl max-w-md w-full">
 						<h2 className="text-2xl font-bold font-mono text-foreground mb-2">Share Pipeline</h2>
 						<p className="text-foreground/60 text-sm mb-4">{selectedPipeline?.name || 'Untitled Pipeline'}</p>
@@ -1480,6 +1217,7 @@ const DashboardPage = () => {
 					</div>
 				</div>
 			)}
+			</main>
 		</div>
 	)
 }

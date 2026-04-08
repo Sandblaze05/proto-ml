@@ -7,6 +7,8 @@ import Link from 'next/link'
 import PipelineThumbnail from '@/components/PipelineThumbnail'
 import { forkPipeline } from '@/lib/community'
 import { useUIStore } from '@/store/useUIStore'
+import CommunityHero from '@/components/community/CommunityHero'
+import CategoryBar, { CATEGORIES } from '@/components/community/CategoryBar'
 
 const CommunityPage = () => {
 	const [pipelines, setPipelines] = useState([])
@@ -15,6 +17,7 @@ const CommunityPage = () => {
 	const [sortBy, setSortBy] = useState('updated_at') // or 'likes_count'
 	const [likedPipelines, setLikedPipelines] = useState(new Set())
 	const [forkedIds, setForkedIds] = useState(new Set())
+	const [selectedCategory, setSelectedCategory] = useState('all')
 	
 	const { addToast } = useUIStore()
 	const supabase = createClient()
@@ -147,10 +150,18 @@ const CommunityPage = () => {
 		}
 	}
 
-	const filteredPipelines = pipelines.filter(p => 
-		(p.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-		(p.description || '').toLowerCase().includes(searchQuery.toLowerCase())
-	)
+	const filteredPipelines = pipelines.filter(p => {
+		const matchesSearch = (p.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+			(p.description || '').toLowerCase().includes(searchQuery.toLowerCase())
+		
+		const activeCategory = CATEGORIES.find(c => c.id === selectedCategory)
+		const matchesCategory = selectedCategory === 'all' || 
+			(p.tags && p.tags.some(tag => tag.toLowerCase() === activeCategory?.tag?.toLowerCase()))
+			
+		return matchesSearch && matchesCategory
+	})
+
+	const featuredPipeline = pipelines.reduce((max, p) => (p.likes_count > (max?.likes_count || 0)) ? p : max, null)
 
 	return (
 		<div className="min-h-screen bg-background text-foreground font-mono p-8">
@@ -170,6 +181,19 @@ const CommunityPage = () => {
 					</Link>
 				</header>
 
+				{/* Hero Section */}
+				{!loading && pipelines.length > 0 && selectedCategory === 'all' && !searchQuery && (
+					<CommunityHero 
+						featuredPipeline={featuredPipeline} 
+						onFork={(p) => handleForkPipeline({ preventDefault: () => {}, stopPropagation: () => {} }, p)} 
+					/>
+				)}
+
+				<CategoryBar 
+					selectedCategory={selectedCategory} 
+					onSelect={setSelectedCategory} 
+				/>
+
 				{/* Search and Filter */}
 				<div className="flex flex-col md:flex-row justify-between items-center mb-8 gap-4 bg-foreground/5 p-4 rounded-2xl border border-foreground/10">
 					<div className="relative w-full md:w-1/2">
@@ -184,12 +208,14 @@ const CommunityPage = () => {
 					</div>
 
 					<div className="flex items-center gap-3 w-full md:w-auto overflow-x-auto pb-2 md:pb-0">
+						<div className="flex items-center gap-2 text-foreground/40 text-[10px] font-black uppercase tracking-widest mr-2">
+							<SortDesc size={14} /> Sort By
+						</div>
 						<div className="flex items-center gap-2">
-							<Filter size={16} className="text-foreground/40" />
 							<select
 								value={sortBy}
 								onChange={(e) => setSortBy(e.target.value)}
-								className="bg-background border border-foreground/10 rounded-xl py-2 px-3 text-xs font-bold uppercase tracking-wider outline-none focus:border-foreground/30 cursor-pointer"
+								className="bg-background border border-foreground/10 rounded-xl py-2 px-3 text-[10px] font-black uppercase tracking-widest outline-none focus:border-foreground/30 cursor-pointer"
 							>
 								<option value="updated_at">Most Recent</option>
 								<option value="likes_count">Most Liked</option>
