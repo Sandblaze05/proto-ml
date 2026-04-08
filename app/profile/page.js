@@ -253,7 +253,7 @@ export default function ProfilePage() {
 
 								{/* Banner color picker — below profile content */}
 								<div className="px-6 py-4 border-t border-foreground/[0.06] bg-foreground/[0.01]">
-									<p className="text-[9px] font-black uppercase tracking-[0.2em] text-foreground/25 mb-3">Banner color</p>
+									<p className="text-[9px] font-black uppercase tracking-[0.2em] text-foreground/25 mb-3">Banner gradient</p>
 									<div className="flex gap-2 flex-wrap">
 										{GRADIENTS.map((grad, idx) => (
 											<button

@@ -1,5 +1,5 @@
 import React from 'react'
-import { Eye, Globe, Edit3, Sliders, Plus, ExternalLink, Heart } from 'lucide-react'
+import { Globe, Edit3, Sliders, Heart } from 'lucide-react'
 import Link from 'next/link'
 
 const ProfileWorkflowCard = ({ pipeline }) => {
@@ -9,16 +9,17 @@ const ProfileWorkflowCard = ({ pipeline }) => {
 		const diffMs = now - date
 		const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24))
 		
+		if (diffDays === 0) return 'Today'
 		if (diffDays < 30) return `${diffDays} days ago`
 		if (diffDays < 365) return `${Math.floor(diffDays / 30)} months ago`
 		return `${Math.floor(diffDays / 365)} years ago`
 	}
 
 	return (
-		<div className="group relative border-b border-foreground/5 last:border-0 hover:bg-foreground/[0.02] transition-colors p-6">
+		<div className="group relative border-b border-foreground/5 last:border-0 hover:bg-foreground/[0.01] transition-colors p-6">
 			<div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
 				<div className="flex-1 space-y-2">
-					<h3 className="text-base font-semibold text-foreground/90 group-hover:text-amber-400 transition-colors leading-snug">
+					<h3 className={`text-base font-semibold text-foreground/90 group-hover:text-amber-400 transition-colors leading-snug`}>
 						{pipeline.name || 'Untitled Workflow'}
 					</h3>
 					<div className="flex items-center gap-3 text-sm text-foreground/40">
@@ -32,7 +33,6 @@ const ProfileWorkflowCard = ({ pipeline }) => {
 				</div>
 
 				<div className="flex items-center gap-2">
-					{/* Action Icons matching the reference image */}
 					<div className="flex items-center gap-1 p-1 rounded-xl bg-foreground/2 border border-foreground/5">
 						<button className="p-2 rounded-lg hover:bg-foreground/5 text-foreground/30 hover:text-foreground/80 transition-all active:scale-95">
 							<Globe size={16} />
@@ -49,7 +49,7 @@ const ProfileWorkflowCard = ({ pipeline }) => {
 			
 			<Link 
 				href={`/canvas/${pipeline.id}?access=view`} 
-				className="absolute inset-0 z-0 bg-transparent"
+				className="absolute inset-0 z-10"
 				aria-label={`View ${pipeline.name}`}
 			/>
 		</div>
