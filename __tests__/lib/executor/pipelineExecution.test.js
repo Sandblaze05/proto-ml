@@ -512,11 +512,11 @@ describe('E2E Python Execution Validation', () => {
           tr1: { id: 'tr1', type: 'lifecycle.core.trainer', config: { epochs: 10, learning_rate: 0.001 } },
         },
         edges: [
-          { source: 'd1', target: 't1' },
-          { source: 't1', target: 's1' },
-          { source: 's1', target: 'm1', sourceHandle: 'train' },
-          { source: 'm1', target: 'tr1', sourceHandle: 'model' },
-          { source: 's1', target: 'tr1', sourceHandle: 'train' },
+          { source: 'd1', target: 't1', sourceHandle: 'features', targetHandle: 'in' },
+          { source: 't1', target: 's1', sourceHandle: 'out', targetHandle: 'dataset' },
+          { source: 's1', target: 'm1', sourceHandle: 'train', targetHandle: 'train_data' },
+          { source: 'm1', target: 'tr1', sourceHandle: 'model', targetHandle: 'model' },
+          { source: 's1', target: 'tr1', sourceHandle: 'train', targetHandle: 'train_data' },
         ],
       });
 
@@ -537,16 +537,16 @@ describe('E2E Python Execution Validation', () => {
           ev1: { id: 'ev1', type: 'lifecycle.core.evaluator', config: {} },
         },
         edges: [
-          { source: 'd1', target: 's1' },
-          { source: 's1', target: 'm1', sourceHandle: 'train' },
-          { source: 'm1', target: 'o1' },
-          { source: 'o1', target: 'tr1' },
-          { source: 'm1', target: 'tr1', sourceHandle: 'model' },
-          { source: 's1', target: 'tr1', sourceHandle: 'train' },
-          { source: 's1', target: 'tr1', sourceHandle: 'val' },
-          { source: 'tr1', target: 'ev1', sourceHandle: 'trained_model' },
-          { source: 'o1', target: 'ev1', sourceHandle: 'out' },
-          { source: 's1', target: 'ev1', sourceHandle: 'test' },
+          { source: 'd1', target: 's1', sourceHandle: 'out', targetHandle: 'dataset' },
+          { source: 's1', target: 'm1', sourceHandle: 'train', targetHandle: 'train_data' },
+          { source: 'm1', target: 'o1', sourceHandle: 'model', targetHandle: 'model' },
+          { source: 'o1', target: 'tr1', sourceHandle: 'loss', targetHandle: 'objective' },
+          { source: 'm1', target: 'tr1', sourceHandle: 'model', targetHandle: 'model' },
+          { source: 's1', target: 'tr1', sourceHandle: 'train', targetHandle: 'train_data' },
+          { source: 's1', target: 'tr1', sourceHandle: 'val', targetHandle: 'val_data' },
+          { source: 'tr1', target: 'ev1', sourceHandle: 'trained_model', targetHandle: 'model' },
+          { source: 'o1', target: 'ev1', sourceHandle: 'loss', targetHandle: 'objective' },
+          { source: 's1', target: 'ev1', sourceHandle: 'test', targetHandle: 'test_data' },
         ],
       });
 

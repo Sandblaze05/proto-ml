@@ -148,6 +148,19 @@ describe('Pipeline Compiler & Template Generation', () => {
       expect(result.errors[0]).toContain('No dataset source node found');
     });
 
+      it('injects deterministic execution seed in generated Python', () => {
+        const compiled = compileExecutionGraph({
+          nodes: { d1: { id: 'd1', type: 'dataset.csv', config: {} } },
+          edges: [],
+        }, { seed: 777 });
+
+        expect(compiled.ok).toBe(true);
+        expect(compiled.code).toContain('execution_seed = 777');
+        expect(compiled.code).toContain('random.seed(execution_seed)');
+        expect(compiled.code).toContain('np.random.seed(execution_seed)');
+        expect(compiled.metadata.executionSeed).toBe(777);
+      });
+
     it('compiles simple CSV dataset node', () => {
       const result = compileExecutionGraph({
         nodes: {
@@ -185,8 +198,8 @@ describe('Pipeline Compiler & Template Generation', () => {
           m1: { id: 'm1', type: 'lifecycle.core.model_builder', config: { family: 'linear_regression' } },
         },
         edges: [
-          { source: 'd1', target: 's1' },
-          { source: 's1', target: 'm1' },
+          { source: 'd1', target: 's1', sourceHandle: 'out', targetHandle: 'dataset' },
+          { source: 's1', target: 'm1', sourceHandle: 'train', targetHandle: 'train_data' },
         ],
       });
 
@@ -207,7 +220,7 @@ describe('Pipeline Compiler & Template Generation', () => {
             config: { objective_type: 'supervised', loss: 'auto', primary_metric: 'accuracy' },
           },
         },
-        edges: [{ source: 'd1', target: 'o1' }],
+        edges: [{ source: 'd1', target: 'o1', sourceHandle: 'targets', targetHandle: 'targets' }],
       });
 
       expect(result.ok).toBe(true);
@@ -229,10 +242,10 @@ describe('Pipeline Compiler & Template Generation', () => {
           n1: { id: 'n1', type: 'lifecycle.core.ensemble', config: {} },
         },
         edges: [
-          { source: 'd1', target: 'f1' },
-          { source: 'f1', target: 'h1' },
-          { source: 'h1', target: 'n1' },
-          { source: 'n1', target: 'e1' },
+          { source: 'd1', target: 'f1', sourceHandle: 'out', targetHandle: 'dataset' },
+          { source: 'f1', target: 'h1', sourceHandle: 'features', targetHandle: 'train_data' },
+          { source: 'h1', target: 'n1', sourceHandle: 'best_params', targetHandle: 'models' },
+          { source: 'n1', target: 'e1', sourceHandle: 'ensemble_model', targetHandle: 'model' },
         ],
       });
 
@@ -316,6 +329,35 @@ describe('Pipeline Compiler & Template Generation', () => {
       expect(result.code).toContain("select_output_handle(ctx['d1']['out'], 'features')");
     });
 
+    it('produces identical output for equivalent graphs with permuted edges', () => {
+      const nodes = {
+        d1: { id: 'd1', type: 'dataset.csv', config: {} },
+        d2: { id: 'd2', type: 'dataset.csv', config: {} },
+        j1: { id: 'j1', type: 'transform.core.join', config: { strategy: 'concat' } },
+      };
+
+      const first = compileExecutionGraph({
+        nodes,
+        edges: [
+          { source: 'd1', target: 'j1', sourceHandle: 'out', targetHandle: 'left' },
+          { source: 'd2', target: 'j1', sourceHandle: 'out', targetHandle: 'right' },
+        ],
+      });
+
+      const second = compileExecutionGraph({
+        nodes,
+        edges: [
+          { source: 'd2', target: 'j1', sourceHandle: 'out', targetHandle: 'right' },
+          { source: 'd1', target: 'j1', sourceHandle: 'out', targetHandle: 'left' },
+        ],
+      });
+
+      expect(first.ok).toBe(true);
+      expect(second.ok).toBe(true);
+      expect(first.metadata.order).toEqual(second.metadata.order);
+      expect(first.code).toEqual(second.code);
+    });
+
     it('handles datasets with various types (json, csv, image, text)', () => {
       const datasetTypes = ['dataset.csv', 'dataset.json', 'dataset.image_folder', 'dataset.text'];
 
@@ -345,6 +387,21 @@ describe('Pipeline Compiler & Template Generation', () => {
       expect(result.code).toContain('node_meta');
     });
 
+    it('emits dataset output handle descriptors in compiled code', () => {
+      const result = compileExecutionGraph({
+        nodes: {
+          d1: { id: 'd1', type: 'dataset.csv', config: {} },
+        },
+        edges: [],
+      });
+
+      expect(result.ok).toBe(true);
+      expect(result.code).toContain("'dataset_type': 'dataset.csv'");
+      expect(result.code).toContain("'handle': 'features'");
+      expect(result.code).toContain("'handle': 'targets'");
+      expect(result.code).toContain("'handle': 'columns'");
+    });
+
     it('fails strict validation for unknown source handle on edge', () => {
       const result = compileExecutionGraph({
         nodes: {
@@ -368,6 +425,19 @@ describe('Pipeline Compiler & Template Generation', () => {
       }, { validationMode: 'strict' });
 
       expect(result.ok).toBe(true);
+    });
+
+    it('fails strict validation when lifecycle multi-input target handle is omitted', () => {
+      const result = compileExecutionGraph({
+        nodes: {
+          s1: { id: 's1', type: 'lifecycle.split', config: {} },
+          m1: { id: 'm1', type: 'lifecycle.core.model_builder', config: {} },
+        },
+        edges: [{ source: 's1', target: 'm1', sourceHandle: 'train' }],
+      }, { validationMode: 'strict' });
+
+      expect(result.ok).toBe(false);
+      expect(result.errors.some((err) => err.includes('missing target handle'))).toBe(true);
     });
 
     it('downgrades invalid handle issues to warnings in relax mode', () => {

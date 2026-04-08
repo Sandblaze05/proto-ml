@@ -59,6 +59,28 @@ This reflects the current implementation status in the repository.
   - Compiler now compiles from the current canvas graph and reports empty-graph errors correctly in [components/PipelineCompilerPanel.js](components/PipelineCompilerPanel.js#L1)
   - Compiler emits deterministic Python with a single run_pipeline() entrypoint in [lib/executor/pipelineCompiler.js](lib/executor/pipelineCompiler.js#L1)
 
+- Deterministic and strict edge-aware routing in compiler/runtime:
+  - Canonical source/target handle wiring with strict validation for multi-input nodes in [lib/executor/pipelineCompiler.js](lib/executor/pipelineCompiler.js#L1)
+  - Deterministic topological ordering in compiler and preview executor in [lib/executor/pipelineCompiler.js](lib/executor/pipelineCompiler.js#L1), [lib/executor/graphExecutor.js](lib/executor/graphExecutor.js#L1)
+  - Seeded reproducibility for split/preview behavior and generated runtime execution in [lib/runtimeFactories/lifecyclePreviewRuntime.js](lib/runtimeFactories/lifecyclePreviewRuntime.js#L1), [lib/pythonTemplates/runtimeHelpers.js](lib/pythonTemplates/runtimeHelpers.js#L1)
+
+- Dataset handle contract and materialization support expanded:
+  - Typed dataset-handle descriptors emitted by compiled code (out/features/targets/columns, etc.) in [lib/executor/pipelineCompiler.js](lib/executor/pipelineCompiler.js#L1)
+  - Runtime materialization for csv/json/text/image (excluding api/database sources) and handle projection in [lib/pythonTemplates/runtimeHelpers.js](lib/pythonTemplates/runtimeHelpers.js#L1)
+  - Objective/loss path now consumes materialized targets correctly in generated Python runtime in [lib/pythonTemplates/runtimeHelpers.js](lib/pythonTemplates/runtimeHelpers.js#L1)
+
+- Real backend execution path and artifact persistence:
+  - sklearn-backed trainer/evaluate/predict/export path with model/artifact persistence and model registry append in [lib/pythonTemplates/runtimeHelpers.js](lib/pythonTemplates/runtimeHelpers.js#L1)
+  - Preview fallback to generated code when runtime preview fails in [app/api/graph/preview/route.js](app/api/graph/preview/route.js#L1)
+
+- Plugin bootstrap reliability improvements:
+  - Alternate bootstrap endpoint in [app/api/plugins/route.js](app/api/plugins/route.js#L1)
+  - Client bootstrap 404 fallback from /api/plugins/bootstrap to /api/plugins in [lib/plugins/clientPluginBootstrap.js](lib/plugins/clientPluginBootstrap.js#L1)
+
+- Transform map parity fix in generated Python runtime:
+  - Core map now executes drop/select/filter/tokenize operations instead of falling back to branch semantics in [lib/pythonTemplates/runtimeHelpers.js](lib/pythonTemplates/runtimeHelpers.js#L1)
+  - Integration regression coverage added in [__tests__/lib/executor/pipelineRealExecution.integration.test.js](__tests__/lib/executor/pipelineRealExecution.integration.test.js#L1)
+
 - Node-level analysis/preview support:
   - Dataset analysis card in [components/nodes/DatasetNode.js](components/nodes/DatasetNode.js#L1)
   - Transform Preview tab with compact analysis hints in [components/nodes/TransformNode.js](components/nodes/TransformNode.js#L1)
@@ -66,7 +88,11 @@ This reflects the current implementation status in the repository.
 
 ### Validation Status
 
-- Focused Vitest suites are in place and passing for registries, templates, plugin bootstrap, execution store diagnostics, and executor preview paths.
+- Focused Vitest suites are in place and passing for registries, templates, plugin bootstrap, execution store diagnostics, compiler determinism, preview runtime paths, and Python integration.
+- Current high-signal execution suites are green locally:
+  - `npx vitest run __tests__/lib/executor/pipelineRealExecution.integration.test.js`
+  - `npx vitest run __tests__/lib/executor/pipelineCompiler.test.js __tests__/lib/executor/graphExecutor.test.js __tests__/lib/executor/pipelineExecution.test.js __tests__/lib/executor/pipelineCompiler.e2e.test.js __tests__/lib/runtimeFactories.test.js`
+- GitHub Actions CI now provisions Python 3.11 before running tests to reduce Python integration flakiness on Linux runners in [.github/workflows/ci.yml](.github/workflows/ci.yml#L1).
 - A full production build succeeds on Next.js 16.2.1.
 
 ### Remaining Work (to reach fully production-grade execution)

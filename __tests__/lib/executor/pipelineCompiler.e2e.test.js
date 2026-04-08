@@ -40,17 +40,17 @@ describe('E2E Pipeline Compilation - Canonical Workflows', () => {
         { source: 's1', target: 'm1', sourceHandle: 'train', targetHandle: 'train_data' },
         
         // ModelBuilder -> Objective
-        { source: 'm1', target: 'o1' },
+        { source: 'm1', target: 'o1', sourceHandle: 'model', targetHandle: 'model' },
         
         // Objective & ModelBuilder -> Trainer
-        { source: 'o1', target: 'tr1', sourceHandle: 'out', targetHandle: 'objective' },
+        { source: 'o1', target: 'tr1', sourceHandle: 'loss', targetHandle: 'objective' },
         { source: 'm1', target: 'tr1', sourceHandle: 'model', targetHandle: 'model' },
         { source: 's1', target: 'tr1', sourceHandle: 'train', targetHandle: 'train_data' },
         { source: 's1', target: 'tr1', sourceHandle: 'val', targetHandle: 'val_data' },
         
         // Trainer -> Evaluator
         { source: 'tr1', target: 'e1', sourceHandle: 'trained_model', targetHandle: 'model' },
-        { source: 'o1', target: 'e1', sourceHandle: 'out', targetHandle: 'objective' },
+        { source: 'o1', target: 'e1', sourceHandle: 'loss', targetHandle: 'objective' },
         { source: 's1', target: 'e1', sourceHandle: 'test', targetHandle: 'test_data' },
       ],
     });
@@ -129,15 +129,15 @@ describe('E2E Pipeline Compilation - Canonical Workflows', () => {
         ev1: { id: 'ev1', type: 'lifecycle.core.evaluator', config: { metrics: ['accuracy', 'precision', 'recall'] } },
       },
       edges: [
-        { source: 'd1', target: 's1' },
+        { source: 'd1', target: 's1', sourceHandle: 'out', targetHandle: 'dataset' },
         { source: 's1', target: 'm1', sourceHandle: 'train', targetHandle: 'train_data' },
-        { source: 'm1', target: 'o1' },
-        { source: 'o1', target: 'tr1' },
+        { source: 'm1', target: 'o1', sourceHandle: 'model', targetHandle: 'model' },
+        { source: 'o1', target: 'tr1', sourceHandle: 'loss', targetHandle: 'objective' },
         { source: 'm1', target: 'tr1', sourceHandle: 'model', targetHandle: 'model' },
         { source: 's1', target: 'tr1', sourceHandle: 'train', targetHandle: 'train_data' },
         { source: 's1', target: 'tr1', sourceHandle: 'val', targetHandle: 'val_data' },
         { source: 'tr1', target: 'ev1', sourceHandle: 'trained_model', targetHandle: 'model' },
-        { source: 'o1', target: 'ev1', sourceHandle: 'out', targetHandle: 'objective' },
+        { source: 'o1', target: 'ev1', sourceHandle: 'loss', targetHandle: 'objective' },
         { source: 's1', target: 'ev1', sourceHandle: 'test', targetHandle: 'test_data' },
       ],
     });

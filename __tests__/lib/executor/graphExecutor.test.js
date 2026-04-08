@@ -130,6 +130,34 @@ describe('GraphExecutor preview', () => {
     expect(result.test.length).toBe(1);
   });
 
+  it('executes lifecycle split deterministically with the same seed', async () => {
+    const executor = createExecutorWithDatasetMock('dataset.csv', async () => ([
+      { id: 1 },
+      { id: 2 },
+      { id: 3 },
+      { id: 4 },
+      { id: 5 },
+      { id: 6 },
+    ]));
+
+    const graph = {
+      nodes: [
+        { id: 'd1', type: 'dataset.csv', config: {} },
+        {
+          id: 's1',
+          type: 'lifecycle.split',
+          config: { train_pct: 50, val_pct: 25, test_pct: 25, shuffle: true, seed: 1234 },
+        },
+      ],
+      edges: [{ source: 'd1', target: 's1' }],
+    };
+
+    const first = await executor.preview(graph, 's1', 6);
+    const second = await executor.preview(graph, 's1', 6);
+
+    expect(first).toEqual(second);
+  });
+
   it('executes primitive model-builder to trainer flow', async () => {
     const executor = createExecutorWithDatasetMock('dataset.csv', async () => ([
       { x: 1, y: 2 },
