@@ -5,7 +5,7 @@ import { DndContext } from '@dnd-kit/core'
 import { v4 as uuidv4 } from 'uuid'
 import { useUIStore } from '@/store/useUIStore'
 import { useExecutionStore } from '@/store/useExecutionStore'
-import { AVAILABLE_NODES } from '@/components/NodePalette'
+import { getAvailableNodes } from '@/components/NodePalette'
 
 export default function CanvasProvider({ children }) {
   const addNode = useUIStore(s => s.addNode);
@@ -15,7 +15,7 @@ export default function CanvasProvider({ children }) {
     const { over, active, delta } = event;
     if (over && over.id === 'canvas-droppable') {
       const nodeTypeId = active.data.current.nodeType;
-      const template = AVAILABLE_NODES.find(n => n.id === nodeTypeId);
+      const template = getAvailableNodes().find(n => n.id === nodeTypeId);
       if (!template) return;
       
       const newNodeId = `${nodeTypeId}-${uuidv4().slice(0, 6)}`;

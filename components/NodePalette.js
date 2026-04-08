@@ -19,21 +19,21 @@ import { bootstrapClientPlugins } from '@/lib/plugins/clientPluginBootstrap';
 
 // ── Icon map for dataset node types ──────────────────────────────────────────
 const TYPE_ICON_MAP = {
-  'dataset.image':    ImageIcon,
-  'dataset.csv':      Table,
-  'dataset.text':     FileText,
-  'dataset.json':     Braces,
+  'dataset.image': ImageIcon,
+  'dataset.csv': Table,
+  'dataset.text': FileText,
+  'dataset.json': Braces,
   'dataset.database': Database,
-  'dataset.api':      Globe,
+  'dataset.api': Globe,
 };
 
 const TYPE_COLOR_MAP = {
-  'dataset.image':    '#c084fc',
-  'dataset.csv':      '#34d399',
-  'dataset.text':     '#60a5fa',
-  'dataset.json':     '#fbbf24',
+  'dataset.image': '#c084fc',
+  'dataset.csv': '#34d399',
+  'dataset.text': '#60a5fa',
+  'dataset.json': '#fbbf24',
   'dataset.database': '#f87171',
-  'dataset.api':      '#a78bfa',
+  'dataset.api': '#a78bfa',
 };
 
 const TRANSFORM_ICON_MAP = {
@@ -87,6 +87,25 @@ function buildNodeEntry(def) {
   };
 }
 
+function getBehaviorHint(def, requiredInputCount) {
+  if (!def) return '';
+
+  const acceptsWildcard = Array.isArray(def.accepts) && def.accepts.includes('*');
+  if (acceptsWildcard && requiredInputCount === 0) {
+    return 'Flexible behavior: output depends on config and upstream payload shape.';
+  }
+
+  if (def.type === 'transform.core.map') return 'Applies row/field-level mapping rules to one stream.';
+  if (def.type === 'transform.core.join') return 'Combines two streams using strategy and optional key.';
+  if (def.type === 'transform.core.route') return 'Routes payload into branches based on condition/type.';
+  if (String(def.type || '').startsWith('transform.image.')) return 'Applies image preprocessing/augmentation to vision inputs.';
+  if (String(def.type || '').startsWith('transform.tabular.')) return 'Applies tabular preprocessing for feature preparation.';
+  if (String(def.type || '').startsWith('transform.text.')) return 'Applies text normalization/token shaping before modeling.';
+  if (String(def.type || '').startsWith('lifecycle.')) return 'Coordinates training lifecycle stages and model artifacts.';
+
+  return '';
+}
+
 export function getPaletteCategories() {
   const defs = listNodeDefs();
   const datasets = defs.filter((def) => def?.kind === 'dataset').map(buildNodeEntry);
@@ -100,12 +119,13 @@ export function getPaletteCategories() {
   ];
 }
 
-// Snapshot export kept for compatibility with modules that import CATEGORIES directly.
-export const CATEGORIES = getPaletteCategories();
+export function getAvailableNodes() {
+  return getPaletteCategories().flatMap((category) => category.nodes);
+}
 
 // ── Palette item ──────────────────────────────────────────────────────────────
 function PaletteItem({ node, isInUse }) {
-  const addNode          = useUIStore(s => s.addNode);
+  const addNode = useUIStore(s => s.addNode);
   const getVisibleCenterPosition = useUIStore(s => s.getVisibleCenterPosition);
   const addExecutionNode = useExecutionStore(s => s.addExecutionNode);
   const ghostRef = useRef(null);
@@ -135,10 +155,10 @@ function PaletteItem({ node, isInUse }) {
           nodeModel: {
             type: def.type,
             label: def.label,
-            inputs:  def.inputs.map(p => p.name),
+            inputs: def.inputs.map(p => p.name),
             outputs: def.outputs.map(p => p.name),
-            config:  initialConfig,
-            schema:  { ...def.schema },
+            config: initialConfig,
+            schema: { ...def.schema },
             metadata: { ...def.metadata },
             kind: 'dataset',
             pythonCode,
@@ -147,16 +167,16 @@ function PaletteItem({ node, isInUse }) {
       });
 
       addExecutionNode(newId, {
-        type:     def.type,
-        label:    def.label,
-        inputs:   def.inputs.map(p => p.name),
-        outputs:  def.outputs.map(p => p.name),
-        portMap:  {
-          inputs:  Object.fromEntries(def.inputs.map(p  => [p.name, p])),
+        type: def.type,
+        label: def.label,
+        inputs: def.inputs.map(p => p.name),
+        outputs: def.outputs.map(p => p.name),
+        portMap: {
+          inputs: Object.fromEntries(def.inputs.map(p => [p.name, p])),
           outputs: Object.fromEntries(def.outputs.map(p => [p.name, p])),
         },
-        config:   initialConfig,
-        schema:   { ...def.schema },
+        config: initialConfig,
+        schema: { ...def.schema },
         metadata: { ...def.metadata },
         pythonCode,
       });
@@ -251,7 +271,7 @@ function PaletteItem({ node, isInUse }) {
     }
   }, [node]);
 
-  const Icon  = node.icon;
+  const Icon = node.icon;
   const color = node.color ?? '#faebd7';
   const requiredInputCount = (node.def?.inputs || []).filter((port) => port?.optional !== true).length;
   const outputCount = node.def?.outputs?.length || 0;
@@ -262,8 +282,9 @@ function PaletteItem({ node, isInUse }) {
     ? node.def.produces.join(', ')
     : '*';
   const guidanceTitle = node.def
-    ? `${node.label}\nRequired inputs: ${requiredInputCount}\nOutputs: ${outputCount}\nAccepts: ${acceptsSummary}\nProduces: ${producesSummary}`
+    ? `${node.label}\nRequired inputs: ${requiredInputCount}\nOutputs: ${outputCount}\nAccepts: ${acceptsSummary}\nProduces: ${producesSummary}${getBehaviorHint(node.def, requiredInputCount) ? `\nBehavior: ${getBehaviorHint(node.def, requiredInputCount)}` : ''}`
     : node.label;
+  const behaviorHint = node.def ? getBehaviorHint(node.def, requiredInputCount) : '';
 
   return (
     <>
@@ -354,6 +375,11 @@ function PaletteItem({ node, isInUse }) {
             {node.def && (
               <div style={{ fontSize: 9, color: '#faebd780', fontFamily: 'monospace' }}>
                 {`accepts ${acceptsSummary} -> produces ${producesSummary}`}
+              </div>
+            )}
+            {behaviorHint && (
+              <div style={{ fontSize: 9, color: '#faebd760', fontFamily: 'monospace' }}>
+                {behaviorHint}
               </div>
             )}
           </div>

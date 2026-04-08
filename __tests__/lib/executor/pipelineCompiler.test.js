@@ -5,6 +5,7 @@ const require = createRequire(import.meta.url);
 const { compileExecutionGraph } = require('../../../lib/executor/pipelineCompiler.js');
 const { generateTransformPythonCode } = require('../../../lib/pythonTemplates/transformNodeTemplate.js');
 const { generateLifecyclePythonCode } = require('../../../lib/pythonTemplates/lifecycleNodeTemplate.js');
+const { registerNodeDef, unregisterNodeDef } = require('../../../nodes/nodeRegistry.js');
 
 describe('Pipeline Compiler & Template Generation', () => {
   describe('Transform Python Code Generation', () => {
@@ -85,12 +86,13 @@ describe('Pipeline Compiler & Template Generation', () => {
     });
 
     it('generates Python code for lifecycle.core.objective', () => {
-      const config = { loss_type: 'mse', metrics: ['mae'] };
+      const config = { objective_type: 'supervised', loss: 'mse', primary_metric: 'mae' };
       const code = generateLifecyclePythonCode('lifecycle.core.objective', config);
 
       expect(code).toContain('def apply_objective():');
-      expect(code).toContain('loss_type');
+      expect(code).toContain('loss_name');
       expect(code).toContain('metrics');
+      expect(code).toContain('objective_type');
     });
 
     it('generates Python code for lifecycle.core.trainer', () => {
@@ -190,9 +192,55 @@ describe('Pipeline Compiler & Template Generation', () => {
 
       expect(result.ok).toBe(true);
       expect(result.code).toContain('apply_lifecycle');
-      expect(result.code).toContain('lifecycle.split');
-      expect(result.code).toContain('lifecycle.core.model_builder');
+      expect(result.code).toContain("apply_lifecycle('split'");
+      expect(result.code).toContain("apply_lifecycle('model'");
       expect(result.metadata.nodeCount).toBe(3);
+    });
+
+    it('normalizes objective legacy keys during compile', () => {
+      const result = compileExecutionGraph({
+        nodes: {
+          d1: { id: 'd1', type: 'dataset.csv', config: {} },
+          o1: {
+            id: 'o1',
+            type: 'lifecycle.core.objective',
+            config: { objective_type: 'supervised', loss: 'auto', primary_metric: 'accuracy' },
+          },
+        },
+        edges: [{ source: 'd1', target: 'o1' }],
+      });
+
+      expect(result.ok).toBe(true);
+      expect(result.code).toContain("'task_type': 'supervised'");
+      expect(result.code).toContain("'loss_name': 'cross_entropy'");
+      expect(result.code).toContain("'metrics': ['accuracy']");
+      expect(result.code).toContain("'loss_reduction': 'mean'");
+      expect(result.code).toContain("'label_smoothing': 0.1");
+      expect(result.code).toContain("apply_lifecycle('loss'");
+    });
+
+    it('maps extended lifecycle node types to runtime stages', () => {
+      const result = compileExecutionGraph({
+        nodes: {
+          d1: { id: 'd1', type: 'dataset.csv', config: {} },
+          h1: { id: 'h1', type: 'lifecycle.core.hyperparameter_tuner', config: {} },
+          e1: { id: 'e1', type: 'lifecycle.core.exporter', config: {} },
+          f1: { id: 'f1', type: 'lifecycle.core.feature_engineer', config: {} },
+          n1: { id: 'n1', type: 'lifecycle.core.ensemble', config: {} },
+        },
+        edges: [
+          { source: 'd1', target: 'f1' },
+          { source: 'f1', target: 'h1' },
+          { source: 'h1', target: 'n1' },
+          { source: 'n1', target: 'e1' },
+        ],
+      });
+
+      expect(result.ok).toBe(true);
+      expect(result.code).toContain("apply_lifecycle('hyperparameter_tune'");
+      expect(result.code).toContain("apply_lifecycle('export'");
+      expect(result.code).toContain("apply_lifecycle('feature_engineer'");
+      expect(result.code).toContain("apply_lifecycle('ensemble'");
     });
 
     it('detects cycles in graph', () => {
@@ -253,6 +301,21 @@ describe('Pipeline Compiler & Template Generation', () => {
       expect(result.code).toContain('apply_transform');
     });
 
+    it('uses sourceHandle-aware routing in generated code', () => {
+      const result = compileExecutionGraph({
+        nodes: {
+          d1: { id: 'd1', type: 'dataset.csv', config: {} },
+          t1: { id: 't1', type: 'transform.core.map', config: { operation: 'identity' } },
+        },
+        edges: [
+          { source: 'd1', target: 't1', sourceHandle: 'features', targetHandle: 'in' },
+        ],
+      });
+
+      expect(result.ok).toBe(true);
+      expect(result.code).toContain("select_output_handle(ctx['d1']['out'], 'features')");
+    });
+
     it('handles datasets with various types (json, csv, image, text)', () => {
       const datasetTypes = ['dataset.csv', 'dataset.json', 'dataset.image_folder', 'dataset.text'];
 
@@ -280,6 +343,82 @@ describe('Pipeline Compiler & Template Generation', () => {
       expect(result.ok).toBe(true);
       expect(result.code).toContain("'type': 'dataset.csv'");
       expect(result.code).toContain('node_meta');
+    });
+
+    it('fails strict validation for unknown source handle on edge', () => {
+      const result = compileExecutionGraph({
+        nodes: {
+          d1: { id: 'd1', type: 'dataset.csv', config: {} },
+          t1: { id: 't1', type: 'transform.core.map', config: {} },
+        },
+        edges: [{ source: 'd1', target: 't1', sourceHandle: 'does_not_exist', targetHandle: 'in' }],
+      }, { validationMode: 'strict' });
+
+      expect(result.ok).toBe(false);
+      expect(result.errors.some((err) => err.includes("unknown source handle 'does_not_exist'"))).toBe(true);
+    });
+
+    it('uses deterministic implicit target handle when target handle is omitted', () => {
+      const result = compileExecutionGraph({
+        nodes: {
+          d1: { id: 'd1', type: 'dataset.csv', config: {} },
+          t1: { id: 't1', type: 'transform.core.map', config: { operation: 'identity' } },
+        },
+        edges: [{ source: 'd1', target: 't1', sourceHandle: 'features' }],
+      }, { validationMode: 'strict' });
+
+      expect(result.ok).toBe(true);
+    });
+
+    it('downgrades invalid handle issues to warnings in relax mode', () => {
+      const result = compileExecutionGraph({
+        nodes: {
+          d1: { id: 'd1', type: 'dataset.csv', config: {} },
+          t1: { id: 't1', type: 'transform.core.map', config: {} },
+        },
+        edges: [{ source: 'd1', target: 't1', sourceHandle: 'does_not_exist', targetHandle: 'in' }],
+      }, { validationMode: 'relax' });
+
+      expect(result.ok).toBe(true);
+      expect(result.warnings.some((warn) => warn.includes("unknown source handle 'does_not_exist'"))).toBe(true);
+    });
+
+    it('validates plugin-registered node handles in strict mode', () => {
+      registerNodeDef({
+        type: 'transform.plugin.strict_ports',
+        kind: 'transform',
+        category: 'plugin',
+        label: 'Strict Ports Plugin Node',
+        accepts: ['*'],
+        produces: ['*'],
+        inputs: [{ name: 'plugin_in', datatype: 'any', shape: [], optional: false }],
+        outputs: [{ name: 'plugin_out', datatype: 'any', shape: [] }],
+      }, { overwrite: true });
+
+      try {
+        const invalid = compileExecutionGraph({
+          nodes: {
+            d1: { id: 'd1', type: 'dataset.csv', config: {} },
+            p1: { id: 'p1', type: 'transform.plugin.strict_ports', config: {} },
+          },
+          edges: [{ source: 'd1', target: 'p1', sourceHandle: 'features', targetHandle: 'in' }],
+        }, { validationMode: 'strict' });
+
+        expect(invalid.ok).toBe(false);
+        expect(invalid.errors.some((err) => err.includes("unknown target handle 'in'"))).toBe(true);
+
+        const valid = compileExecutionGraph({
+          nodes: {
+            d1: { id: 'd1', type: 'dataset.csv', config: {} },
+            p1: { id: 'p1', type: 'transform.plugin.strict_ports', config: {} },
+          },
+          edges: [{ source: 'd1', target: 'p1', sourceHandle: 'features', targetHandle: 'plugin_in' }],
+        }, { validationMode: 'strict' });
+
+        expect(valid.ok).toBe(true);
+      } finally {
+        unregisterNodeDef('transform.plugin.strict_ports');
+      }
     });
   });
 });

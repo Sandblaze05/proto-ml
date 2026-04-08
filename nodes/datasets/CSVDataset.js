@@ -12,6 +12,7 @@ export const CSVDatasetDef = {
   inputs: [],
 
   outputs: [
+    { name: 'out',          datatype: 'any',        shape: [] },
     { name: 'features',     datatype: 'tensor',     shape: ['B', 'num_features'] },
     { name: 'targets',      datatype: 'tensor',     shape: ['B'] },
     { name: 'columns',      datatype: 'list',        shape: ['num_columns'] },

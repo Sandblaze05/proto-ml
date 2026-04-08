@@ -12,6 +12,7 @@ export const TextDatasetDef = {
   inputs: [],
 
   outputs: [
+    { name: 'out',          datatype: 'any',        shape: [] },
     { name: 'input_ids',     datatype: 'sequence',   shape: ['B', 'max_length'] },
     { name: 'attention_mask', datatype: 'sequence',  shape: ['B', 'max_length'] },
     { name: 'labels',        datatype: 'tensor',     shape: ['B'] },

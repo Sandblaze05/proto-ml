@@ -158,4 +158,42 @@ describe('GraphExecutor preview', () => {
       logs: { learning_rate: 0.01 },
     });
   });
+
+  it('routes edge payload by sourceHandle deterministically', async () => {
+    const executor = new GraphExecutor({
+      get: (nodeType) => {
+        if (nodeType === 'dataset.left') {
+          return () => ({
+            getSample: async () => ({
+              rows: [{ id: 'wrong' }],
+              features: [{ id: 'expected-left' }],
+            }),
+          });
+        }
+        if (nodeType === 'dataset.right') {
+          return () => ({
+            getSample: async () => ({
+              rows: [{ id: 'expected-right' }],
+            }),
+          });
+        }
+        return runtimeFactories.get(nodeType);
+      },
+    });
+
+    const graph = {
+      nodes: [
+        { id: 'l', type: 'dataset.left', config: {} },
+        { id: 'r', type: 'dataset.right', config: {} },
+        { id: 'j', type: 'transform.core.join', config: { strategy: 'concat' } },
+      ],
+      edges: [
+        { source: 'l', target: 'j', sourceHandle: 'features', targetHandle: 'left' },
+        { source: 'r', target: 'j', sourceHandle: 'rows', targetHandle: 'right' },
+      ],
+    };
+
+    const result = await executor.preview(graph, 'j', 5);
+    expect(result).toEqual([{ id: 'expected-left' }, { id: 'expected-right' }]);
+  });
 });

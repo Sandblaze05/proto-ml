@@ -8,6 +8,10 @@ describe('nodeRegistry', () => {
     expect(NODE_REGISTRY['lifecycle.core.trainer']).toBeDefined();
     expect(NODE_REGISTRY['lifecycle.core.evaluator']).toBeDefined();
     expect(NODE_REGISTRY['lifecycle.core.predictor']).toBeDefined();
+    expect(NODE_REGISTRY['lifecycle.core.hyperparameter_tuner']).toBeDefined();
+    expect(NODE_REGISTRY['lifecycle.core.exporter']).toBeDefined();
+    expect(NODE_REGISTRY['lifecycle.core.feature_engineer']).toBeDefined();
+    expect(NODE_REGISTRY['lifecycle.core.ensemble']).toBeDefined();
   });
 
   it('includes task-agnostic core transform primitives', () => {

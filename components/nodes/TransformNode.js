@@ -341,7 +341,8 @@ export default function TransformNode({ data, id, selected }) {
           type="target"
           position={Position.Left}
           id={inp}
-          style={{ top: 22 + idx * 16, background: '#67e8f9', border: 'none', width: 8, height: 8 }}
+          style={{ top: 22 + idx * 16, background: '#fbbf24', border: 'none', width: 8, height: 8 }}
+          title={`Input port: ${inp || `in_${idx + 1}`}`}
         />
       ))}
 
@@ -444,6 +445,7 @@ export default function TransformNode({ data, id, selected }) {
           type="source"
           position={Position.Right}
           id={out}
+          title={`Output port: ${out || `out_${idx + 1}`}`}
           style={{
             top: collapsed ? 44 + 6 + idx * 22 + 9 : 44 + 34 + 220 + 6 + idx * 22 + 9,
             background: '#67e8f9',

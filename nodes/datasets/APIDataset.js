@@ -12,6 +12,7 @@ export const APIDatasetDef = {
   inputs: [],
 
   outputs: [
+    { name: 'out',          datatype: 'any',        shape: [] },
     { name: 'data',         datatype: 'tensor',     shape: ['B', 'feature_dim'] },
     { name: 'labels',       datatype: 'tensor',     shape: ['B'] },
     { name: 'raw',          datatype: 'dict',        shape: [] },
