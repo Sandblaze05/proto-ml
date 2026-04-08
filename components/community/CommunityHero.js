@@ -38,26 +38,17 @@ const CommunityHero = ({ featuredPipeline, onFork }) => {
 						</button>
 						<Link 
 							href={`/canvas/${featuredPipeline.id}?access=view`}
-							className="flex items-center gap-2 px-8 py-4 bg-foreground/5 border border-foreground/10 rounded-2xl font-black uppercase text-sm hover:bg-foreground/10 transition-all"
+							className="group flex items-center gap-2 px-8 py-4 bg-foreground/5 border border-foreground/10 rounded-2xl font-black uppercase text-sm hover:bg-foreground/10 transition-all"
 						>
 							View Snapshot <ArrowRight size={18} className="group-hover:translate-x-1 transition-transform" />
 						</Link>
-					</div>
-					
-					<div className="mt-8 flex items-center justify-center lg:justify-start gap-6 text-foreground/40 text-[10px] font-bold uppercase tracking-widest">
-						<div className="flex items-center gap-2">
-							<Users size={14} /> 5k+ Active Builders
-						</div>
-						<div className="flex items-center gap-2">
-							<GitFork size={14} /> 12k+ Total Forks
-						</div>
 					</div>
 				</div>
 
 				{/* Featured Card */}
 				<div className="flex-1 w-full max-w-xl group">
-					<div className="relative bg-background/40 backdrop-blur-3xl border border-foreground/10 rounded-4xl p-6 shadow-[0_32px_64px_-16px_rgba(0,0,0,0.3)] transition-all group-hover:scale-[1.02] group-hover:border-amber-400/30">
-						<div className="absolute -inset-0.5 bg-linear-to-br from-amber-400/20 to-purple-500/20 rounded-4xl opacity-0 group-hover:opacity-100 transition-opacity blur" />
+					<div className="relative bg-background/40 backdrop-blur-3xl border border-foreground/10 rounded-4xl p-6 shadow-[0_32px_64px_-16px_rgba(0,0,0,0.3)] transition-all group-hover:scale-[1.02] group-hover:border-amber-400/30 text-left">
+						<div className="absolute -inset-0.5 bg-gradient-to-br from-amber-400/20 to-purple-500/20 rounded-4xl opacity-0 group-hover:opacity-100 transition-opacity blur" />
 						<div className="relative">
 							{/* Large Thumbnail */}
 							<div className="h-64 mb-6 rounded-2xl overflow-hidden grayscale-[0.5] group-hover:grayscale-0 transition-all duration-700">

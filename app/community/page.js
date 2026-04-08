@@ -9,6 +9,8 @@ import { forkPipeline } from '@/lib/community'
 import { useUIStore } from '@/store/useUIStore'
 import CommunityHero from '@/components/community/CommunityHero'
 import CategoryBar, { CATEGORIES } from '@/components/community/CategoryBar'
+import CommunitySkeleton from '@/components/community/CommunitySkeleton'
+import CustomDropdown from '@/components/ui/CustomDropdown'
 
 const CommunityPage = () => {
 	const [pipelines, setPipelines] = useState([])
@@ -19,6 +21,11 @@ const CommunityPage = () => {
 	const [forkedIds, setForkedIds] = useState(new Set())
 	const [selectedCategory, setSelectedCategory] = useState('all')
 	
+	const communitySortOptions = [
+		{ value: 'updated_at', label: 'Most Recent', icon: Clock },
+		{ value: 'likes_count', label: 'Most Liked', icon: Heart },
+	]
+
 	const { addToast } = useUIStore()
 	const supabase = createClient()
 
@@ -26,7 +33,7 @@ const CommunityPage = () => {
 		const fetchCommunityPipelines = async () => {
 			const { data, error } = await supabase
 				.from('pipelines')
-				.select('*, profiles(username, avatar_url)')
+				.select('*, profiles(username, avatar_url, handle)')
 				.eq('is_public', true)
 				.eq('is_snapshot', true)
 				.order(sortBy, { ascending: false })
@@ -211,22 +218,19 @@ const CommunityPage = () => {
 						<div className="flex items-center gap-2 text-foreground/40 text-[10px] font-black uppercase tracking-widest mr-2">
 							<SortDesc size={14} /> Sort By
 						</div>
-						<div className="flex items-center gap-2">
-							<select
-								value={sortBy}
-								onChange={(e) => setSortBy(e.target.value)}
-								className="bg-background border border-foreground/10 rounded-xl py-2 px-3 text-[10px] font-black uppercase tracking-widest outline-none focus:border-foreground/30 cursor-pointer"
-							>
-								<option value="updated_at">Most Recent</option>
-								<option value="likes_count">Most Liked</option>
-							</select>
-						</div>
+						<CustomDropdown 
+							value={sortBy} 
+							onChange={setSortBy} 
+							options={communitySortOptions} 
+							variant="pill"
+							label="Community Sorting"
+						/>
 					</div>
 				</div>
 
 				{/* Grid */}
 				{loading ? (
-					<div className="text-center py-20 text-foreground/50 animate-pulse">Loading community pipelines...</div>
+					<CommunitySkeleton />
 				) : filteredPipelines.length === 0 ? (
 					<div className="text-center py-20 border border-dashed border-foreground/10 rounded-3xl bg-foreground/2">
 						<Users size={48} className="mx-auto text-foreground/20 mb-4" />
@@ -243,7 +247,10 @@ const CommunityPage = () => {
 										<h3 className="text-xl font-bold truncate pr-4 text-foreground group-hover:text-amber-400 transition-colors duration-300">{p.name || 'Untitled Pipeline'}</h3>
 										<span className="flex-shrink-0 bg-amber-400/10 text-amber-500 border border-amber-400/20 px-1.5 py-0.5 rounded text-[9px] font-black uppercase">v{p.version || 1}</span>
 									</div>
-									<div className="flex items-center gap-2 mt-2">
+									<Link 
+										href={`/u/${p.profiles?.handle || p.profiles?.username || p.author_name}`} 
+										className="flex items-center gap-2 mt-2 hover:opacity-70 transition-opacity relative z-20"
+									>
 										{p.profiles?.avatar_url ? (
 											<img src={p.profiles.avatar_url} alt={p.profiles.username} className="w-5 h-5 rounded-full object-cover border border-foreground/10" />
 										) : (
@@ -251,8 +258,8 @@ const CommunityPage = () => {
 												<Users size={10} className="text-foreground/40" />
 											</div>
 										)}
-										<p className="text-[10px] text-foreground/60 uppercase tracking-wider">by <span className="font-bold text-foreground">{p.profiles?.username || p.author_name || 'Anonymous'}</span></p>
-									</div>
+										<p className="text-[10px] text-foreground/60 uppercase tracking-wider">by <span className="font-bold text-foreground underline-offset-2 group-hover:underline decoration-amber-400/50">{p.profiles?.username || p.author_name || 'Anonymous'}</span></p>
+									</Link>
 									<p className="text-xs text-foreground/50 line-clamp-2 mt-2 leading-relaxed">
 										{p.description || 'No description provided.'}
 									</p>

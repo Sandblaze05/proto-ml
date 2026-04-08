@@ -1,42 +1,43 @@
 'use client'
 
 import React from 'react'
-import { Search, Settings, HelpCircle, LayoutGrid, User, Bell, SortAsc, SortDesc, ChevronDown } from 'lucide-react'
-import Link from 'next/link'
+import { Search, Settings, HelpCircle, Bell, SortAsc, SortDesc, Clock, Layout } from 'lucide-react'
+import CustomDropdown from '@/components/ui/CustomDropdown'
 
 const DashboardTopBar = ({ user, profile, searchQuery, setSearchQuery, sortBy, setSortBy, sortOrder, setSortOrder }) => {
+  const sortOptions = [
+    { value: 'updated_at', label: 'Last Updated', icon: Clock },
+    { value: 'name', label: 'Pipeline Name', icon: Layout },
+  ]
+
   return (
     <header className="h-16 flex items-center justify-between px-8 bg-background border-b border-foreground/5 sticky top-0 z-50">
       <div className="flex items-center gap-6 flex-1">
         <div className="max-w-xl w-full relative group">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-foreground/30 group-focus-within:text-foreground/60 transition-colors" size={20} />
+          < Search className="absolute left-4 top-1/2 -translate-y-1/2 text-foreground/30 group-focus-within:text-foreground/60 transition-colors" size={20} />
           <input
             type="text"
-            placeholder="Search..."
+            placeholder="Search pipelines..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full h-10 bg-foreground/5 border border-transparent rounded-full pl-12 pr-4 text-sm focus:bg-background focus:border-foreground/10 outline-none transition-all shadow-sm focus:shadow-md"
+            className="w-full h-10 bg-foreground/5 border border-transparent rounded-full pl-12 pr-4 text-sm focus:bg-background focus:border-foreground/10 outline-none transition-all shadow-sm focus:shadow-md placeholder:text-foreground/20 font-medium"
           />
         </div>
 
-        <div className="flex items-center gap-2 bg-foreground/5 p-1 rounded-full border border-foreground/5">
-            <div className="relative flex items-center">
-                <select
-                    value={sortBy}
-                    onChange={(e) => setSortBy(e.target.value)}
-                    className="appearance-none bg-transparent pl-4 pr-10 py-1.5 text-[11px] font-bold uppercase tracking-wider text-foreground/60 hover:text-foreground outline-none cursor-pointer transition-colors"
-                >
-                    <option value="updated_at">Last Updated</option>
-                    <option value="name">Pipeline Name</option>
-                </select>
-                <ChevronDown size={14} className="absolute right-3 text-foreground/30 pointer-events-none" />
-            </div>
+        <div className="flex items-center gap-2">
+            <CustomDropdown 
+                value={sortBy} 
+                onChange={setSortBy} 
+                options={sortOptions} 
+                variant="pill"
+                label="Sort View By"
+            />
             
-            <div className="w-px h-4 bg-foreground/10" />
-
             <button
                 onClick={() => setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc')}
-                className="p-1.5 text-foreground/40 hover:text-foreground hover:bg-foreground/5 rounded-full transition-all"
+                className={`p-2 rounded-full transition-all group ${
+                    sortOrder === 'asc' ? 'text-amber-400 hover:bg-amber-400/10' : 'text-foreground/40 hover:text-foreground hover:bg-foreground/10'
+                }`}
                 title={sortOrder === 'asc' ? 'Sort Ascending' : 'Sort Descending'}
             >
                 {sortOrder === 'asc' ? <SortAsc size={18} /> : <SortDesc size={18} />}

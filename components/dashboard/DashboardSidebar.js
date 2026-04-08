@@ -4,8 +4,9 @@ import React from 'react'
 import { Home, Folder, Users, Clock, Star, Trash2, Plus, HardDrive, LogOut, User as UserIcon, ChevronRight, ChevronDown, FileText, Layout as LayoutIcon } from 'lucide-react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import { SidebarTreeSkeleton, Shimmer } from './DashboardSkeleton'
 
-const DashboardSidebar = ({ onNew, activeTab, onTabChange, user, profile, groupedPipelines = {}, onSignOut }) => {
+const DashboardSidebar = ({ onNew, activeTab, onTabChange, user, profile, groupedPipelines = {}, onSignOut, loading = false }) => {
   const [expandedFolders, setExpandedFolders] = React.useState([])
 
   const toggleFolder = (folderName) => {
@@ -64,43 +65,47 @@ const DashboardSidebar = ({ onNew, activeTab, onTabChange, user, profile, groupe
           
           {/* Dynamic Folder Tree (integrated with main nav) */}
           <div className="space-y-1 mt-4">
-            {Object.entries(groupedPipelines).map(([folderName, pipelines]) => {
-              if (folderName === 'Starred') return null;
-              const isExpanded = expandedFolders.includes(folderName);
-              
-              return (
-                <div key={folderName} className="space-y-1">
-                  <button
-                    onClick={() => toggleFolder(folderName)}
-                    className={`w-full flex items-center gap-4 px-4 py-3 rounded-full transition-all group/folder ${isExpanded ? 'bg-foreground/5' : 'text-foreground/50 hover:bg-foreground/5 hover:text-foreground'}`}
-                  >
-                    <Folder 
-                      size={20} 
-                      className={isExpanded ? 'text-amber-400' : 'text-foreground/40 group-hover/folder:text-foreground'} 
-                    />
-                    <span className={`text-sm flex-1 text-left ${isExpanded ? 'font-bold text-foreground' : 'font-medium'}`}>{folderName}</span>
-                    {isExpanded ? <ChevronDown size={14} className="text-foreground/40" /> : <ChevronRight size={14} className="text-foreground/40" />}
-                  </button>
-                  
-                  {isExpanded && (
-                    <div className="ml-8 space-y-1 border-l border-foreground/5 pl-2">
-                      {pipelines.length === 0 ? (
-                        <div className="px-4 py-1 text-[10px] text-foreground/20 font-medium italic">Empty Folder</div>
-                      ) : pipelines.map(p => (
-                        <Link
-                          key={p.id}
-                          href={`/canvas/${p.id}`}
-                          className="flex items-center gap-3 px-4 py-2 rounded-xl text-foreground/40 hover:bg-foreground/5 hover:text-foreground transition-all group/file"
-                        >
-                          <FileText size={16} className="text-foreground/20 group-hover/file:text-foreground/40" />
-                          <span className="text-xs font-medium truncate">{p.name || 'Untitled'}</span>
-                        </Link>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
+            {loading ? (
+              <SidebarTreeSkeleton />
+            ) : (
+              Object.entries(groupedPipelines).map(([folderName, pipelines]) => {
+                if (folderName === 'Starred') return null;
+                const isExpanded = expandedFolders.includes(folderName);
+                
+                return (
+                  <div key={folderName} className="space-y-1">
+                    <button
+                      onClick={() => toggleFolder(folderName)}
+                      className={`w-full flex items-center gap-4 px-4 py-3 rounded-full transition-all group/folder ${isExpanded ? 'bg-foreground/5' : 'text-foreground/50 hover:bg-foreground/5 hover:text-foreground'}`}
+                    >
+                      <Folder 
+                        size={20} 
+                        className={isExpanded ? 'text-amber-400' : 'text-foreground/40 group/folder:text-foreground'} 
+                      />
+                      <span className={`text-sm flex-1 text-left ${isExpanded ? 'font-bold text-foreground' : 'font-medium'}`}>{folderName}</span>
+                      {isExpanded ? <ChevronDown size={14} className="text-foreground/40" /> : <ChevronRight size={14} className="text-foreground/40" />}
+                    </button>
+                    
+                    {isExpanded && (
+                      <div className="ml-8 space-y-1 border-l border-foreground/5 pl-2">
+                        {pipelines.length === 0 ? (
+                          <div className="px-4 py-1 text-[10px] text-foreground/20 font-medium italic">Empty Folder</div>
+                        ) : pipelines.map(p => (
+                          <Link
+                            key={p.id}
+                            href={`/canvas/${p.id}`}
+                            className="flex items-center gap-3 px-4 py-2 rounded-xl text-foreground/40 hover:bg-foreground/5 hover:text-foreground transition-all group/file"
+                          >
+                            <FileText size={16} className="text-foreground/20 group-hover/file:text-foreground/40" />
+                            <span className="text-xs font-medium truncate">{p.name || 'Untitled'}</span>
+                          </Link>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })
+            )}
           </div>
 
           <div className="h-px bg-foreground/5 my-4 mx-2" />
@@ -129,8 +134,17 @@ const DashboardSidebar = ({ onNew, activeTab, onTabChange, user, profile, groupe
             )}
           </div>
           <div className="flex flex-col min-w-0">
-            <span className="text-sm font-bold text-foreground truncate leading-tight">{profile?.username || profile?.full_name || user?.email?.split('@')[0] || 'User'}</span>
-            <span className="text-[10px] text-foreground/30 truncate uppercase tracking-widest font-bold">Pro Member</span>
+            {loading && !profile && !user ? (
+              <div className="space-y-1">
+                <div className="h-3 w-20 bg-foreground/10 rounded relative overflow-hidden"><Shimmer /></div>
+                <div className="h-2 w-12 bg-foreground/5 rounded relative overflow-hidden"><Shimmer /></div>
+              </div>
+            ) : (
+              <>
+                <span className="text-sm font-bold text-foreground truncate leading-tight">{profile?.username || profile?.full_name || user?.email?.split('@')[0] || 'User'}</span>
+                <span className="text-[10px] text-foreground/30 truncate uppercase tracking-widest font-bold">Pro Member</span>
+              </>
+            )}
           </div>
         </Link>
         

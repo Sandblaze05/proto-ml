@@ -5,12 +5,13 @@ import { createClient } from '@/lib/supabase/client'
 import DashboardSidebar from '@/components/dashboard/DashboardSidebar'
 import DashboardTopBar from '@/components/dashboard/DashboardTopBar'
 import PipelineThumbnail from '@/components/PipelineThumbnail'
-import { Share2, Trash2, Layout, Clock, User, ExternalLink, Edit2, Check, X, Copy, Search, Grid, List, SortAsc, SortDesc, Folder, FolderPlus, ChevronRight, ChevronDown, Star, StarOff, GripVertical, Users } from 'lucide-react'
+import { Share2, Trash2, Layout, Clock, User, ExternalLink, Edit2, Check, X, Copy, Search, Grid, List, SortAsc, SortDesc, Folder, FolderPlus, ChevronRight, ChevronDown, Star, StarOff, GripVertical, Users, Eye } from 'lucide-react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useUIStore } from '@/store/useUIStore'
 import { publishToCommunity } from '@/lib/community'
-import DashboardSkeleton from '@/components/dashboard/DashboardSkeleton'
+import DashboardSkeleton, { DashboardMainSkeleton } from '@/components/dashboard/DashboardSkeleton'
+import CustomDropdown from '@/components/ui/CustomDropdown'
 
 const ACTIVE_PIPELINE_ID_KEY = 'protoMlActivePipelineId'
 const DRAFT_PIPELINE_NAME_KEY = 'protoMlDraftPipelineName'
@@ -61,6 +62,11 @@ const DashboardPage = () => {
 	const supabase = createClient()
 
 	const [activeTab, setActiveTab] = useState('Home')
+
+	const permissionOptions = [
+		{ value: 'view', label: 'View Only', icon: Eye },
+		{ value: 'edit', label: 'Can Edit', icon: Edit2 },
+	]
 
 	// Sync activeTab with URL
 	useEffect(() => {
@@ -881,7 +887,6 @@ const DashboardPage = () => {
 		</section>
 	)
 
-	if (loading) return <DashboardSkeleton />
 
 	return (
 		<div className="dashboard-grid bg-background text-foreground font-sans">
@@ -893,6 +898,7 @@ const DashboardPage = () => {
 				profile={profile}
 				groupedPipelines={groupedPipelines}
 				onSignOut={handleSignOut}
+				loading={loading}
 				className="dashboard-sidebar shadow-xl z-20" 
 			/>
 			
@@ -964,17 +970,23 @@ const DashboardPage = () => {
 
 					{/* Tab Content Rendering */}
 					<div className="min-h-[400px]">
-						{/* My Drive / Home Tab */}
-						{activeTab === 'Home' && renderHomeTab()}
+						{loading ? (
+							<DashboardMainSkeleton />
+						) : (
+							<>
+								{/* My Drive / Home Tab */}
+								{activeTab === 'Home' && renderHomeTab()}
 
-						{/* Shared Tab */}
-						{activeTab === 'Shared with me' && renderSharedTab()}
+								{/* Shared Tab */}
+								{activeTab === 'Shared with me' && renderSharedTab()}
 
-						{/* Recent Tab */}
-						{activeTab === 'Recent' && renderFlatList(recentlyEdited, 'clock')}
+								{/* Recent Tab */}
+								{activeTab === 'Recent' && renderFlatList(recentlyEdited, 'clock')}
 
-						{/* Starred Tab */}
-						{activeTab === 'Starred' && renderFlatList(filteredMyPipelines.filter(p => p.is_starred), 'star')}
+								{/* Starred Tab */}
+								{activeTab === 'Starred' && renderFlatList(filteredMyPipelines.filter(p => p.is_starred), 'star')}
+							</>
+						)}
 					</div>
 
 				{/* Context Menu */}
@@ -1163,15 +1175,14 @@ const DashboardPage = () => {
 							</div>
 
 							<div>
-								<label className="block text-xs font-bold uppercase tracking-wider text-foreground/60 mb-1">Permission</label>
-								<select
+								<label className="block text-xs font-bold uppercase tracking-wider text-foreground/60 mb-2">Permission</label>
+								<CustomDropdown
 									value={sharePermission}
-									onChange={(e) => setSharePermission(e.target.value)}
-									className="w-full bg-foreground/5 border border-foreground/20 rounded-lg px-3 py-2 text-sm text-foreground outline-none focus:border-foreground/50"
-								>
-									<option value="view">View Only</option>
-									<option value="edit">Can Edit</option>
-								</select>
+									onChange={setSharePermission}
+									options={permissionOptions}
+									variant="input"
+									label="Select Access Level"
+								/>
 							</div>
 
 							<button

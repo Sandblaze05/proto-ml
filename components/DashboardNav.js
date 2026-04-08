@@ -1,7 +1,8 @@
 'use client'
 
 import React, { useEffect, useRef, useState } from 'react'
-import { SidebarClose, Menu, Share2, Copy, Check, Save } from 'lucide-react'
+import { SidebarClose, Menu, Share2, Copy, Check, Save, Edit2, Eye } from 'lucide-react'
+import CustomDropdown from './ui/CustomDropdown'
 import gsap from 'gsap'
 import NodePalette from './NodePalette'
 import { useUIStore } from '@/store/useUIStore'
@@ -26,6 +27,11 @@ const DashboardNav = () => {
   const [shareMode, setShareMode] = useState('email');
   const [sharePermission, setSharePermission] = useState('view');
   const [shareGenerated, setShareGenerated] = useState(false);
+  const permissionOptions = [
+    { value: 'view', label: 'View Only', icon: Eye },
+    { value: 'edit', label: 'Can Edit', icon: Edit2 },
+  ]
+
   const { nodes, edges, addToast, draftPipelineName } = useUIStore();
   const supabase = createClient();
   const pathname = usePathname();
@@ -411,15 +417,14 @@ const DashboardNav = () => {
               </div>
 
               <div>
-                <label className="block text-xs font-bold uppercase tracking-wider text-foreground/60 mb-1">Permission</label>
-                <select
+                <label className="block text-xs font-bold uppercase tracking-wider text-foreground/60 mb-2">Permission</label>
+                <CustomDropdown
                   value={sharePermission}
-                  onChange={(e) => setSharePermission(e.target.value)}
-                  className="w-full bg-foreground/5 border border-foreground/20 rounded-lg px-3 py-2 text-sm text-foreground outline-none focus:border-foreground/50"
-                >
-                  <option value="view">View Only</option>
-                  <option value="edit">Can Edit</option>
-                </select>
+                  onChange={setSharePermission}
+                  options={permissionOptions}
+                  variant="input"
+                  label="Select Access Level"
+                />
               </div>
 
               <button

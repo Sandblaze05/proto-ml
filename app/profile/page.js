@@ -4,7 +4,8 @@ import React, { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, Camera, Check, User, Github, Twitter, Save, X } from 'lucide-react'
+import { ArrowLeft, Camera, Check, User, Github, Twitter, Save, X, Linkedin, Instagram } from 'lucide-react'
+import PrivateProfileSkeleton from '@/components/profile/PrivateProfileSkeleton'
 
 const GRADIENTS = [
 	'from-amber-400 to-orange-500',
@@ -22,10 +23,12 @@ export default function ProfilePage() {
 	const [message, setMessage] = useState({ text: '', type: '' })
 
 	const [username, setUsername] = useState('')
+	const [handle, setHandle] = useState('')
+	const [handleStatus, setHandleStatus] = useState({ state: 'idle', message: '' })
 	const [about, setAbout] = useState('')
 	const [avatarUrl, setAvatarUrl] = useState('')
 	const [bannerGradient, setBannerGradient] = useState(GRADIENTS[0])
-	const [socials, setSocials] = useState({ twitter: '', github: '' })
+	const [socials, setSocials] = useState({ twitter: '', github: '', linkedin: '', instagram: '' })
 
 	const router = useRouter()
 	const supabase = createClient()
@@ -43,14 +46,53 @@ export default function ProfilePage() {
 				.single()
 
 			setUsername(profile?.username || user?.user_metadata?.full_name || user?.email?.split('@')[0] || '')
+			setHandle(profile?.handle || '')
 			setAbout(profile?.about || '')
 			setAvatarUrl(profile?.avatar_url || user?.user_metadata?.avatar_url || '')
 			setBannerGradient(profile?.banner_gradient || GRADIENTS[0])
-			setSocials(profile?.socials || { twitter: '', github: '' })
+			setSocials(profile?.socials || { twitter: '', github: '', linkedin: '', instagram: '' })
 			setLoading(false)
 		}
 		fetchProfile()
 	}, [supabase, router])
+
+	useEffect(() => {
+		if (!handle || !user) {
+			setHandleStatus({ state: 'idle', message: '' })
+			return
+		}
+		
+		const validate = async () => {
+			const normalized = handle.toLowerCase().trim()
+			
+			if (normalized.length < 3) {
+				setHandleStatus({ state: 'invalid', message: 'Too short (min 3 chars)' })
+				return
+			}
+			if (!/^[a-z0-9_]+$/.test(normalized)) {
+				setHandleStatus({ state: 'invalid', message: 'Only lowercase letters, numbers, and underscores allowed' })
+				return
+			}
+
+			setHandleStatus({ state: 'checking', message: 'Checking...' })
+			
+			const { data, error } = await supabase
+				.from('profiles')
+				.select('id')
+				.eq('handle', normalized)
+				.neq('id', user.id)
+				.maybeSingle()
+				
+			if (data) {
+				setHandleStatus({ state: 'taken', message: 'Handle is already taken' })
+			} else {
+				setHandleStatus({ state: 'available', message: 'Handle is available' })
+			}
+		}
+
+		const timer = setTimeout(validate, 400)
+		return () => clearTimeout(timer)
+	}, [handle, user, supabase])
 
 	const handleImageUpload = (e) => {
 		const file = e.target.files?.[0]
@@ -64,14 +106,42 @@ export default function ProfilePage() {
 		reader.readAsDataURL(file)
 	}
 
+	const stripUsername = (value, platform) => {
+		if (!value) return ''
+		const platformPatterns = {
+			github: /github\.com\/([^/?#]+)/i,
+			twitter: /(?:x|twitter)\.com\/([^/?#]+)/i,
+			linkedin: /linkedin\.com\/in\/([^/?#]+)/i,
+			instagram: /instagram\.com\/([^/?#]+)/i
+		}
+		const pattern = platformPatterns[platform]
+		if (pattern) {
+			const match = value.match(pattern)
+			if (match) return match[1]
+		}
+		// Handle cases like "@username"
+		if (value.startsWith('@') && platform !== 'linkedin') return value.slice(1)
+		return value
+	}
+
+	const handleSocialChange = (platform, value) => {
+		const clean = stripUsername(value, platform)
+		setSocials(prev => ({ ...prev, [platform]: clean }))
+	}
+
 	const saveProfile = async () => {
 		if (!user) return
 		setSaving(true)
 		setMessage({ text: '', type: '' })
 		try {
+			if (handleStatus.state === 'taken' || handleStatus.state === 'invalid') {
+				throw new Error(handleStatus.message || 'Invalid handle')
+			}
+
 			const { error } = await supabase.from('profiles').upsert({
 				id: user.id,
 				username: username.trim(),
+				handle: handle.toLowerCase().trim(),
 				about: about.trim(),
 				avatar_url: avatarUrl,
 				banner_gradient: bannerGradient,
@@ -89,15 +159,7 @@ export default function ProfilePage() {
 	}
 
 	if (loading) {
-		return (
-			<div className="min-h-screen bg-background text-foreground flex items-center justify-center">
-				<div className="flex items-center gap-3">
-					<div className="w-2 h-2 rounded-full bg-amber-400 animate-bounce" style={{ animationDelay: '0ms' }} />
-					<div className="w-2 h-2 rounded-full bg-amber-400 animate-bounce" style={{ animationDelay: '150ms' }} />
-					<div className="w-2 h-2 rounded-full bg-amber-400 animate-bounce" style={{ animationDelay: '300ms' }} />
-				</div>
-			</div>
-		)
+		return <PrivateProfileSkeleton />
 	}
 
 	return (
@@ -155,7 +217,7 @@ export default function ProfilePage() {
 									<h1 className="text-lg font-black tracking-tight leading-none mb-0.5">
 										{username || <span className="text-foreground/20">Anonymous</span>}
 									</h1>
-									{username && <p className="text-xs text-foreground/35 font-mono mb-3">@{username}</p>}
+									{handle && <p className="text-xs text-amber-400 font-bold mb-3 tracking-tight">@{handle.toLowerCase()}</p>}
 
 									{about ? (
 										<p className="text-sm text-foreground/60 leading-relaxed border-l-2 border-amber-400/50 pl-3 mb-4">
@@ -174,6 +236,16 @@ export default function ProfilePage() {
 										{socials.twitter && (
 											<div className="flex items-center gap-1.5 text-xs text-foreground/40">
 												<Twitter size={11} /><span className="font-mono">{socials.twitter}</span>
+											</div>
+										)}
+										{socials.linkedin && (
+											<div className="flex items-center gap-1.5 text-xs text-foreground/40">
+												<Linkedin size={11} /><span className="font-mono">{socials.linkedin}</span>
+											</div>
+										)}
+										{socials.instagram && (
+											<div className="flex items-center gap-1.5 text-xs text-foreground/40">
+												<Instagram size={11} /><span className="font-mono">{socials.instagram}</span>
 											</div>
 										)}
 									</div>
@@ -218,22 +290,48 @@ export default function ProfilePage() {
 								</div>
 								<div className="space-y-4">
 									<div>
-										<label className="block text-[10px] font-bold text-foreground/35 mb-2 uppercase tracking-widest">Username</label>
+										<label className="block text-[10px] font-bold text-foreground/35 mb-2 uppercase tracking-widest">Display Name</label>
 										<input
 											type="text"
 											value={username}
 											onChange={(e) => setUsername(e.target.value)}
-											className="w-full bg-foreground/[0.04] border border-foreground/[0.08] rounded-xl px-4 py-3 text-sm font-semibold outline-none focus:border-amber-400/50 focus:bg-foreground/[0.06] transition-all placeholder:text-foreground/20"
-											placeholder="CoolDeveloper99"
+											className="w-full bg-foreground/4 border border-foreground/8 rounded-xl px-4 py-3 text-sm font-semibold outline-none focus:border-amber-400/50 focus:bg-foreground/6 transition-all placeholder:text-foreground/20"
+											placeholder="Derek Cheung"
 										/>
-										<p className="text-[10px] text-foreground/25 mt-1.5">Shown publicly instead of your email.</p>
+										<p className="text-[10px] text-foreground/25 mt-1.5">Your full name or a nickname.</p>
+									</div>
+									<div>
+										<label className="block text-[10px] font-bold text-foreground/35 mb-2 uppercase tracking-widest">Unique Handle</label>
+										<div className="relative">
+											<span className="absolute left-4 top-1/2 -translate-y-1/2 text-foreground/30 font-bold text-sm">@</span>
+											<input
+												type="text"
+												value={handle}
+												onChange={(e) => setHandle(e.target.value.toLowerCase().replace(/\s/g, ''))}
+												className={`w-full bg-foreground/4 border rounded-xl pl-8 pr-4 py-3 text-sm font-bold outline-none transition-all placeholder:text-foreground/10 ${
+													handleStatus.state === 'available' ? 'border-emerald-500/30 focus:border-emerald-500/50' :
+													handleStatus.state === 'taken' || handleStatus.state === 'invalid' ? 'border-red-500/30 focus:border-red-500/50' :
+													'border-foreground/8 focus:border-amber-400/50'
+												}`}
+												placeholder="username"
+											/>
+										</div>
+										{handleStatus.message && (
+											<p className={`text-[10px] font-bold mt-1.5 uppercase tracking-wide ${
+												handleStatus.state === 'available' ? 'text-emerald-500' : 
+												handleStatus.state === 'checking' ? 'text-amber-400/50' : 'text-red-500'
+											}`}>
+												{handleStatus.message}
+											</p>
+										)}
+										<p className="text-[10px] text-foreground/25 mt-1.5 uppercase tracking-widest">This is your unique URL: proto-ml.com/u/{handle || '...'}</p>
 									</div>
 									<div>
 										<label className="block text-[10px] font-bold text-foreground/35 mb-2 uppercase tracking-widest">Bio</label>
 										<textarea
 											value={about}
 											onChange={(e) => setAbout(e.target.value)}
-											className="w-full bg-foreground/[0.04] border border-foreground/[0.08] rounded-xl px-4 py-3 text-sm outline-none focus:border-amber-400/50 focus:bg-foreground/[0.06] transition-all resize-none h-[88px] placeholder:text-foreground/20 leading-relaxed"
+											className="w-full bg-foreground/4 border border-foreground/8 rounded-xl px-4 py-3 text-sm outline-none focus:border-amber-400/50 focus:bg-foreground/6 transition-all resize-none h-[88px] placeholder:text-foreground/20 leading-relaxed"
 											placeholder="A short bio for the community..."
 										/>
 									</div>
@@ -248,24 +346,46 @@ export default function ProfilePage() {
 									<div className="flex-1 h-px bg-foreground/[0.07]" />
 								</div>
 								<div className="space-y-3">
-									<div className="flex items-center gap-3 bg-foreground/[0.04] border border-foreground/[0.08] rounded-xl px-4 py-3 focus-within:border-amber-400/50 transition-all">
+									<div className="flex items-center gap-3 bg-foreground/4 border border-foreground/8 rounded-xl px-4 py-3 focus-within:border-amber-400/50 transition-all">
 										<Github size={14} className="text-foreground/30 shrink-0" />
 										<span className="text-foreground/25 text-xs font-mono shrink-0">github.com/</span>
 										<input
 											type="text"
 											value={socials.github || ''}
-											onChange={(e) => setSocials({ ...socials, github: e.target.value })}
+											onChange={(e) => handleSocialChange('github', e.target.value)}
 											className="flex-1 bg-transparent text-sm outline-none font-mono placeholder:text-foreground/20 min-w-0"
 											placeholder="your-handle"
 										/>
 									</div>
-									<div className="flex items-center gap-3 bg-foreground/[0.04] border border-foreground/[0.08] rounded-xl px-4 py-3 focus-within:border-amber-400/50 transition-all">
+									<div className="flex items-center gap-3 bg-foreground/4 border border-foreground/8 rounded-xl px-4 py-3 focus-within:border-amber-400/50 transition-all">
 										<Twitter size={14} className="text-foreground/30 shrink-0" />
 										<span className="text-foreground/25 text-xs font-mono shrink-0">x.com/</span>
 										<input
 											type="text"
 											value={socials.twitter || ''}
-											onChange={(e) => setSocials({ ...socials, twitter: e.target.value })}
+											onChange={(e) => handleSocialChange('twitter', e.target.value)}
+											className="flex-1 bg-transparent text-sm outline-none font-mono placeholder:text-foreground/20 min-w-0"
+											placeholder="your-handle"
+										/>
+									</div>
+									<div className="flex items-center gap-3 bg-foreground/4 border border-foreground/8 rounded-xl px-4 py-3 focus-within:border-amber-400/50 transition-all">
+										<Linkedin size={14} className="text-foreground/30 shrink-0" />
+										<span className="text-foreground/25 text-xs font-mono shrink-0">linkedin.com/in/</span>
+										<input
+											type="text"
+											value={socials.linkedin || ''}
+											onChange={(e) => handleSocialChange('linkedin', e.target.value)}
+											className="flex-1 bg-transparent text-sm outline-none font-mono placeholder:text-foreground/20 min-w-0"
+											placeholder="your-id"
+										/>
+									</div>
+									<div className="flex items-center gap-3 bg-foreground/4 border border-foreground/8 rounded-xl px-4 py-3 focus-within:border-amber-400/50 transition-all">
+										<Instagram size={14} className="text-foreground/30 shrink-0" />
+										<span className="text-foreground/25 text-xs font-mono shrink-0">instagram.com/</span>
+										<input
+											type="text"
+											value={socials.instagram || ''}
+											onChange={(e) => handleSocialChange('instagram', e.target.value)}
 											className="flex-1 bg-transparent text-sm outline-none font-mono placeholder:text-foreground/20 min-w-0"
 											placeholder="your-handle"
 										/>
