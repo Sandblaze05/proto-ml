@@ -2,8 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import Link from 'next/link';
-import { Share2, Layout, Copy, GitFork, Eye } from 'lucide-react';
+import { Share2, Layout, Copy, GitFork, Eye, X, Pencil, LogOut } from 'lucide-react';
 import InfiniteCanvas from '@/components/InfiniteCanvas';
 import DashboardNav from '@/components/DashboardNav';
 import DashboardProfile from '@/components/DashboardProfile';
@@ -29,6 +28,106 @@ const pickCursorColor = (seed) => {
 
 const supabase = createClient();
 
+// ─── Helper: detect whether a name is "unnamed" ────────────────────────────────
+const isUnnamedPipeline = (name) => {
+  if (!name || name.trim() === '') return true;
+  const trimmed = name.trim();
+  if (trimmed === 'Unsaved Pipeline') return true;
+  // Matches "Untitled Pipeline", "Untitled Pipeline (2)", "Untitled Pipeline (15)" …
+  return /^Untitled Pipeline(\s\(\d+\))?$/i.test(trimmed);
+};
+
+// ─── Helper: generate next "Untitled Pipeline (N)" label ─────────────────────────────────
+const nextUnnamedLabel = async (userId) => {
+  const { data } = await supabase
+    .from('pipelines')
+    .select('name')
+    .eq('user_id', userId);
+
+  const existingNames = new Set((data || []).map((p) => (p.name || '').trim()));
+
+  if (!existingNames.has('Untitled Pipeline')) return 'Untitled Pipeline';
+
+  let n = 2;
+  while (existingNames.has(`Untitled Pipeline (${n})`)) n++;
+  return `Untitled Pipeline (${n})`;
+};
+
+// ─── LeaveModal ────────────────────────────────────────────────────────────────
+const LeaveModal = ({ currentName, pipelineId, onSaveAndLeave, onDiscardAndLeave, onCancel, isSaving }) => {
+  const [name, setName] = useState(currentName || '');
+
+  return (
+    <div className="fixed inset-0 z-9999 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+      <div
+        className="relative bg-background border border-foreground/20 rounded-2xl p-7 shadow-2xl max-w-sm w-full mx-4 animate-in fade-in zoom-in-95 duration-200"
+        style={{ boxShadow: '0 25px 60px rgba(0,0,0,0.6)' }}
+      >
+        {/* Close */}
+        <button
+          onClick={onCancel}
+          className="absolute top-4 right-4 p-1 rounded-full text-foreground/40 hover:text-foreground hover:bg-foreground/10 transition-all"
+          aria-label="Stay on canvas"
+        >
+          <X size={16} />
+        </button>
+
+        {/* Icon + title */}
+        <div className="flex items-center gap-3 mb-5">
+          <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-amber-400/10 border border-amber-400/20">
+            <Pencil size={18} className="text-amber-400" />
+          </div>
+          <div>
+            <h2 className="text-lg font-bold font-mono text-foreground leading-tight">Name this pipeline</h2>
+            <p className="text-[11px] text-foreground/50 mt-0.5">Give it a name before you leave</p>
+          </div>
+        </div>
+
+        {/* Name input */}
+        <div className="mb-5">
+          <label className="block text-[10px] font-bold uppercase tracking-wider text-foreground/50 mb-1.5">
+            Pipeline Name
+          </label>
+          <input
+            autoFocus
+            type="text"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && name.trim()) onSaveAndLeave(name.trim());
+            }}
+            placeholder="My awesome pipeline…"
+            className="w-full h-10 rounded-xl border-2 border-foreground/25 bg-foreground/5 px-4 text-sm font-medium text-foreground outline-none transition-colors focus:border-foreground/60 placeholder:text-foreground/25"
+          />
+        </div>
+
+        {/* Actions */}
+        <div className="flex flex-col gap-2.5">
+          <button
+            onClick={() => onSaveAndLeave(name.trim() || null)}
+            disabled={isSaving}
+            className="w-full py-2.5 bg-foreground text-background rounded-xl font-bold text-sm hover:opacity-90 transition-opacity disabled:opacity-40 flex items-center justify-center gap-2"
+          >
+            {isSaving ? (
+              <span className="inline-block w-4 h-4 border-2 border-background/30 border-t-background rounded-full animate-spin" />
+            ) : null}
+            {isSaving ? 'Saving…' : 'Save & Leave'}
+          </button>
+          <button
+            onClick={onDiscardAndLeave}
+            className="w-full py-2.5 border border-foreground/15 text-foreground/70 rounded-xl font-bold text-sm hover:bg-foreground/5 hover:text-foreground transition-all flex items-center justify-center gap-2"
+          >
+            <LogOut size={14} />
+            Discard & Leave
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ──────────────────────────────────────────────────────────────────────────────
+
 const SharedCanvasPage = () => {
   const pathname = usePathname();
   const router = useRouter();
@@ -39,6 +138,8 @@ const SharedCanvasPage = () => {
   const { addToast } = useUIStore();
   const nodes = useUIStore(state => state.nodes);
   const edges = useUIStore(state => state.edges);
+  const savedPipelineName = useUIStore(state => state.savedPipelineName);
+
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [collaborators, setCollaborators] = useState([]);
@@ -48,6 +149,15 @@ const SharedCanvasPage = () => {
   const [isCopying, setIsCopying] = useState(false);
   const [remoteCursors, setRemoteCursors] = useState([]);
   const [remoteNodeEditors, setRemoteNodeEditors] = useState([]);
+  const [isMobile, setIsMobile] = useState(false);
+
+  // ── Leave modal state ──────────────────────────────────────────────────────
+  const [leaveModalOpen, setLeaveModalOpen] = useState(false);
+  const [isSavingLeave, setIsSavingLeave] = useState(false);
+  const pendingNavTarget = useRef(null); // href to navigate to after modal resolves
+  const leaveAllowed = useRef(false);   // when true, skip interception
+
+  // ── Refs ───────────────────────────────────────────────────────────────────
   const isUpdatingFromRemote = useRef(false);
   const lastSavedState = useRef(null);
   const pendingSaveSnapshot = useRef(null);
@@ -59,6 +169,11 @@ const SharedCanvasPage = () => {
   const lastCursorBroadcastAt = useRef(0);
   const lastNodeEditBroadcast = useRef({ nodeId: undefined, ts: 0 });
   const remoteAnimationFrame = useRef(null);
+
+  // KEY FIX: canEditRef is always current — avoids stale closures in callbacks
+  const canEditRef = useRef(false);
+  useEffect(() => { canEditRef.current = canEdit; }, [canEdit]);
+
   const requestedAccess = searchParams.get('access') === 'edit' ? 'edit' : 'view';
 
   const normalizeGraphData = useCallback((value) => {
@@ -74,8 +189,9 @@ const SharedCanvasPage = () => {
     return [];
   }, []);
 
+  // ── Autosave — reads canEditRef (stable), no stale closure ─────────────────
   const queueAutosave = useCallback((newNodes, newEdges) => {
-    if (!canEdit || isUpdatingFromRemote.current || !hasHydratedPipeline.current) return;
+    if (!canEditRef.current || isUpdatingFromRemote.current || !hasHydratedPipeline.current) return;
 
     const snapshot = JSON.stringify({ nodes: newNodes, edges: newEdges });
     if (snapshot === lastSavedState.current) return;
@@ -85,7 +201,7 @@ const SharedCanvasPage = () => {
       edges: newEdges,
       snapshot,
     };
-  }, [canEdit]);
+  }, []); // no canEdit dependency — reads ref instead
 
   useEffect(() => {
     bootstrapClientPlugins().catch(() => {
@@ -93,6 +209,7 @@ const SharedCanvasPage = () => {
     });
   }, []);
 
+  // ── Interval flush — runs whenever canEdit becomes true ────────────────────
   useEffect(() => {
     if (!canEdit) return;
 
@@ -109,6 +226,7 @@ const SharedCanvasPage = () => {
 
       saveInFlight.current = true;
       try {
+        useUIStore.getState().setSyncState('saving');
         const { error } = await supabase
           .from('pipelines')
           .update({
@@ -122,19 +240,37 @@ const SharedCanvasPage = () => {
 
         lastSavedState.current = pending.snapshot;
         pendingSaveSnapshot.current = null;
+        useUIStore.getState().setSyncState('saved');
+        localStorage.removeItem(`pipeline_backup_${pipelineId}`);
       } catch (err) {
         console.error('Error auto-saving pipeline:', err);
+        useUIStore.getState().setSyncState('error');
+        localStorage.setItem(`pipeline_backup_${pipelineId}`, JSON.stringify({
+          nodes: pending.nodes,
+          edges: pending.edges,
+          ts: Date.now()
+        }));
       } finally {
         saveInFlight.current = false;
       }
     }, 1000);
 
     return () => clearInterval(intervalId);
-  }, [canEdit, pathname, supabase]);
+  }, [canEdit, pathname]);
 
-  // Function to broadcast local changes to other users
+  // ── Mobile Check ───────────────────────────────────────────────────────────
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+
+  // ── Broadcast local changes ────────────────────────────────────────────────
   const broadcastChanges = useCallback((newNodes, newEdges, newDrawings, meta = {}) => {
-    if (!canEdit || !hasHydratedPipeline.current) return;
+    if (!canEditRef.current || !hasHydratedPipeline.current) return;
 
     if (channel && !isUpdatingFromRemote.current) {
       channel.send({
@@ -150,10 +286,10 @@ const SharedCanvasPage = () => {
     }
 
     queueAutosave(newNodes, newEdges);
-  }, [canEdit, channel, queueAutosave]);
+  }, [channel, queueAutosave]); // no canEdit dep — uses ref
 
   const broadcastEditingNode = useCallback((nodeId) => {
-    if (!canEdit || !channel) return;
+    if (!canEditRef.current || !channel) return;
 
     const now = Date.now();
     if (lastNodeEditBroadcast.current.nodeId === nodeId && now - lastNodeEditBroadcast.current.ts < 120) {
@@ -172,7 +308,7 @@ const SharedCanvasPage = () => {
         ts: now,
       },
     });
-  }, [canEdit, channel]);
+  }, [channel]);
 
   const animateRemoteGraphTo = useCallback((nextNodes, nextEdges) => {
     if (remoteAnimationFrame.current) {
@@ -219,7 +355,7 @@ const SharedCanvasPage = () => {
   }, [setEdges, setNodes]);
 
   const handlePointerMove = useCallback((x, y) => {
-    if (!canEdit || !channel) return;
+    if (!canEditRef.current || !channel) return;
 
     const now = Date.now();
     if (now - lastCursorBroadcastAt.current < 33) return;
@@ -238,7 +374,7 @@ const SharedCanvasPage = () => {
         ts: now,
       },
     });
-  }, [canEdit, channel]);
+  }, [channel]);
 
   const handleFork = useCallback(async () => {
     const pipelineId = pathname.split('/').pop();
@@ -252,7 +388,6 @@ const SharedCanvasPage = () => {
         return;
       }
 
-      // We need the full pipeline object to fork it
       const { data: pipeline, error: fetchError } = await supabase
         .from('pipelines')
         .select('*')
@@ -264,8 +399,8 @@ const SharedCanvasPage = () => {
       await forkPipeline(supabase, user.id, pipeline);
       addToast('Pipeline forked successfully! Returning to dashboard...', 'success');
       
-      // Delay slightly for toast visibility
       setTimeout(() => {
+        leaveAllowed.current = true;
         router.push('/dashboard');
       }, 1500);
     } catch (err) {
@@ -274,7 +409,7 @@ const SharedCanvasPage = () => {
     } finally {
       setIsCopying(false);
     }
-  }, [pathname, router, supabase, addToast]);
+  }, [pathname, router, addToast]);
 
   const claimPublicShare = useCallback(async ({ pipelineId, ownerId, userEmail, permission }) => {
     if (!pipelineId || !ownerId || !userEmail) return;
@@ -318,15 +453,100 @@ const SharedCanvasPage = () => {
         });
 
       if (error) {
-        // Duplicate share claim is harmless (already claimed in another tab/session).
         if (error.code === '23505') return;
         console.error('Failed to claim public share:', normalizeError(error));
       }
     } catch (err) {
       console.error('Unexpected claim public share error:', normalizeError(err));
     }
-  }, [supabase]);
+  }, []);
 
+  // ── Leave-canvas flow helpers ───────────────────────────────────────────────
+
+  /** Returns true if we should intercept navigation (unnamed + owner + not snapshot). */
+  const shouldInterceptLeave = useCallback(() => {
+    if (!canEditRef.current) return false;
+    if (leaveAllowed.current) return false;
+    return isUnnamedPipeline(savedPipelineName);
+  }, [savedPipelineName]);
+
+  /** Programmatic navigation that respects the leave gate. */
+  const guardedNavigate = useCallback((href) => {
+    if (shouldInterceptLeave()) {
+      pendingNavTarget.current = href;
+      setLeaveModalOpen(true);
+    } else {
+      leaveAllowed.current = true;
+      router.push(href);
+    }
+  }, [shouldInterceptLeave, router]);
+
+  /** Save + rename then navigate. If nameOverride is null/empty, auto-generate an "Unnamed (N)" label. */
+  const handleSaveAndLeave = useCallback(async (nameOverride) => {
+    setIsSavingLeave(true);
+    const pipelineId = pathname.split('/').pop();
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
+
+      const finalName = (nameOverride && nameOverride.trim())
+        ? nameOverride.trim()
+        : await nextUnnamedLabel(user.id);
+
+      if (pipelineId) {
+        await supabase
+          .from('pipelines')
+          .update({ name: finalName, updated_at: new Date().toISOString() })
+          .eq('id', pipelineId)
+          .eq('user_id', user.id);
+      }
+
+      setLeaveModalOpen(false);
+      leaveAllowed.current = true;
+      router.push(pendingNavTarget.current || '/dashboard');
+    } catch (err) {
+      console.error('Save & leave error:', err);
+      addToast('Failed to save pipeline name.', 'error');
+    } finally {
+      setIsSavingLeave(false);
+    }
+  }, [pathname, router, addToast]);
+
+  /** Discard: just navigate without saving. */
+  const handleDiscardAndLeave = useCallback(async () => {
+    // If unnamed, assign an auto-generated "Unnamed (N)" label so the user can
+    // still find the pipeline in the dashboard (it won't be truly deleted).
+    const pipelineId = pathname.split('/').pop();
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user && pipelineId) {
+        const autoName = await nextUnnamedLabel(user.id);
+        await supabase
+          .from('pipelines')
+          .update({ name: autoName, updated_at: new Date().toISOString() })
+          .eq('id', pipelineId)
+          .eq('user_id', user.id);
+      }
+    } catch {
+      // Non-fatal — just navigate
+    }
+    setLeaveModalOpen(false);
+    leaveAllowed.current = true;
+    router.push(pendingNavTarget.current || '/dashboard');
+  }, [pathname, router]);
+
+  // ── beforeunload interception (tab/window close) ──────────────────────────
+  useEffect(() => {
+    const handleBeforeUnload = (e) => {
+      if (!shouldInterceptLeave()) return;
+      e.preventDefault();
+      e.returnValue = '';
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [shouldInterceptLeave]);
+
+  // ── Bootstrap ──────────────────────────────────────────────────────────────
   useEffect(() => {
     const pipelineId = pathname.split('/').pop();
     if (!pipelineId) return;
@@ -335,7 +555,6 @@ const SharedCanvasPage = () => {
     let isMounted = true;
 
     const bootstrap = async () => {
-      // ── 1. Fetch pipeline data ───────────────────────────────────────────
       try {
         hasHydratedPipeline.current = false;
         if (isMounted) setRemoteCursors([]);
@@ -415,30 +634,47 @@ const SharedCanvasPage = () => {
           sharedPermission = effectiveShare?.permission || 'view';
         }
 
-        // Snapshots (community copies) are always read-only, even for the owner.
-        // This prevents cursor/node movement from leaking to community viewers.
-        const canEdit = pipelineIsSnapshot
+        const resolvedCanEdit = pipelineIsSnapshot
           ? false
           : (owner || (sharedPermission === 'edit' && requestedAccess === 'edit'));
 
         if (!isMounted) return;
-        useUIStore.getState().setReadOnly(!canEdit);
-        setCanEdit(canEdit);
+        useUIStore.getState().setReadOnly(!resolvedCanEdit);
+        setCanEdit(resolvedCanEdit);
+        canEditRef.current = resolvedCanEdit;
 
         isUpdatingFromRemote.current = true;
-        const normalizedNodes = normalizeGraphData(data.nodes);
-        const normalizedEdges = normalizeGraphData(data.edges);
+        let normalizedNodes = normalizeGraphData(data.nodes);
+        let normalizedEdges = normalizeGraphData(data.edges);
         const normalizedDrawings = normalizeGraphData(data.drawings);
+        
+        // Recover fallback locally saved progress
+        try {
+          const fallbackStr = localStorage.getItem(`pipeline_backup_${pipelineId}`);
+          if (fallbackStr) {
+            const fallback = JSON.parse(fallbackStr);
+            if (fallback.nodes && fallback.edges) {
+              normalizedNodes = normalizeGraphData(fallback.nodes);
+              normalizedEdges = normalizeGraphData(fallback.edges);
+              setTimeout(() => {
+                const addToast = useUIStore.getState().addToast;
+                if (addToast) addToast("Recovered unsaved local changes.", "info");
+                // Force an autosave of recovered changes shortly after load
+                queueAutosave(normalizedNodes, normalizedEdges);
+              }, 500);
+            }
+          }
+        } catch (e) { console.error('Fallback read error', e); }
+
         setNodes(normalizedNodes);
         setEdges(normalizedEdges);
         setDrawings(normalizedDrawings);
         lastSavedState.current = JSON.stringify({ nodes: normalizedNodes, edges: normalizedEdges });
         pendingSaveSnapshot.current = null;
+        useUIStore.getState().setSyncState('saved');
         hasHydratedPipeline.current = true;
         setTimeout(() => { if (isMounted) isUpdatingFromRemote.current = false; }, 100);
 
-        // ── 2. Real-time channel (only for non-snapshot pipelines) ────────
-        // Snapshots are frozen community copies — no cursors, no live sync.
         if (pipelineIsSnapshot) {
           setLoading(false);
           return;
@@ -565,6 +801,26 @@ const SharedCanvasPage = () => {
     return () => clearInterval(cleanupId);
   }, []);
 
+  if (isMobile) {
+    return (
+      <div className="w-full h-screen flex flex-col items-center justify-center bg-background text-foreground p-8 text-center bg-linear-to-b from-background to-amber-500/5">
+        <div className="w-20 h-20 bg-amber-400/10 rounded-3xl flex items-center justify-center text-amber-400 mb-6 border border-amber-400/20 shadow-[0_0_30px_rgba(251,191,36,0.1)]">
+          <Layout size={40} />
+        </div>
+        <h2 className="text-2xl font-bold mb-4 tracking-tight">Desktop Only Experience</h2>
+        <p className="text-foreground/60 text-sm max-w-xs leading-relaxed mb-8">
+          The Proto-ML canvas is a high-performance workspace designed for precision and complex workflows. For the best experience, please view this from a larger screen.
+        </p>
+        <button 
+          onClick={() => router.push('/dashboard')}
+          className="px-8 py-3 bg-foreground text-background font-bold rounded-xl hover:opacity-90 transition-all shadow-lg"
+        >
+          Back to Dashboard
+        </button>
+      </div>
+    );
+  }
+
   if (loading) {
     return <CanvasSkeleton />;
   }
@@ -610,13 +866,28 @@ const SharedCanvasPage = () => {
         </div>
       )}
 
-      {/* Projects Button */}
-      <Link 
-        href="/dashboard" 
-        className="absolute bottom-4 left-4 z-100 flex items-center gap-2 px-4 py-2 bg-foreground text-background text-xs font-bold rounded-full hover:opacity-90 transition-all shadow-xl"
+      {/* My Projects — guarded navigation */}
+      <button
+        onClick={() => guardedNavigate('/dashboard')}
+        className="absolute bottom-4 left-4 z-100 flex items-center gap-2 px-4 py-2 bg-foreground text-background text-xs font-bold rounded-full hover:opacity-90 transition-all shadow-xl cursor-pointer"
       >
         <Layout size={14} /> My Projects
-      </Link>
+      </button>
+
+      {/* Leave modal */}
+      {leaveModalOpen && (
+        <LeaveModal
+          currentName={savedPipelineName && !isUnnamedPipeline(savedPipelineName) ? savedPipelineName : ''}
+          pipelineId={pathname.split('/').pop()}
+          onSaveAndLeave={handleSaveAndLeave}
+          onDiscardAndLeave={handleDiscardAndLeave}
+          onCancel={() => {
+            setLeaveModalOpen(false);
+            pendingNavTarget.current = null;
+          }}
+          isSaving={isSavingLeave}
+        />
+      )}
     </div>
   );
 };

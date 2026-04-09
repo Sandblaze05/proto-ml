@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useEffect, useMemo, useState, useRef } from 'react'
-import { LogOut, Settings, X } from 'lucide-react'
+import { LogOut, Settings, X, Cloud, RefreshCcw, CloudOff } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { useUIStore } from '@/store/useUIStore'
 import gsap from 'gsap'
@@ -24,10 +24,12 @@ const DashboardProfile = ({ activeCollaborators = [] }) => {
   const supabase = createClient()
   const pathname = usePathname()
   const setDraftPipelineName = useUIStore(s => s.setDraftPipelineName)
-
+  const setStorePipelineId = useUIStore(s => s.setPipelineId)
+  const setSavedPipelineName = useUIStore(s => s.setSavedPipelineName)
   const showMinimap = useUIStore(s => s.showMinimap)
   const setShowMinimap = useUIStore(s => s.setShowMinimap)
   const hydrateShowMinimap = useUIStore(s => s.hydrateShowMinimap)
+  const syncState = useUIStore(s => s.syncState)
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => setUser(data?.user ?? null))
@@ -38,7 +40,8 @@ const DashboardProfile = ({ activeCollaborators = [] }) => {
       const pathPipelineId = pathname?.startsWith('/canvas/') ? pathname.split('/').pop() : null
       const currentPipelineId = pathPipelineId
       if (!currentPipelineId) {
-        setPipelineId(null)
+        setStorePipelineId(null)
+        setSavedPipelineName('')
         setIsOwner(true)
         setPipelineName('Unsaved Pipeline')
         setPipelineNameDraft('')
@@ -55,7 +58,8 @@ const DashboardProfile = ({ activeCollaborators = [] }) => {
         .single()
 
       if (error || !data) {
-        setPipelineId(null)
+        setStorePipelineId(null)
+        setSavedPipelineName('')
         setIsOwner(true)
         setPipelineName('Unsaved Pipeline')
         setPipelineNameDraft('')
@@ -67,6 +71,8 @@ const DashboardProfile = ({ activeCollaborators = [] }) => {
       setPipelineName(loadedName)
       setPipelineNameDraft(loadedName)
       setDraftPipelineName(loadedName)
+      setStorePipelineId(currentPipelineId)
+      setSavedPipelineName(loadedName)
       
       const ownerMatch = Boolean(authedUser?.id) && authedUser.id === data.user_id;
       const pipelineIsSnapshot = Boolean(data.is_snapshot);
@@ -126,6 +132,7 @@ const DashboardProfile = ({ activeCollaborators = [] }) => {
       if (error) throw error
       setPipelineName(nextName)
       setDraftPipelineName(nextName)
+      setSavedPipelineName(nextName)
     } catch (error) {
       console.error('Error renaming pipeline:', error)
       setPipelineNameDraft(pipelineName)
@@ -195,7 +202,28 @@ const DashboardProfile = ({ activeCollaborators = [] }) => {
   }, [activeCollaborators])
 
   return (
-    <div className='z-200 fixed top-3 right-6 flex flex-row items-start gap-3 pr-2'>
+    <div className='z-200 fixed top-3 right-6 flex flex-row items-center gap-3 pr-2'>
+      <div className='flex items-center bg-background/95 border-2 border-foreground/40 rounded-full h-10 px-3 shadow-md backdrop-blur'>
+        {syncState === 'saving' && (
+          <div className="flex items-center gap-1.5 opacity-60 pointer-events-none">
+            <RefreshCcw size={12} className="animate-spin text-foreground" />
+            <span className="text-[10px] uppercase font-bold tracking-wider text-foreground pt-px">Saving...</span>
+          </div>
+        )}
+        {syncState === 'saved' && (
+          <div className="flex items-center gap-1.5 opacity-50 pointer-events-none">
+            <Cloud size={13} className="text-foreground" />
+            <span className="text-[10px] uppercase font-bold tracking-wider text-foreground pt-px">Saved to DB</span>
+          </div>
+        )}
+        {syncState === 'error' && (
+          <div className="flex items-center gap-1.5 text-rose-500 opacity-90 cursor-help" title="Saved strictly to browser local storage due to connection error">
+            <CloudOff size={13} />
+            <span className="text-[10px] uppercase font-bold tracking-wider pt-px">Local Backup</span>
+          </div>
+        )}
+      </div>
+
       <div className='w-56'>
         <input
           type='text'

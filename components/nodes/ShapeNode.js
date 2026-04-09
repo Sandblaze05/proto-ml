@@ -1,7 +1,7 @@
 'use client';
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { NodeResizer, useStore } from 'reactflow';
-import { Lock } from 'lucide-react';
+import { Lock, RotateCw } from 'lucide-react';
 import { useUIStore } from '../../store/useUIStore';
 
 // ── helpers ──────────────────────────────────────────────────────────────────
@@ -92,10 +92,45 @@ export default function ShapeNode({ id, data, selected }) {
     }
   }, [shapeType, data.label]);
 
-  // Selection glow style
-  const selectedStyle = selected ? {
-    filter: 'drop-shadow(0 0 6px rgba(103, 232, 249, 0.55))',
-  } : {};
+  // Selection glow style (removed per user request)
+  const selectedStyle = {
+    transform: `rotate(${data.rotation || 0}deg)`,
+  };
+
+  // Rotation drag
+  const onRotateMouseDown = (e) => {
+    e.stopPropagation();
+    const rect = e.currentTarget.parentElement.getBoundingClientRect();
+    const centerX = rect.left + rect.width / 2;
+    const centerY = rect.top + rect.height / 2;
+    
+    const startAngle = Math.atan2(e.clientY - centerY, e.clientX - centerX) * (180 / Math.PI);
+    const startRot = data.rotation || 0;
+    
+    const onMove = (me) => {
+      const angle = Math.atan2(me.clientY - centerY, me.clientX - centerX) * (180 / Math.PI);
+      let newRot = startRot + (angle - startAngle);
+      if (me.shiftKey) newRot = Math.round(newRot / 45) * 45;
+      setNodes(useUIStore.getState().nodes.map(n => n.id === id ? { ...n, data: { ...n.data, rotation: newRot } } : n));
+    };
+    
+    const onUp = () => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  };
+
+  const RotationHandle = () => (selected && !isLocked && shapeType !== 'frame' && shapeType !== 'text') ? (
+    <div 
+      className="absolute -top-10 left-1/2 -translate-x-1/2 w-6 h-6 bg-background border border-foreground/30 rounded-full flex items-center justify-center cursor-pointer shadow opacity-80 hover:opacity-100 z-50 pointer-events-auto nodrag"
+      onMouseDown={onRotateMouseDown}
+      title="Rotate"
+    >
+      <RotateCw size={12} color={strokeColor} />
+    </div>
+  ) : null;
 
   // ── Line / arrow shapes ────────────────────────────────────────────────────
   if (['line', 'arrow', 'double-arrow', 'dotted-line', 'dotted-arrow', 'elbow'].includes(shapeType)) {
@@ -111,32 +146,43 @@ export default function ShapeNode({ id, data, selected }) {
     const hasStart = isDouble || arrowheads === 'start' || arrowheads === 'both';
     const direction = hasStart && hasEnd ? 'both' : hasEnd ? 'end' : hasStart ? 'start' : null;
 
-    const svgW = Math.max(w, 80);
+    const svgW = Math.max(w, 40);
     const svgH = Math.max(h, 40);
     const pad = 10;
+    
+    const py1 = data.invertY ? svgH - pad : pad;
+    const py2 = data.invertY ? pad : svgH - pad;
+    const midX = data.midpointOffsetX || 0;
+    const midY = data.midpointOffsetY || 0;
 
     let pathD;
     if (isElbow) {
       const mid = midpointOffset;
       const mx = svgW / 2 + mid;
-      pathD = `M ${pad} ${svgH / 2} L ${mx} ${svgH / 2} L ${mx} ${svgH / 2} L ${svgW - pad} ${svgH / 2}`;
-      // orthogonal: horizontal then vertical then horizontal
       pathD = `M ${pad} ${pad} L ${mx} ${pad} L ${mx} ${svgH - pad} L ${svgW - pad} ${svgH - pad}`;
     } else {
-      pathD = `M ${pad} ${svgH / 2} L ${svgW - pad} ${svgH / 2}`;
+      pathD = `M ${pad} ${py1} Q ${svgW / 2 + midX} ${svgH / 2 + midY} ${svgW - pad} ${py2}`;
     }
 
-    // Midpoint drag for elbow
+    // Midpoint drag
     const onMidMouseDown = (e) => {
-      if (!isElbow) return;
       e.stopPropagation();
       const startX = e.clientX;
+      const startY = e.clientY;
       const startOffset = midpointOffset;
+      const startMidX = data.midpointOffsetX || 0;
+      const startMidY = data.midpointOffsetY || 0;
+      
       const onMove = (me) => {
         const dx = me.clientX - startX;
-        const newOff = startOffset + dx;
-        setMidpointOffset(newOff);
-        setNodes(nodes.map(n => n.id === id ? { ...n, data: { ...n.data, midpointOffset: newOff } } : n));
+        const dy = me.clientY - startY;
+        if (isElbow) {
+          const newOff = startOffset + dx;
+          setMidpointOffset(newOff);
+          setNodes(useUIStore.getState().nodes.map(n => n.id === id ? { ...n, data: { ...n.data, midpointOffset: newOff } } : n));
+        } else {
+          setNodes(useUIStore.getState().nodes.map(n => n.id === id ? { ...n, data: { ...n.data, midpointOffsetX: startMidX + dx, midpointOffsetY: startMidY + dy } } : n));
+        }
       };
       const onUp = () => {
         window.removeEventListener('mousemove', onMove);
@@ -148,7 +194,8 @@ export default function ShapeNode({ id, data, selected }) {
 
     return (
       <div style={{ width: svgW, height: svgH, opacity, ...selectedStyle, position: 'relative' }}>
-        <NodeResizer isVisible={selected && !isLocked} minWidth={80} minHeight={30} color="#67e8f9" />
+        <RotationHandle />
+        <NodeResizer isVisible={selected && !isLocked} minWidth={40} minHeight={40} color="#67e8f9" />
         {isLocked && (
           <div className="absolute top-1 right-1 z-20 pointer-events-none opacity-60">
             <Lock size={12} color={strokeColor} />
@@ -172,15 +219,15 @@ export default function ShapeNode({ id, data, selected }) {
             markerEnd={hasEnd ? `url(#${markerId}-arrow-end)` : undefined}
             markerStart={hasStart ? `url(#${markerId}-arrow-start)` : undefined}
           />
-          {/* Midpoint handle for elbow */}
-          {isElbow && selected && (
+          {/* Midpoint handle for lines and elbows */}
+          {selected && (
             <circle
-              cx={svgW / 2 + midpointOffset}
-              cy={svgH / 2}
-              r={6}
+              cx={isElbow ? svgW / 2 + midpointOffset : svgW / 2 + (data.midpointOffsetX || 0)}
+              cy={isElbow ? svgH / 2 : svgH / 2 + (data.midpointOffsetY || 0)}
+              r={3}
               fill={strokeColor}
               opacity={0.8}
-              style={{ cursor: 'ew-resize' }}
+              style={{ cursor: isElbow ? 'ew-resize' : 'move' }}
               onMouseDown={onMidMouseDown}
               className="nodrag"
             />
@@ -349,6 +396,7 @@ export default function ShapeNode({ id, data, selected }) {
 
   return (
     <div style={{ width: svgW, height: svgH, opacity, position: 'relative', ...selectedStyle }}>
+      <RotationHandle />
       <NodeResizer isVisible={selected && !isLocked} minWidth={40} minHeight={30} color="#67e8f9" />
       {isLocked && (
         <div className="absolute top-1 right-1 z-20 pointer-events-none opacity-60">

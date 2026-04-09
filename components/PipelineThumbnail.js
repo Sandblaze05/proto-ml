@@ -39,7 +39,7 @@ const PipelineThumbnail = React.memo(({ nodes = [], edges = [] }) => {
 	}
 
 	const validNodes = nodes.filter(n =>
-		n.type !== 'annotationNode' &&
+		!['annotationNode', 'shapeNode', 'frameNode', 'textNode'].includes(n.type) &&
 		n.position &&
 		typeof n.position.x === 'number'
 	)
@@ -55,7 +55,7 @@ const PipelineThumbnail = React.memo(({ nodes = [], edges = [] }) => {
 	const height = Math.max(maxY - minY, 1)
 	const padding = 20
 
-	const scale = Math.min((300 - padding * 2) / width, (128 - padding * 2) / height, 0.4)
+	const scale = Math.min((240 - padding * 2) / width, (128 - padding * 2) / height, 0.6)
 
 	return (
 		<div className="w-full h-32 bg-foreground/[0.03] rounded-xl mb-4 relative overflow-hidden group-hover:bg-foreground/[0.05] transition-colors border border-foreground/5">
@@ -70,7 +70,7 @@ const PipelineThumbnail = React.memo(({ nodes = [], edges = [] }) => {
 					}}
 				>
 					<svg
-						className="absolute inset-0 overflow-visible pointer-events-none opacity-40"
+						className="absolute inset-0 overflow-visible pointer-events-none opacity-60"
 						style={{ width: '100%', height: '100%' }}
 					>
 						{edges.map((edge, i) => {
@@ -114,9 +114,9 @@ const PipelineThumbnail = React.memo(({ nodes = [], edges = [] }) => {
 									top,
 									width: 180 * scale,
 									height: 80 * scale,
-									borderColor: `${color}40`,
-									backgroundColor: `${color}20`,
-									backdropFilter: 'blur(2px)'
+									borderColor: `${color}80`,
+									backgroundColor: `${color}40`,
+									backdropFilter: 'blur(4px)'
 								}}
 							>
 								<div className="flex items-center gap-1 min-w-0">

@@ -18,6 +18,10 @@ export const useUIStore = create((set, get) => ({
   future: [],
   draftPipelineName: '',
   setDraftPipelineName: (name) => set({ draftPipelineName: name }),
+  pipelineId: null,
+  setPipelineId: (id) => set({ pipelineId: id }),
+  savedPipelineName: '',
+  setSavedPipelineName: (name) => set({ savedPipelineName: name }),
   annotationColor: '#faebd7',
   activeTool: 'select', // 'select', 'draw', 'erase', 'text'
   activeAnnotationShape: null, // shapeType string or null
@@ -54,6 +58,8 @@ export const useUIStore = create((set, get) => ({
   },
 
   setAnnotationColor: (color) => set({ annotationColor: color }),
+  syncState: 'saved',
+  setSyncState: (state) => set({ syncState: state }),
   setActiveTool: (tool) => set({ activeTool: tool }),
   setCanvasViewport: (viewport) => {
     const prev = get().canvasViewport;
