@@ -5,7 +5,7 @@ import { createClient } from '@/lib/supabase/client'
 import DashboardSidebar from '@/components/dashboard/DashboardSidebar'
 import DashboardTopBar from '@/components/dashboard/DashboardTopBar'
 import PipelineThumbnail from '@/components/PipelineThumbnail'
-import { Share2, Trash2, Layout, Clock, User, ExternalLink, Edit2, Check, X, Copy, Search, Grid, List, SortAsc, SortDesc, Folder, FolderPlus, ChevronRight, ChevronDown, Star, StarOff, GripVertical, Users, Eye } from 'lucide-react'
+import { Share2, Trash2, Layout, Clock, User, ExternalLink, Edit2, Check, X, Copy, Search, Grid, List, SortAsc, SortDesc, Folder, FolderPlus, ChevronRight, ChevronDown, Star, StarOff, GripVertical, Users, Eye, MoreVertical, Globe, Zap, Workflow, Cpu, Bot, Activity } from 'lucide-react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useUIStore } from '@/store/useUIStore'
@@ -55,6 +55,7 @@ const DashboardPage = () => {
 	const [publishModal, setPublishModal] = useState(null)
 	const [publishDesc, setPublishDesc] = useState('')
 	const [publishTags, setPublishTags] = useState('')
+	const [isSidebarOpen, setIsSidebarOpen] = useState(false)
 
 	const { addToast, setNodes, setEdges, setDrawings } = useUIStore()
 	const router = useRouter()
@@ -165,7 +166,7 @@ const DashboardPage = () => {
 		})
 	}
 
-	const handleNewCanvas = () => {
+	const handleNewCanvas = async () => {
 		setNodes([])
 		setEdges([])
 		setDrawings([])
@@ -174,6 +175,28 @@ const DashboardPage = () => {
 		if (typeof window !== 'undefined') {
 			localStorage.removeItem(ACTIVE_PIPELINE_ID_KEY)
 			localStorage.removeItem(DRAFT_PIPELINE_NAME_KEY)
+		}
+
+		if (user) {
+			try {
+				const { data, error } = await supabase
+					.from('pipelines')
+					.insert({
+						user_id: user.id,
+						name: '',
+						nodes: [],
+						edges: [],
+					})
+					.select('id')
+					.single();
+					
+				if (!error && data) {
+					router.push(`/canvas/${data.id}`);
+					return;
+				}
+			} catch (e) {
+				console.error('Failed to pre-create pipeline', e);
+			}
 		}
 
 		router.push('/canvas')
@@ -203,9 +226,34 @@ const DashboardPage = () => {
 
 				if (errorMine) console.error('Error fetching mine:', errorMine)
 				else {
-					setMyPipelines(mine)
+					// 1. Fetch all shares for user's pipelines to determine is_shared flag
+					const pipelineIds = mine.map(p => p.id)
+					const { data: allSharedItems } = await supabase
+						.from('pipeline_shares')
+						.select('pipeline_id')
+						.in('pipeline_id', pipelineIds)
+					
+					const sharedSet = new Set(allSharedItems?.map(s => s.pipeline_id) || [])
+					
+					// 2. Fetch all public snapshots to determine is_public (published) flag
+					const { data: allSnapshots } = await supabase
+						.from('pipelines')
+						.select('parent_id')
+						.in('parent_id', pipelineIds)
+						.eq('is_snapshot', true)
+						.eq('is_public', true)
+
+					const publishedSet = new Set(allSnapshots?.map(s => s.parent_id) || [])
+
+					const enhancedMine = mine.map(p => ({
+						...p,
+						is_shared: sharedSet.has(p.id),
+						is_public: publishedSet.has(p.id)
+					}))
+
+					setMyPipelines(enhancedMine)
 					const foundFolders = new Set([UNCATEGORIZED_FOLDER_NAME])
-					mine.forEach(p => {
+					enhancedMine.forEach(p => {
 						if (p.is_starred) foundFolders.add(STARRED_FOLDER_NAME)
 						else if (p.folder) foundFolders.add(p.folder)
 					})
@@ -225,6 +273,7 @@ const DashboardPage = () => {
 						.filter((row) => row.pipeline)
 						.map((row) => ({
 							...row.pipeline,
+							is_shared: true,
 							share_permission: row.permission,
 							share_scope: row.share_scope || 'email',
 						}))
@@ -716,32 +765,72 @@ const DashboardPage = () => {
 					<div
 						key={p.id}
 						onContextMenu={(e) => handleContextMenu(e, p, 'my')}
-						className={`group bg-foreground/5 border border-foreground/10 rounded-2xl hover:border-foreground/30 transition-all shadow-sm cursor-pointer ${viewMode === 'list' ? 'flex items-center justify-between p-4' : 'p-6'}`}
+						className={`group bg-foreground/5 border border-foreground/10 rounded-2xl hover:border-foreground/30 transition-all shadow-sm cursor-pointer ${viewMode === 'list' ? 'flex flex-row items-center justify-between p-3' : 'p-6'} min-w-0 gap-2`}
 					>
-						<div className={viewMode === 'list' ? "flex items-center gap-6 flex-1 min-w-0" : ""}>
-							{viewMode === 'grid' && <PipelineThumbnail nodes={p.nodes} edges={p.edges} />}
-							<div className={`flex justify-between items-start ${viewMode === 'list' ? 'mb-0 flex-1' : 'mb-4'}`}>
-								<div className="flex items-center gap-2 min-w-0 pr-4 relative text-foreground">
-									<h3 className={`text-lg font-bold truncate ${viewMode === 'list' ? 'max-w-[200px] md:max-w-md' : ''}`}>{p.name || 'Untitled Pipeline'}</h3>
-									{p.is_starred && <Star size={14} className="text-amber-400 shrink-0" />}
+						<div className={viewMode === 'list' ? "flex items-center gap-3 sm:gap-6 flex-1 min-w-0" : "flex flex-col"}>
+							{viewMode === 'list' ? (
+								<div className="w-14 h-14 rounded-2xl bg-foreground/10 flex items-center justify-center shrink-0 border border-foreground/10 group-hover:border-foreground/20 transition-all pointer-events-none relative overflow-hidden">
+									<div className="absolute inset-0 bg-[#FAEBD7]/5 animate-pulse" />
+									<Workflow size={28} className="text-[#FAEBD7] relative z-10 opacity-80" />
 								</div>
-								<button
-									onClick={(e) => { e.stopPropagation(); handleStarPipeline(p) }}
-									className={`p-2 transition-colors ${p.is_starred ? 'text-amber-400' : 'text-foreground/40 hover:text-amber-400'}`}
-								>
-									{p.is_starred ? <StarOff size={16} /> : <Star size={16} />}
-								</button>
-							</div>
-							<div className="flex items-center gap-4 text-[10px] text-foreground/50">
-								<span className="flex items-center gap-1"><Clock size={12} /> {new Date(p.updated_at).toLocaleDateString()}</span>
+							) : (
+								<PipelineThumbnail nodes={p.nodes} edges={p.edges} />
+							)}
+							
+							<div className={`flex flex-col flex-1 min-w-0 ${viewMode === 'list' ? '' : 'mt-4 mb-4'}`}>
+								<div className="flex justify-between items-start">
+									<div className="flex items-center gap-2 min-w-0 pr-4 relative text-foreground flex-wrap">
+										<h3 
+											className={`font-bold truncate hover:text-[#FAEBD7] transition-colors cursor-pointer ${viewMode === 'list' ? 'text-base' : 'text-lg'}`}
+											onClick={(e) => { e.stopPropagation(); router.push(`/canvas/${p.id}`) }}
+										>
+											{p.name || 'Untitled Pipeline'}
+										</h3>
+										<div className="flex items-center gap-1.5 shrink-0">
+											{p.is_starred && <Star size={14} className="text-[#FAEBD7] fill-[#FAEBD7]/20" />}
+											{p.is_shared && <Users size={14} className="text-blue-400" title="Shared with others" />}
+											{p.is_public && <Globe size={14} className="text-emerald-400" title="Published to Community" />}
+										</div>
+									</div>
+									{viewMode === 'grid' && (
+										<button
+											onClick={(e) => { e.stopPropagation(); handleContextMenu(e, p, 'my') }}
+											className="p-1.5 hover:bg-foreground/10 rounded-lg text-foreground/40 hover:text-foreground transition-all"
+										>
+											<MoreVertical size={18} />
+										</button>
+									)}
+								</div>
+								<div className="flex items-center gap-4 text-[10px] text-foreground/50 mt-1">
+									<span className="flex items-center gap-1"><Clock size={12} /> {new Date(p.updated_at).toLocaleDateString()}</span>
+									{viewMode === 'list' && p.folder && (
+										<span className="flex items-center gap-1 bg-foreground/5 px-2 py-0.5 rounded-full capitalize">
+											<Folder size={10} /> {p.folder}
+										</span>
+									)}
+								</div>
 							</div>
 						</div>
-						<Link 
-							href={`/canvas/${p.id}`} 
-							className={viewMode === 'list' ? "ml-4 px-4 py-2 bg-foreground text-background rounded-xl font-bold text-sm" : "mt-6 block w-full py-3 bg-foreground/10 rounded-xl font-bold text-sm text-center group-hover:bg-foreground group-hover:text-background transition-all"}
-						>
-							Open Workspace
-						</Link>
+
+						<div className="flex items-center gap-2">
+							{viewMode === 'list' && (
+								<button
+									onClick={(e) => { e.stopPropagation(); handleContextMenu(e, p, 'my') }}
+									className="p-2.5 hover:bg-foreground/10 rounded-xl text-foreground/40 hover:text-foreground transition-all ml-1 sm:ml-4"
+									title="More actions"
+								>
+									<MoreVertical size={20} />
+								</button>
+							)}
+							{viewMode === 'grid' && (
+								<Link 
+									href={`/canvas/${p.id}`} 
+									className="mt-6 block w-full py-3 bg-foreground/10 rounded-xl font-bold text-sm text-center group-hover:bg-foreground group-hover:text-background transition-all"
+								>
+									Open Workspace
+								</Link>
+							)}
+						</div>
 					</div>
 				))}
 			</div>
@@ -764,20 +853,73 @@ const DashboardPage = () => {
 					<div 
 						key={p.id} 
 						onContextMenu={(e) => handleContextMenu(e, p, 'shared')}
-						className={`group bg-foreground/5 border border-foreground/10 rounded-2xl hover:border-foreground/30 transition-all shadow-sm ${viewMode === 'list' ? 'flex items-center justify-between p-4' : 'p-6'}`}
+						className={`group bg-foreground/5 border border-foreground/10 rounded-2xl hover:border-foreground/30 transition-all shadow-sm ${viewMode === 'list' ? 'flex flex-row items-center justify-between p-3 cursor-pointer' : 'p-6'} min-w-0 gap-2`}
+						onClick={() => {
+							if (viewMode === 'list') router.push(`/canvas/${p.id}?access=${p.share_permission === 'edit' ? 'edit' : 'view'}`)
+						}}
 					>
-						<div className={viewMode === 'list' ? "flex items-center gap-6 flex-1 min-w-0" : ""}>
-							{viewMode === 'grid' && <PipelineThumbnail nodes={p.nodes} edges={p.edges} />}
-							<div className="flex justify-between items-start mb-4">
-								<h3 className="text-lg font-bold truncate text-foreground">{p.name || 'Shared Pipeline'}</h3>
-								<span className="px-2 py-0.5 text-[8px] font-bold uppercase rounded border bg-blue-500/10 text-blue-400 border-blue-500/20">
-									{p.share_permission === 'edit' ? 'Can Edit' : 'Read Only'}
-								</span>
+						<div className={viewMode === 'list' ? "flex items-center gap-3 sm:gap-6 flex-1 min-w-0" : "flex flex-col"}>
+							{viewMode === 'list' ? (
+								<div className="w-14 h-14 rounded-2xl bg-linear-to-br from-blue-500/20 to-indigo-500/20 flex items-center justify-center shrink-0 border border-blue-500/20 group-hover:border-blue-500/40 transition-all pointer-events-none relative overflow-hidden">
+									<div className="absolute inset-0 bg-blue-400/5 animate-pulse" />
+									<Workflow size={28} className="text-blue-400 relative z-10" />
+								</div>
+							) : (
+								<PipelineThumbnail nodes={p.nodes} edges={p.edges} />
+							)}
+							
+							<div className={`flex flex-col flex-1 min-w-0 ${viewMode === 'list' ? '' : 'mt-4 mb-4'}`}>
+								<div className="flex justify-between items-start">
+									<div className="flex items-center gap-2 min-w-0 pr-4 relative text-foreground flex-wrap">
+										<h3 
+											className={`font-bold truncate group-hover:text-blue-400 transition-colors ${viewMode === 'list' ? 'text-base' : 'text-lg'}`}
+										>
+											{p.name || 'Shared Pipeline'}
+										</h3>
+										<div className="flex items-center gap-1.5 shrink-0">
+											<span className="px-2 py-0.5 text-[8px] font-bold uppercase rounded border bg-blue-500/10 text-blue-400 border-blue-500/20">
+												{p.share_permission === 'edit' ? 'Can Edit' : 'Read Only'}
+											</span>
+											{p.is_starred && <Star size={14} className="text-[#FAEBD7] fill-[#FAEBD7]/20" />}
+											{p.is_shared && <Users size={14} className="text-blue-400" title="Shared with others" />}
+											{p.is_public && <Globe size={14} className="text-emerald-400" title="Published" />}
+										</div>
+									</div>
+									{viewMode === 'grid' && (
+										<button
+											onClick={(e) => { e.stopPropagation(); handleContextMenu(e, p, 'shared') }}
+											className="p-1.5 hover:bg-foreground/10 rounded-lg text-foreground/40 hover:text-foreground transition-all"
+										>
+											<MoreVertical size={18} />
+										</button>
+									)}
+								</div>
+								<div className="flex items-center gap-4 text-[10px] text-foreground/50 mt-1">
+									<span className="flex items-center gap-1"><Clock size={12} /> {new Date(p.updated_at).toLocaleDateString()}</span>
+									<span className="flex items-center gap-1 ml-2"><User size={12} /> Shared with you</span>
+								</div>
 							</div>
 						</div>
-						<Link href={`/canvas/${p.id}`} className="mt-6 block w-full py-3 bg-foreground/10 rounded-xl font-bold text-sm text-center group-hover:bg-foreground group-hover:text-background transition-all">
-							Open Shared Workspace
-						</Link>
+
+						<div className="flex items-center gap-2">
+							{viewMode === 'list' && (
+								<button
+									onClick={(e) => { e.stopPropagation(); handleContextMenu(e, p, 'shared') }}
+									className="p-2.5 hover:bg-foreground/10 rounded-xl text-foreground/40 hover:text-foreground transition-all ml-1 sm:ml-4"
+									title="More actions"
+								>
+									<MoreVertical size={20} />
+								</button>
+							)}
+							{viewMode === 'grid' && (
+								<Link 
+									href={`/canvas/${p.id}?access=${p.share_permission === 'edit' ? 'edit' : 'view'}`} 
+									className="mt-6 block w-full py-3 bg-foreground/10 rounded-xl font-bold text-sm text-center group-hover:bg-foreground group-hover:text-background transition-all"
+								>
+									Open Shared Workspace
+								</Link>
+							)}
+						</div>
 					</div>
 				))}
 			</div>
@@ -786,29 +928,29 @@ const DashboardPage = () => {
 
 	const renderHomeTab = () => (
 		<section className="mb-16">
-			<div className="flex justify-between items-center mb-6">
-				<h2 className="text-xl font-bold flex items-center gap-2 text-foreground">
+			<div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
+				<h2 className="text-lg sm:text-xl font-bold flex items-center gap-2 text-foreground">
 					<Layout size={20} /> Personal Workspaces
 					<span className="text-xs font-normal text-foreground/40 ml-2 bg-foreground/5 px-2 py-0.5 rounded-full">{filteredMyPipelines.length}</span>
 				</h2>
-				<div className="flex gap-2">
+				<div className="flex gap-2 w-full sm:w-auto">
 					{isAddingFolder ? (
-						<div className="flex gap-2">
+						<div className="flex gap-2 w-full">
 							<input
 								value={newFolderName}
 								onChange={(e) => setNewFolderName(e.target.value)}
-								className="text-xs bg-background border border-foreground/20 rounded-lg px-3 py-1 outline-none text-foreground"
+								className="text-xs bg-background border border-foreground/20 rounded-lg px-3 py-1 outline-none text-foreground flex-1"
 								placeholder="Folder name..."
 								autoFocus
 								onKeyDown={(e) => e.key === 'Enter' && handleAddFolder()}
 							/>
-							<button onClick={handleAddFolder} className="p-1 hover:text-emerald-400"><Check size={16} /></button>
-							<button onClick={() => setIsAddingFolder(false)} className="p-1 hover:text-red-400"><X size={16} /></button>
+							<button onClick={handleAddFolder} className="p-1 hover:text-emerald-400 shrink-0"><Check size={16} /></button>
+							<button onClick={() => setIsAddingFolder(false)} className="p-1 hover:text-red-400 shrink-0"><X size={16} /></button>
 						</div>
 					) : (
 						<button
 							onClick={() => setIsAddingFolder(true)}
-							className="text-xs font-bold uppercase tracking-widest text-foreground/40 hover:text-foreground flex items-center gap-2 bg-foreground/5 px-3 py-1 rounded-lg transition-all"
+							className="text-xs font-bold uppercase tracking-widest text-foreground/40 hover:text-foreground flex items-center justify-center gap-2 bg-foreground/5 px-3 py-2 sm:py-1 rounded-lg transition-all w-full sm:w-auto border border-foreground/5"
 						>
 							<FolderPlus size={14} /> New Folder
 						</button>
@@ -865,15 +1007,71 @@ const DashboardPage = () => {
 												onDragStart={handlePipelineDragStart(p.id)}
 												onDragEnd={handlePipelineDragEnd}
 												onContextMenu={(e) => handleContextMenu(e, p, 'my')}
-												className={`group bg-foreground/5 border border-foreground/10 rounded-2xl hover:border-foreground/30 transition-all shadow-sm ${viewMode === 'list' ? 'flex items-center justify-between p-4' : 'p-6'}`}
+												className={`group bg-foreground/5 border border-foreground/10 rounded-2xl hover:border-foreground/30 transition-all shadow-sm ${viewMode === 'list' ? 'flex flex-row items-center justify-between p-3 cursor-pointer' : 'p-6'} min-w-0 gap-2`}
+												onClick={() => {
+													if (viewMode === 'list') router.push(`/canvas/${p.id}`)
+												}}
 											>
-												<div className={viewMode === 'list' ? "flex items-center gap-6 flex-1 min-w-0" : ""}>
-													{viewMode === 'grid' && <PipelineThumbnail nodes={p.nodes} edges={p.edges} />}
-													<div className="flex justify-between items-start mt-4 mb-4">
-														<h3 className="text-lg font-bold truncate text-foreground">{p.name || 'Untitled Pipeline'}</h3>
-														<button onClick={() => handleStarPipeline(p)} className={p.is_starred ? 'text-amber-400' : 'text-foreground/40'}><Star size={18} /></button>
+												<div className={viewMode === 'list' ? "flex items-center gap-3 sm:gap-6 flex-1 min-w-0" : "flex flex-col"}>
+													{viewMode === 'list' ? (
+														<div className="w-14 h-14 rounded-2xl bg-foreground/10 flex items-center justify-center shrink-0 border border-foreground/10 group-hover:border-foreground/20 transition-all pointer-events-none relative overflow-hidden">
+															<div className="absolute inset-0 bg-[#FAEBD7]/5 animate-pulse" />
+															<Cpu size={28} className="text-[#FAEBD7] relative z-10 opacity-80" />
+														</div>
+													) : (
+														<PipelineThumbnail nodes={p.nodes} edges={p.edges} />
+													)}
+													
+													<div className={`flex flex-col flex-1 min-w-0 ${viewMode === 'list' ? '' : 'mt-4 mb-4'}`}>
+														<div className="flex justify-between items-start">
+															<div className="flex items-center gap-2 min-w-0 pr-4 relative text-foreground flex-wrap">
+																<h3 className={`font-bold truncate group-hover:text-[#FAEBD7] transition-colors ${viewMode === 'list' ? 'text-base' : 'text-lg'}`}>
+																	{p.name || 'Untitled Pipeline'}
+																</h3>
+																<div className="flex items-center gap-1.5 shrink-0">
+																	{p.is_starred && <Star size={14} className="text-[#FAEBD7] fill-[#FAEBD7]/20" />}
+																	{p.is_shared && <Users size={14} className="text-blue-400" title="Shared with others" />}
+																	{p.is_public && <Globe size={14} className="text-emerald-400" title="Published" />}
+																</div>
+															</div>
+															{viewMode === 'grid' && (
+																<button
+																	onClick={(e) => { e.stopPropagation(); handleContextMenu(e, p, 'my') }}
+																	className="p-1.5 hover:bg-foreground/10 rounded-lg text-foreground/40 hover:text-foreground transition-all"
+																>
+																	<MoreVertical size={18} />
+																</button>
+															)}
+														</div>
+														<div className="flex items-center gap-4 text-[10px] text-foreground/50 mt-1">
+															<span className="flex items-center gap-1"><Clock size={12} /> {new Date(p.updated_at).toLocaleDateString()}</span>
+															{viewMode === 'list' && p.folder && (
+																<span className="flex items-center gap-1 bg-foreground/5 px-2 py-0.5 rounded-full capitalize">
+																	<Folder size={10} /> {p.folder}
+																</span>
+															)}
+														</div>
 													</div>
-													<Link href={`/canvas/${p.id}`} className="block w-full py-3 bg-foreground/10 rounded-xl font-bold text-sm text-center group-hover:bg-foreground group-hover:text-background transition-all">Open Workspace</Link>
+												</div>
+
+												<div className="flex items-center gap-2">
+													{viewMode === 'list' && (
+														<button
+															onClick={(e) => { e.stopPropagation(); handleContextMenu(e, p, 'my') }}
+															className="p-2.5 hover:bg-foreground/10 rounded-xl text-foreground/40 hover:text-foreground transition-all ml-1 sm:ml-4"
+															title="More actions"
+														>
+															<MoreVertical size={20} />
+														</button>
+													)}
+													{viewMode === 'grid' && (
+														<Link 
+															href={`/canvas/${p.id}`} 
+															className="mt-6 block w-full py-3 bg-foreground/10 rounded-xl font-bold text-sm text-center group-hover:bg-foreground group-hover:text-background transition-all"
+														>
+															Open Workspace
+														</Link>
+													)}
 												</div>
 											</div>
 										))}
@@ -889,7 +1087,7 @@ const DashboardPage = () => {
 
 
 	return (
-		<div className="dashboard-grid bg-background text-foreground font-sans">
+		<div className="dashboard-grid bg-background text-foreground font-sans w-full max-w-full overflow-x-hidden">
 			<DashboardSidebar 
 				onNew={handleNewCanvas} 
 				activeTab={activeTab} 
@@ -899,6 +1097,8 @@ const DashboardPage = () => {
 				groupedPipelines={groupedPipelines}
 				onSignOut={handleSignOut}
 				loading={loading}
+				isOpen={isSidebarOpen}
+				setIsOpen={setIsSidebarOpen}
 				className="dashboard-sidebar shadow-xl z-20" 
 			/>
 			
@@ -911,6 +1111,7 @@ const DashboardPage = () => {
 				setSortBy={setSortBy}
 				sortOrder={sortOrder}
 				setSortOrder={setSortOrder}
+				toggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
 				className="dashboard-topbar"
 			/>
 
@@ -920,12 +1121,12 @@ const DashboardPage = () => {
 					{activeTab === 'Home' && !searchQuery && (
 						<section className="mb-10">
 							<h2 className="text-sm font-medium text-foreground/60 mb-4 px-1 uppercase tracking-wider">Suggested</h2>
-							<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+							<div className="flex flex-nowrap sm:grid sm:grid-cols-2 lg:grid-cols-4 gap-4 overflow-x-auto no-scrollbar -mx-4 px-4 sm:mx-0 sm:px-0 h-full scroll-smooth scroll-pl-4">
 								{recentlyEdited.slice(0, 4).map(p => (
 									<div 
 										key={`suggested-${p.id}`}
 										onContextMenu={(e) => handleContextMenu(e, p, 'my')}
-										className="group bg-background border border-foreground/10 rounded-xl hover:border-amber-400/50 hover:bg-amber-400/20 transition-all p-4 relative cursor-pointer overflow-hidden shadow-sm hover:shadow-md border-l-4 border-l-amber-400"
+										className="group bg-background border border-foreground/10 rounded-xl hover:border-[#FAEBD7]/50 hover:bg-[#FAEBD7]/10 transition-all p-3 sm:p-4 relative cursor-pointer overflow-hidden shadow-sm hover:shadow-md border-l-4 border-l-[#FAEBD7] min-w-0 flex-none w-[85%] sm:w-auto"
 									>
 										<div className="h-28 mb-3 overflow-hidden rounded-lg pointer-events-none">
 											<PipelineThumbnail nodes={p.nodes} edges={p.edges} />
@@ -945,12 +1146,12 @@ const DashboardPage = () => {
 					)}
 
 					{/* Standard Dashboard Content */}
-					<header className="flex justify-between items-center mb-6">
-						<h1 className="text-2xl font-bold tracking-tight text-foreground">
+					<header className="flex flex-row justify-between items-center gap-4 mb-6">
+						<h1 className="text-xl sm:text-2xl font-bold tracking-tight text-[#FAEBD7]">
 							{searchQuery ? `Search results for "${searchQuery}"` : activeTab}
 						</h1>
 						
-						<div className="flex items-center gap-2 bg-foreground/5 p-1 rounded-lg">
+						<div className="flex items-center gap-2 bg-foreground/5 p-1 rounded-lg self-end sm:self-auto">
 							<button
 								onClick={() => setViewMode('grid')}
 								className={`p-1.5 rounded-md transition-all ${viewMode === 'grid' ? 'bg-background shadow-sm text-foreground font-bold' : 'text-foreground/40 hover:text-foreground'}`}

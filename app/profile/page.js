@@ -4,8 +4,10 @@ import React, { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, Camera, Check, User, Github, Twitter, Save, X, Linkedin, Instagram } from 'lucide-react'
+import { ArrowLeft, Camera, Check, User, Github, Twitter, Save, X, Linkedin, Instagram, Eye, Users } from 'lucide-react'
+import { motion, AnimatePresence } from 'framer-motion'
 import PrivateProfileSkeleton from '@/components/profile/PrivateProfileSkeleton'
+import ImageCropModal from '@/components/profile/ImageCropModal'
 
 const GRADIENTS = [
 	'from-amber-400 to-orange-500',
@@ -27,8 +29,11 @@ export default function ProfilePage() {
 	const [handleStatus, setHandleStatus] = useState({ state: 'idle', message: '' })
 	const [about, setAbout] = useState('')
 	const [avatarUrl, setAvatarUrl] = useState('')
+	const [avatarBlob, setAvatarBlob] = useState(null)
 	const [bannerGradient, setBannerGradient] = useState(GRADIENTS[0])
 	const [socials, setSocials] = useState({ twitter: '', github: '', linkedin: '', instagram: '' })
+	const [imageToCrop, setImageToCrop] = useState(null)
+	const [showCropModal, setShowCropModal] = useState(false)
 
 	const router = useRouter()
 	const supabase = createClient()
@@ -97,13 +102,32 @@ export default function ProfilePage() {
 	const handleImageUpload = (e) => {
 		const file = e.target.files?.[0]
 		if (!file) return
-		if (file.size > 2 * 1024 * 1024) {
-			setMessage({ text: 'Image too large. Max 2MB.', type: 'error' })
-			return
-		}
+
+		// Read file as data URL to pass to cropper
 		const reader = new FileReader()
-		reader.onloadend = () => setAvatarUrl(reader.result)
+		reader.onload = () => {
+			setImageToCrop(reader.result)
+			setShowCropModal(true)
+		}
 		reader.readAsDataURL(file)
+	}
+
+	const handleCropComplete = async (croppedImage) => {
+		try {
+			// Instant UI update
+			setAvatarUrl(croppedImage)
+			
+			// Store the blob for later upload
+			const response = await fetch(croppedImage)
+			const blob = await response.blob()
+			setAvatarBlob(blob)
+			
+			setShowCropModal(false)
+			setMessage({ text: 'Avatar adjusted. Remember to save changes.', type: 'success' })
+		} catch (err) {
+			console.error('Crop error:', err)
+			setMessage({ text: 'Failed to process image', type: 'error' })
+		}
 	}
 
 	const stripUsername = (value, platform) => {
@@ -138,12 +162,35 @@ export default function ProfilePage() {
 				throw new Error(handleStatus.message || 'Invalid handle')
 			}
 
+			let finalAvatarUrl = avatarUrl
+
+			// Handle image upload if a new one was cropped
+			if (avatarBlob) {
+				const file = new File([avatarBlob], 'avatar.jpg', { type: 'image/jpeg' })
+				const fileName = `${Math.random()}.jpg`
+				const filePath = `${user.id}/${fileName}`
+
+				const { error: uploadError } = await supabase.storage
+					.from('avatars')
+					.upload(filePath, file)
+
+				if (uploadError) throw uploadError
+
+				const { data: { publicUrl } } = supabase.storage
+					.from('avatars')
+					.getPublicUrl(filePath)
+				
+				finalAvatarUrl = publicUrl
+				setAvatarUrl(publicUrl)
+				setAvatarBlob(null)
+			}
+
 			const { error } = await supabase.from('profiles').upsert({
 				id: user.id,
 				username: username.trim(),
 				handle: handle.toLowerCase().trim(),
 				about: about.trim(),
-				avatar_url: avatarUrl,
+				avatar_url: finalAvatarUrl,
 				banner_gradient: bannerGradient,
 				socials,
 				updated_at: new Date().toISOString()
@@ -165,7 +212,7 @@ export default function ProfilePage() {
 	return (
 		<div className="min-h-screen bg-background text-foreground">
 			{/* Navbar */}
-			<nav className="fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-6 h-14 border-b border-foreground/[0.06] bg-background/90 backdrop-blur-sm">
+			<nav className="sticky top-0 z-50 flex items-center justify-between px-6 h-14 border-b border-foreground/[0.06] bg-background/90 backdrop-blur-sm">
 				<Link href="/dashboard" className="flex items-center gap-2 text-sm font-semibold text-foreground/50 hover:text-foreground transition-colors group">
 					<ArrowLeft size={15} className="group-hover:-translate-x-0.5 transition-transform" />
 					Dashboard
@@ -174,13 +221,12 @@ export default function ProfilePage() {
 				<div className="w-24" />
 			</nav>
 
-			<main className="pt-14 min-h-screen">
+			<main className="min-h-screen">
 				<div className="max-w-5xl mx-auto px-6 py-12">
 					<div className="grid grid-cols-1 lg:grid-cols-2 gap-10 lg:gap-16">
 
-						{/* LEFT — Live Preview (sticky) */}
 						<div className="lg:sticky lg:top-24 lg:self-start order-2 lg:order-1">
-							<p className="text-[9px] font-black uppercase tracking-[0.2em] text-foreground/20 mb-3">Live preview</p>
+							<p className="text-[9px] font-black uppercase tracking-[0.2em] text-foreground/20 mb-3">Preview</p>
 
 							<div className="rounded-2xl overflow-hidden border border-foreground/[0.08] shadow-lg">
 								{/* Banner — clean gradient only */}
@@ -205,7 +251,7 @@ export default function ProfilePage() {
 										</div>
 										{avatarUrl && (
 											<button
-												onClick={() => setAvatarUrl('')}
+												onClick={() => { setAvatarUrl(''); setAvatarBlob(null); }}
 												title="Remove photo"
 												className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-background border border-foreground/20 flex items-center justify-center hover:border-red-400/60 hover:text-red-400 text-foreground/40 transition-colors shadow-sm"
 											>
@@ -416,6 +462,18 @@ export default function ProfilePage() {
 					</div>
 				</div>
 			</main>
+
+
+			{/* Image Crop Modal */}
+			<AnimatePresence>
+				{showCropModal && (
+					<ImageCropModal 
+						image={imageToCrop}
+						onCropComplete={handleCropComplete}
+						onCancel={() => setShowCropModal(false)}
+					/>
+				)}
+			</AnimatePresence>
 		</div>
 	)
 }

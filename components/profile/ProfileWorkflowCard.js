@@ -16,10 +16,10 @@ const ProfileWorkflowCard = ({ pipeline }) => {
 	}
 
 	return (
-		<div className="group relative border-b border-foreground/5 last:border-0 hover:bg-foreground/[0.01] transition-colors p-6">
-			<div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-				<div className="flex-1 space-y-2">
-					<h3 className={`text-base font-semibold text-foreground/90 group-hover:text-amber-400 transition-colors leading-snug`}>
+		<div className="group relative border-b border-foreground/5 last:border-0 hover:bg-foreground/[0.01] transition-colors p-5 lg:p-6 text-left">
+			<div className="flex items-center justify-between gap-4">
+				<div className="flex-1 space-y-1.5 min-w-0">
+					<h3 className="text-base font-semibold text-foreground/90 group-hover:text-amber-400 transition-colors leading-snug">
 						{pipeline.name || 'Untitled Workflow'}
 					</h3>
 					<div className="flex items-center gap-3 text-sm text-foreground/40">

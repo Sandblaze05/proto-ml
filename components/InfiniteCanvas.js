@@ -1142,7 +1142,8 @@ function DrawingLayer() {
     setCurrentPath((prev) => `${prev} L ${point.x} ${point.y}`);
   };
 
-  const onDrawUp = () => {
+  const onDrawUp = (event) => {
+    if (event) event.stopPropagation();
     if (!currentPath) return;
     addDrawing({ path: currentPath, color: annotationColor });
     setCurrentPath(null);
@@ -1191,8 +1192,6 @@ function DrawingLayer() {
       ref={svgRef}
       className="absolute inset-0 w-full h-full z-10 pointer-events-none"
       onMouseMove={activeTool === 'draw' ? onDrawMove : undefined}
-      onMouseUp={activeTool === 'draw' ? onDrawUp : undefined}
-      onMouseLeave={activeTool === 'draw' ? onDrawUp : undefined}
     >
       {(activeTool === 'draw' || activeTool === 'erase') && (
         <rect
@@ -1902,7 +1901,7 @@ function ContextMenu({ menu, onClose, screenToFlowPosition }) {
 }
 
 function ShapeLayerComponents() {
-  const { activeAnnotationShape, setActiveAnnotationShape, addNode, addToast, nodes } = useUIStore();
+  const { activeAnnotationShape, setActiveAnnotationShape, addNode, addToast, nodes, annotationColor } = useUIStore();
   const { screenToFlowPosition } = useReactFlow();
   const [startPt, setStartPt] = useState(null);
   const [currPt, setCurrPt] = useState(null);
@@ -1940,10 +1939,9 @@ function ShapeLayerComponents() {
         width: 160,
         height: 40,
         zIndex: 10,
-        data: { shapeType: 'text', label: '', strokeColor: '#67e8f9', width: 160, height: 40 },
+        data: { shapeType: 'text', label: '', strokeColor: annotationColor || '#faebd7', width: 160, height: 40 },
       });
       setActiveAnnotationShape(null);
-      addToast('Text added', 'success');
       return;
     }
     setStartPt(pos);
@@ -1971,7 +1969,7 @@ function ShapeLayerComponents() {
         zIndex: 10,
         data: {
           shapeType: activeAnnotationShape,
-          strokeColor: '#67e8f9',
+          strokeColor: annotationColor || '#67e8f9',
           fillColor: 'none',
           strokeWidth: 2,
           strokeStyle: activeAnnotationShape.startsWith('dotted') ? 'dotted' : 'solid',
@@ -1986,9 +1984,13 @@ function ShapeLayerComponents() {
     const flowEnd = screenToFlowPosition(endPt);
 
     const w = Math.max(Math.abs(flowEnd.x - flowStart.x), 40);
-    const h = Math.max(Math.abs(flowEnd.y - flowStart.y), 30);
+    const h = Math.max(Math.abs(flowEnd.y - flowStart.y), 40);
     const px = Math.min(flowStart.x, flowEnd.x);
     const py = Math.min(flowStart.y, flowEnd.y);
+    
+    // Determine if drawn bottom-left to top-right (relative to top-left origin)
+    const isLineStr = ['line', 'arrow', 'double-arrow', 'dotted-line', 'dotted-arrow'].includes(activeAnnotationShape);
+    const invertY = isLineStr && ((flowStart.x < flowEnd.x) !== (flowStart.y < flowEnd.y));
 
     addNode({
       id: `shape-${uuidv4().slice(0, 6)}`,
@@ -2000,10 +2002,11 @@ function ShapeLayerComponents() {
       data: {
         shapeType: activeAnnotationShape,
         width: w, height: h,
-        strokeColor: '#67e8f9',
+        strokeColor: annotationColor || '#67e8f9',
         fillColor: 'none',
         strokeWidth: 2,
         strokeStyle: activeAnnotationShape.startsWith('dotted') ? 'dotted' : 'solid',
+        invertY,
       },
     });
 
@@ -2025,18 +2028,60 @@ function ShapeLayerComponents() {
           onPointerUp={onPointerUp}
           onContextMenu={e => { e.preventDefault(); setActiveAnnotationShape(null); }}
         >
-          {startPt && currPt && !isText && (
-            <div style={{
-              position: 'absolute',
-              left: Math.min(startPt.x, currPt.x),
-              top: Math.min(startPt.y, currPt.y),
-              width: Math.abs(currPt.x - startPt.x),
-              height: Math.abs(currPt.y - startPt.y),
-              border: '1px dashed #67e8f9',
-              backgroundColor: 'rgba(103,232,249,0.05)',
-              pointerEvents: 'none'
-            }} />
-          )}
+          {startPt && currPt && !isText && (() => {
+            const left = Math.min(startPt.x, currPt.x);
+            const top = Math.min(startPt.y, currPt.y);
+            const w = Math.max(Math.abs(currPt.x - startPt.x), 5);
+            const h = Math.max(Math.abs(currPt.y - startPt.y), 5);
+            const strokeColor = annotationColor || '#67e8f9';
+            const strokeWidth = 2;
+            const half = strokeWidth / 2;
+            
+            const isLine = ['line', 'arrow', 'double-arrow', 'dotted-line', 'dotted-arrow', 'elbow'].includes(activeAnnotationShape);
+            
+            if (isLine) {
+              const isElbow = activeAnnotationShape === 'elbow';
+              const isDotted = activeAnnotationShape === 'dotted-line' || activeAnnotationShape === 'dotted-arrow';
+              const dashArray = isDotted ? `${strokeWidth},${strokeWidth * 2}` : 'none';
+              const invertY = ((startPt.x < currPt.x) !== (startPt.y < currPt.y));
+              
+              let pathD;
+              const pad = 10;
+              const effW = Math.max(w, pad * 2);
+              if (isElbow) {
+                const mx = effW / 2;
+                pathD = `M ${pad} ${pad} L ${mx} ${pad} L ${mx} ${Math.max(h - pad, pad)} L ${effW - pad} ${Math.max(h - pad, pad)}`;
+              } else {
+                const py1 = invertY ? Math.max(h - pad, pad) : pad;
+                const py2 = invertY ? pad : Math.max(h - pad, pad);
+                pathD = `M ${pad} ${py1} L ${effW - pad} ${py2}`;
+              }
+              
+              return (
+                <svg style={{ position: 'absolute', left, top, width: w, height: h, pointerEvents: 'none', overflow: 'visible' }}>
+                  <path d={pathD} stroke={strokeColor} strokeWidth={strokeWidth} fill="none" strokeDasharray={dashArray} strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              );
+            }
+            
+            let element;
+            if (activeAnnotationShape === 'ellipse') {
+              element = <ellipse cx={w/2} cy={h/2} rx={Math.max(w/2 - half, 0)} ry={Math.max(h/2 - half, 0)} stroke={strokeColor} strokeWidth={strokeWidth} fill="rgba(103,232,249,0.05)" />;
+            } else if (activeAnnotationShape === 'frame') {
+              element = <rect x={half} y={half} width={Math.max(w - strokeWidth, 0)} height={Math.max(h - strokeWidth, 0)} rx={10} stroke={strokeColor} strokeWidth={strokeWidth} fill="rgba(103,232,249,0.03)" />
+            } else {
+              const rx = activeAnnotationShape === 'rounded-rect' ? 12 : 0;
+              const isDotted = activeAnnotationShape.startsWith('dotted');
+              const dashArray = isDotted ? `${strokeWidth},${strokeWidth * 2}` : 'none';
+              element = <rect x={half} y={half} width={Math.max(w - strokeWidth, 0)} height={Math.max(h - strokeWidth, 0)} rx={rx} stroke={strokeColor} strokeWidth={strokeWidth} strokeDasharray={dashArray} fill="rgba(103,232,249,0.05)" />;
+            }
+
+            return (
+              <svg style={{ position: 'absolute', left, top, width: w, height: h, pointerEvents: 'none', overflow: 'visible' }}>
+                {element}
+              </svg>
+            );
+          })()}
         </div>
       )}
     </>

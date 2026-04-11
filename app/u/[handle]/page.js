@@ -23,7 +23,11 @@ import {
 	Check,
 	X,
 	ArrowUpDown,
-	Frown
+	Frown,
+	Edit3,
+	Eye,
+	Menu,
+	ChevronRight
 } from 'lucide-react'
 import Link from 'next/link'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -39,10 +43,22 @@ export default function PublicProfilePage() {
 	const [searchQuery, setSearchQuery] = useState('')
 	const [sortBy, setSortBy] = useState('newest')
 	const [isShareModalOpen, setIsShareModalOpen] = useState(false)
+	const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
+	const [currentUser, setCurrentUser] = useState(null)
 	const [copied, setCopied] = useState(false)
 	
 	const supabase = createClient()
 	const router = useRouter()
+
+	useEffect(() => {
+		async function fetchUser() {
+			const { data: { user } } = await supabase.auth.getUser()
+			setCurrentUser(user)
+		}
+		fetchUser()
+	}, [supabase])
+
+	const isOwnProfile = currentUser?.id === profile?.id
 
 	const stats = useMemo(() => {
 		if (!pipelines.length) return { pipelines: 0, likes: 0, forks: 0 }
@@ -123,12 +139,14 @@ export default function PublicProfilePage() {
 
 	return (
 		<div className={`min-h-screen bg-background text-foreground selection:bg-amber-400/30 selection:text-amber-400 font-sans`}>
-			<nav className="fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-8 h-16 border-b border-white/[0.04] bg-background/60 backdrop-blur-xl">
+			<nav className="sticky top-0 z-60 flex items-center justify-between px-6 lg:px-8 h-16 border-b border-white/[0.04] bg-background">
 				<Link href="/community" className="flex items-center gap-2 text-sm font-bold text-foreground/40 hover:text-foreground transition-all group">
 					<ArrowLeft size={16} className="group-hover:-translate-x-1 transition-transform" />
-					Back to Community
+					<span className="hidden sm:inline">Back to Community</span>
 				</Link>
-				<div className="flex items-center gap-4">
+
+				{/* Desktop Menu */}
+				<div className="hidden lg:flex items-center gap-4">
 					<button 
 						onClick={() => setIsShareModalOpen(true)}
 						className="flex items-center gap-2 px-4 py-2 rounded-xl bg-foreground/5 hover:bg-foreground/10 border border-foreground/5 transition-all text-xs font-bold uppercase tracking-widest"
@@ -136,63 +154,139 @@ export default function PublicProfilePage() {
 						<Share2 size={14} />
 						Share
 					</button>
+					{isOwnProfile && (
+						<Link 
+							href="/profile"
+							className="flex items-center gap-2 px-4 py-2 rounded-xl bg-amber-400 text-black hover:opacity-90 transition-all text-xs font-bold uppercase tracking-widest shadow-lg shadow-amber-400/20"
+						>
+							<Edit3 size={14} />
+							Edit Profile
+						</Link>
+					)}
 					<div className="w-px h-4 bg-foreground/10 mx-2" />
-					<Link href="/dashboard" className="text-xs font-black uppercase tracking-widest text-foreground/20 hover:text-foreground transition-colors">
+					<Link href="/dashboard" className="text-xs font-black uppercase tracking-widest text-foreground/20 hover:text-foreground transition-colors text-right">
 						My Dashboard
 					</Link>
 				</div>
+
+				{/* Mobile Menu Toggle */}
+				<button 
+					onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+					className="lg:hidden p-2 rounded-xl bg-foreground/5 text-foreground/60 hover:text-foreground transition-all"
+				>
+					{isMobileMenuOpen ? <X size={20} /> : <Menu size={20} />}
+				</button>
+
+				{/* Mobile Menu Overlay */}
+				<AnimatePresence>
+					{isMobileMenuOpen && (
+						<>
+							<motion.div 
+								initial={{ opacity: 0 }}
+								animate={{ opacity: 1 }}
+								exit={{ opacity: 0 }}
+								onClick={() => setIsMobileMenuOpen(false)}
+								className="fixed inset-0 top-16 bg-black/60 backdrop-blur-md z-55"
+							/>
+							<motion.div 
+								initial={{ y: -20, opacity: 0 }}
+								animate={{ y: 0, opacity: 1 }}
+								exit={{ y: -20, opacity: 0 }}
+								className="fixed inset-x-0 top-16 bg-background border-b border-foreground/5 p-6 z-56 lg:hidden space-y-4 shadow-2xl"
+							>
+								<div className="flex flex-col gap-3">
+									<button 
+										onClick={() => { setIsShareModalOpen(true); setIsMobileMenuOpen(false); }}
+										className="flex items-center justify-between w-full px-6 py-4 rounded-2xl bg-foreground/5 text-sm font-bold"
+									>
+										<div className="flex items-center gap-3">
+											<Share2 size={18} className="text-foreground/40" />
+											Share Profile
+										</div>
+										<ChevronRight size={16} className="text-foreground/20" />
+									</button>
+									{isOwnProfile && (
+										<Link 
+											href="/profile"
+											className="flex items-center justify-between w-full px-6 py-4 rounded-2xl bg-amber-400 text-black text-sm font-bold"
+										>
+											<div className="flex items-center gap-3">
+												<Edit3 size={18} />
+												Edit Profile
+											</div>
+											<ChevronRight size={16} />
+										</Link>
+									)}
+									<Link 
+										href="/dashboard"
+										className="flex items-center justify-between w-full px-6 py-4 rounded-2xl bg-foreground/5 text-sm font-bold"
+									>
+										<div className="flex items-center gap-3">
+											<LayoutGrid size={18} className="text-foreground/40" />
+											My Dashboard
+										</div>
+										<ChevronRight size={16} className="text-foreground/20" />
+									</Link>
+								</div>
+							</motion.div>
+						</>
+					)}
+				</AnimatePresence>
 			</nav>
 
 			{/* Banner */}
-			<div className={`h-[280px] w-full bg-gradient-to-br ${profile.banner_gradient || 'from-amber-400 to-orange-500'} relative`}>
-				<div className="absolute inset-0 bg-black/20" />
+			<div className={`h-32 lg:h-40 w-full bg-linear-to-br ${profile.banner_gradient || 'from-amber-400 to-orange-500'} relative`}>
+				<div className="absolute inset-0 bg-black/10" />
 			</div>
 
-			<main className="relative z-10 max-w-7xl mx-auto px-8 -mt-24 pb-24">
-				<div className="grid grid-cols-1 lg:grid-cols-[380px_1fr] gap-16">
+			<main className="relative z-10 max-w-7xl mx-auto px-6 lg:px-8 pb-24">
+				{/* Avatar & overlap handling */}
+				<div className="relative -mt-16 lg:-mt-20 mb-10 lg:mb-12 flex flex-col lg:flex-row items-center lg:items-end gap-6 lg:gap-8">
+					<motion.div 
+						whileHover={{ scale: 1.02 }}
+						className="relative shrink-0"
+					>
+						<div className="w-36 h-36 lg:w-48 lg:h-48 rounded-[32px] lg:rounded-[40px] border-6 lg:border-8 border-background bg-background p-1.5 overflow-hidden shadow-2xl shadow-black/10">
+							{profile.avatar_url ? (
+								<img 
+									src={profile.avatar_url} 
+									alt={profile.username} 
+									className="w-full h-full object-cover rounded-[24px] lg:rounded-[32px]"
+								/>
+							) : (
+								<div className="w-full h-full bg-foreground/5 rounded-[24px] lg:rounded-[32px] flex items-center justify-center">
+									<span className="text-4xl lg:text-5xl font-black text-foreground/10">{profile.username?.[0]?.toUpperCase()}</span>
+								</div>
+							)}
+						</div>
+						{stats.likes > 100 && (
+							<div className="absolute -bottom-1 -right-1 lg:-bottom-2 lg:-right-2 p-2.5 lg:p-3 rounded-xl lg:rounded-2xl bg-amber-400 shadow-lg text-white ring-4 ring-background">
+								<Trophy size={16} />
+							</div>
+						)}
+					</motion.div>
+
+						<div className="flex-1 space-y-1 text-center lg:text-left">
+							<h1 className="text-4xl lg:text-5xl font-black tracking-tight flex items-center justify-center lg:justify-start gap-3">
+								{profile.username}
+								{stats.likes > 50 && <CheckCircle2 size={28} className="text-amber-400" />}
+							</h1>
+							<p className="text-xl lg:text-2xl font-bold text-amber-400/80">@{profile.handle}</p>
+						</div>
+				</div>
+
+				<div className="grid grid-cols-1 lg:grid-cols-[380px_1fr] gap-12 lg:gap-16">
 					
 					{/* Left Column: Profile Card */}
 					<aside className="space-y-10">
 						<div className="space-y-8">
-							{/* Large Avatar with Magnetic Effect */}
-							<motion.div 
-								whileHover={{ scale: 1.02 }}
-								className="relative inline-block"
-							>
-								<div className={`w-48 h-48 rounded-3xl border-4 border-background bg-background p-1.5 overflow-hidden shadow-2xl transition-shadow duration-500 shadow-amber-400/20`}>
-									{profile.avatar_url ? (
-										<img 
-											src={profile.avatar_url} 
-											alt={profile.username} 
-											className="w-full h-full object-cover rounded-2xl"
-										/>
-									) : (
-										<div className="w-full h-full bg-foreground/5 rounded-2xl flex items-center justify-center">
-											<span className="text-5xl font-black text-foreground/10">{profile.username?.[0]?.toUpperCase()}</span>
-										</div>
-									)}
-								</div>
-								{stats.likes > 100 && (
-									<div className={`absolute -bottom-2 -right-2 p-3 rounded-2xl bg-amber-400 shadow-lg text-white`}>
-										<Trophy size={18} />
-									</div>
-								)}
-							</motion.div>
 
-							<div className="space-y-3">
-								<h1 className="text-4xl font-black tracking-tight flex items-center gap-2">
-									{profile.username}
-									{stats.likes > 50 && <CheckCircle2 size={24} className="text-amber-400" />}
-								</h1>
-								<p className={`text-xl font-bold text-amber-400`}>@{profile.handle}</p>
-							</div>
-
-							<p className="text-lg text-foreground/60 leading-relaxed">
+							<p className="text-lg text-foreground/60 leading-relaxed text-center lg:text-left">
 								{profile.about || `Passionate about building innovative AI workflows and contributing to the ProtoML community.`}
 							</p>
 
 							{/* Stats Row */}
-							<div className="flex items-center gap-8 py-6 border-y border-foreground/5">
+							<div className="flex items-center justify-center lg:justify-start gap-8 py-6 border-b border-foreground/5">
 								<div className="text-center">
 									<p className="text-2xl font-black">{stats.pipelines}</p>
 									<p className="text-[10px] font-bold uppercase tracking-widest text-foreground/30">Pipelines</p>
@@ -209,7 +303,7 @@ export default function PublicProfilePage() {
 
 							{/* Badges */}
 							{stats.pipelines > 5 && (
-								<div className="flex flex-wrap gap-2">
+								<div className="flex flex-wrap items-center justify-center lg:justify-start gap-2">
 									<div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-amber-400/10 text-amber-400 text-[10px] font-black uppercase tracking-widest`}>
 										<TrendingUp size={10} />
 										Top Contributor
@@ -221,30 +315,30 @@ export default function PublicProfilePage() {
 								</div>
 							)}
 
-							{/* Social/Links */}
-							<div className="space-y-4 pt-2">
+							{/* Social/Links - Moved to bottom for mobile */}
+							<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 gap-4 pt-6">
 								{profile.socials?.twitter && (
-									<a href={`https://twitter.com/${profile.socials.twitter}`} target="_blank" rel="noopener noreferrer" className={`flex items-center gap-3 text-foreground/40 hover:text-amber-400 transition-colors group`}>
+									<a href={`https://twitter.com/${profile.socials.twitter}`} target="_blank" rel="noopener noreferrer" className={`flex items-center gap-3 p-4 lg:p-0 rounded-2xl bg-foreground/5 lg:bg-transparent text-foreground/40 hover:text-amber-400 transition-colors group`}>
 										<Twitter size={18} />
-										<span className="text-sm font-semibold">@{profile.socials.twitter}</span>
+										<span className="text-sm font-semibold truncate">@{profile.socials.twitter}</span>
 									</a>
 								)}
 								{profile.socials?.github && (
-									<a href={`https://github.com/${profile.socials.github}`} target="_blank" rel="noopener noreferrer" className={`flex items-center gap-3 text-foreground/40 hover:text-amber-400 transition-colors group`}>
+									<a href={`https://github.com/${profile.socials.github}`} target="_blank" rel="noopener noreferrer" className={`flex items-center gap-3 p-4 lg:p-0 rounded-2xl bg-foreground/5 lg:bg-transparent text-foreground/40 hover:text-amber-400 transition-colors group`}>
 										<Github size={18} />
-										<span className="text-sm font-semibold">github.com/{profile.socials.github}</span>
+										<span className="text-sm font-semibold truncate">github.com/{profile.socials.github}</span>
 									</a>
 								)}
 								{profile.socials?.linkedin && (
-									<a href={`https://linkedin.com/in/${profile.socials.linkedin}`} target="_blank" rel="noopener noreferrer" className={`flex items-center gap-3 text-foreground/40 hover:text-amber-400 transition-colors group`}>
+									<a href={`https://linkedin.com/in/${profile.socials.linkedin}`} target="_blank" rel="noopener noreferrer" className={`flex items-center gap-3 p-4 lg:p-0 rounded-2xl bg-foreground/5 lg:bg-transparent text-foreground/40 hover:text-amber-400 transition-colors group`}>
 										<Linkedin size={18} />
-										<span className="text-sm font-semibold">linkedin.com/in/{profile.socials.linkedin}</span>
+										<span className="text-sm font-semibold truncate">linkedin.com/in/{profile.socials.linkedin}</span>
 									</a>
 								)}
 								{profile.socials?.instagram && (
-									<a href={`https://instagram.com/${profile.socials.instagram}`} target="_blank" rel="noopener noreferrer" className={`flex items-center gap-3 text-foreground/40 hover:text-amber-400 transition-colors group`}>
+									<a href={`https://instagram.com/${profile.socials.instagram}`} target="_blank" rel="noopener noreferrer" className={`flex items-center gap-3 p-4 lg:p-0 rounded-2xl bg-foreground/5 lg:bg-transparent text-foreground/40 hover:text-amber-400 transition-colors group`}>
 										<Instagram size={18} />
-										<span className="text-sm font-semibold">instagram.com/{profile.socials.instagram}</span>
+										<span className="text-sm font-semibold truncate">instagram.com/{profile.socials.instagram}</span>
 									</a>
 								)}
 							</div>
@@ -252,34 +346,38 @@ export default function PublicProfilePage() {
 					</aside>
 
 					{/* Right Column: Workflows */}
-					<section className="space-y-10 pt-8">
-						<div className="flex flex-col md:flex-row md:items-center justify-between gap-6 pb-6 border-b border-foreground/5">
-							<h2 className="text-2xl font-black tracking-tight flex items-center gap-3">
-								<span className="text-amber-400">{pipelines.length}</span>
-								Workflows
-							</h2>
-							
-							<div className="flex items-center gap-3">
-								<div className="relative group">
-									<Search className="absolute left-3 top-1/2 -translate-y-1/2 text-foreground/20 group-focus-within:text-foreground/50 transition-colors" size={16} />
-									<input 
-										type="text"
-										value={searchQuery}
-										onChange={(e) => setSearchQuery(e.target.value)}
-										placeholder="Search workflows..."
-										className={`pl-10 pr-4 py-2 border border-foreground/5 bg-foreground/3 focus:bg-foreground/5 rounded-2xl text-sm outline-none transition-all w-full md:w-64 font-semibold focus:border-amber-400/50`}
-									/>
+					<section className="bg-white/[0.02] border border-white/5 rounded-[32px] overflow-hidden shadow-2xl flex flex-col min-h-[500px]">
+						{/* Integrated Workflow Control Bar */}
+						<div className="p-3 border-b border-white/5 bg-white/1">
+							<div className="bg-white/5 border border-white/5 rounded-[24px] p-2 flex flex-col md:flex-row items-center gap-2">
+								<div className="flex-1 flex items-center gap-4 px-6 h-12">
+									<h2 className="text-lg font-black tracking-tight flex items-center gap-3">
+										<span className="text-amber-400">{pipelines.length}</span>
+										Workflows
+									</h2>
+									<div className="w-px h-6 bg-white/10 hidden md:block" />
+									<div className="relative group flex-1 max-w-md">
+										<Search className="absolute left-0 top-1/2 -translate-y-1/2 text-white/20 group-focus-within:text-white/50 transition-colors" size={14} />
+										<input 
+											type="text"
+											value={searchQuery}
+											onChange={(e) => setSearchQuery(e.target.value)}
+											placeholder="Search workflows..."
+											className="w-full bg-transparent pl-8 pr-4 py-2 text-sm font-semibold outline-none placeholder:text-white/20"
+										/>
+									</div>
 								</div>
-								<div className="flex items-center p-1 rounded-2xl bg-foreground/5 border border-foreground/5">
+								
+								<div className="flex items-center gap-1.5 bg-black/40 backdrop-blur-md border border-white/5 p-1 rounded-[18px] shadow-sm w-full md:w-auto">
 									<button 
 										onClick={() => setSortBy('newest')}
-										className={`px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${sortBy === 'newest' ? `bg-background text-foreground shadow-sm` : 'text-foreground/30 hover:text-foreground/60'}`}
+										className={`flex-1 md:flex-none px-6 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${sortBy === 'newest' ? `bg-white text-black shadow-lg` : 'text-white/40 hover:text-white'}`}
 									>
 										Newest
 									</button>
 									<button 
 										onClick={() => setSortBy('likes')}
-										className={`px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${sortBy === 'likes' ? `bg-background text-foreground shadow-sm` : 'text-foreground/30 hover:text-foreground/60'}`}
+										className={`flex-1 md:flex-none px-6 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${sortBy === 'likes' ? `bg-white text-black shadow-lg` : 'text-white/40 hover:text-white'}`}
 									>
 										Trending
 									</button>
@@ -287,7 +385,7 @@ export default function PublicProfilePage() {
 							</div>
 						</div>
 
-						<div className="bg-white/[0.02] border border-white/5 rounded-[32px] overflow-hidden shadow-2xl min-h-[400px]">
+						<div className="flex-1">
 							{filteredPipelines.length > 0 ? (
 								<div className="divide-y divide-white/[0.03]">
 									{filteredPipelines.map(pipeline => (
