@@ -6,7 +6,6 @@ import gsap from 'gsap'
 import { useUIStore } from '@/store/useUIStore'
 import { compileExecutionGraph } from '@/lib/executor/pipelineCompiler'
 import MonacoCodeEditor from './nodes/MonacoCodeEditor'
-import JupyterClient from '@/lib/executor/jupyterClient'
 
 const PipelineCompilerPanel = () => {
   const panelRef = useRef(null)
@@ -20,11 +19,12 @@ const PipelineCompilerPanel = () => {
   const [validationMode, setValidationMode] = useState('strict')
 
   // Execution State
-  const [activeTab, setActiveTab] = useState('code') // 'code' | 'logs'
+  const [activeTab, setActiveTab] = useState('code') // 'code' | 'logs' | 'result'
   const [jupyterUrl, setJupyterUrl] = useState('http://localhost:8888')
   const [jupyterToken, setJupyterToken] = useState('')
   const [isExecuting, setIsExecuting] = useState(false)
   const [executionLogs, setExecutionLogs] = useState([])
+  const [executionResult, setExecutionResult] = useState(null)
   const [showSettings, setShowSettings] = useState(false)
 
   const uiNodes = useUIStore(s => s.nodes)
@@ -100,7 +100,8 @@ const PipelineCompilerPanel = () => {
     if (!compiledCode) return;
     setIsExecuting(true);
     setActiveTab('logs');
-    setExecutionLogs([{ type: 'system', text: `Connecting to Jupyter at ${jupyterUrl}...` }]);
+    setExecutionLogs([]);
+    setExecutionResult(null);
 
     try {
       const appProtocol = typeof window !== 'undefined' ? window.location.protocol : '';
@@ -123,59 +124,115 @@ const PipelineCompilerPanel = () => {
         ]);
       }
 
-      const client = new JupyterClient(jupyterUrl, jupyterToken);
-      
-      // Step 1: List / create kernel
-      let kernelId;
-      setExecutionLogs(prev => [...prev, { type: 'system', text: 'Fetching kernels...' }]);
-      const kernels = await client.listKernels();
-      
-      if (kernels && kernels.length > 0) {
-        kernelId = kernels[0].id; // reuse existing kernel
-        setExecutionLogs(prev => [...prev, { type: 'system', text: `Reusing existing kernel ${kernelId}...` }]);
-      } else {
-        setExecutionLogs(prev => [...prev, { type: 'system', text: 'Starting new kernel...' }]);
-        const newKernel = await client.startKernel();
-        kernelId = newKernel.id;
+      const response = await fetch('/api/jupyter/execute', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jupyterUrl,
+          jupyterToken,
+          code: compiledCode,
+        }),
+      });
+
+      const data = await response.json();
+      if (!response.ok || !data?.ok) {
+        throw new Error(data?.error || `Execution failed (${response.status})`);
       }
 
-      // Step 2: Execute code
-      setExecutionLogs(prev => [...prev, { type: 'system', text: 'Executing compiled pipeline...\n' + '-'.repeat(40) }]);
-      
-      const result = await client.executeCode(kernelId, compiledCode, {
-        onStream: (name, text) => {
-          setExecutionLogs(prev => [...prev, { type: name, text }]);
-        },
-        onDisplayData: (data) => {
-          if (data['text/plain']) {
-            setExecutionLogs(prev => [...prev, { type: 'stdout', text: data['text/plain'] }]);
-          }
-        },
-        onError: (err) => {
-          setExecutionLogs(prev => [...prev, { type: 'stderr', text: `${err.ename}: ${err.evalue}\n${(err.traceback || []).join('\n')}` }]);
-        },
-        onConnected: () => {
-          // Socket connected
-        },
-        onComplete: (status) => {
-          setExecutionLogs(prev => [...prev, { type: 'system', text: `\n${'-'.repeat(40)}\nExecution finished with status: ${status}` }]);
-        }
-      });
-      
-      if (result.status !== 'ok') {
-         setExecutionLogs(prev => [...prev, { type: 'stderr', text: `Pipeline execution failed or aborted.` }]);
+      setExecutionLogs(prev => [...prev, ...(Array.isArray(data.logs) ? data.logs : [])]);
+      setExecutionResult(data?.structuredResult ?? null);
+
+      if (data?.structuredResult) {
+        setActiveTab('result');
+      }
+
+      if (data.status !== 'ok') {
+        setExecutionLogs(prev => [...prev, { type: 'stderr', text: 'Pipeline execution failed or aborted.' }]);
       }
     } catch (err) {
       const message = String(err?.message || err || 'Unknown error');
       const isNetworkFailure = /NetworkError|Failed to fetch|fetch resource/i.test(message);
       const hint = isNetworkFailure
-        ? '\nHint: If this app is not running on localhost, a local Jupyter URL (http://localhost:8888) is unreachable from the browser context. Use a publicly reachable HTTPS Jupyter endpoint or run the app locally.'
+        ? '\nHint: Execution now runs through the server API. Ensure the server can reach the Jupyter endpoint and that URL/token are still valid.'
         : '';
       setExecutionLogs(prev => [...prev, { type: 'stderr', text: `\n[Fatal Error]: ${message}${hint}` }]);
     } finally {
       setIsExecuting(false);
     }
   }
+
+  const getResultRows = () => {
+    const candidate = executionResult;
+    if (!candidate) return null;
+
+    if (Array.isArray(candidate)) {
+      return candidate;
+    }
+
+    if (Array.isArray(candidate.final_output)) return candidate.final_output;
+    if (Array.isArray(candidate.rows)) return candidate.rows;
+    if (Array.isArray(candidate.data)) return candidate.data;
+    if (candidate.output && Array.isArray(candidate.output.final_output)) return candidate.output.final_output;
+    if (candidate.output && Array.isArray(candidate.output.rows)) return candidate.output.rows;
+    if (candidate.output && Array.isArray(candidate.output.data)) return candidate.output.data;
+
+    return null;
+  }
+
+  const triggerDownload = (filename, mimeType, content) => {
+    if (typeof window === 'undefined') return;
+    const blob = new Blob([content], { type: mimeType });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = filename;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  const downloadResultJson = () => {
+    if (!executionResult) return;
+    const content = `${JSON.stringify(executionResult, null, 2)}\n`;
+    triggerDownload('pipeline-result.json', 'application/json;charset=utf-8', content);
+  }
+
+  const toCsv = (rows) => {
+    if (!Array.isArray(rows) || rows.length === 0) return '';
+    const objectRows = rows.map((row) => (row && typeof row === 'object' ? row : { value: row }));
+    const headers = Array.from(new Set(objectRows.flatMap((row) => Object.keys(row))));
+
+    const escapeCell = (value) => {
+      const normalized = value == null ? '' : String(value);
+      const escaped = normalized.replace(/"/g, '""');
+      return /[",\n]/.test(escaped) ? `"${escaped}"` : escaped;
+    };
+
+    const lines = [headers.join(',')];
+    for (const row of objectRows) {
+      lines.push(headers.map((header) => escapeCell(row[header])).join(','));
+    }
+
+    return `${lines.join('\n')}\n`;
+  }
+
+  const downloadResultCsv = () => {
+    const rows = getResultRows();
+    if (!rows || rows.length === 0) return;
+    const csv = toCsv(rows);
+    if (!csv) return;
+    triggerDownload('pipeline-result.csv', 'text/csv;charset=utf-8', csv);
+  }
+
+  const resultRows = getResultRows();
+  const hasCsvRows = Array.isArray(resultRows) && resultRows.length > 0;
+  const tableRows = hasCsvRows
+    ? resultRows.map((row) => (row && typeof row === 'object' ? row : { value: row }))
+    : [];
+  const tableHeaders = hasCsvRows
+    ? Array.from(new Set(tableRows.flatMap((row) => Object.keys(row))))
+    : [];
 
   return (
     <>
@@ -320,6 +377,12 @@ const PipelineCompilerPanel = () => {
                Execution Logs 
                {isExecuting && <span className="inline-block ml-2 w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />}
              </button>
+             <button 
+               onClick={() => setActiveTab('result')}
+               className={`flex-1 py-1.5 text-[11px] font-mono border-b-2 transition-colors ${activeTab === 'result' ? 'border-violet-400 text-foreground bg-foreground/10' : 'border-transparent text-foreground/50 hover:bg-foreground/5'}`}
+             >
+               Result
+             </button>
           </div>
 
           <div className="flex-1 border border-t-0 border-foreground/20 rounded-b-lg overflow-hidden bg-black/60 flex flex-col min-h-0 relative">
@@ -331,6 +394,58 @@ const PipelineCompilerPanel = () => {
                 readOnly
                 height="100%"
               />
+            ) : activeTab === 'result' ? (
+              <div className="flex-1 w-full h-full overflow-y-auto p-3 font-mono text-[11px] whitespace-pre-wrap break-all">
+                {executionResult ? (
+                  <>
+                    <div className="mb-3 flex items-center gap-2">
+                      <button
+                        onClick={downloadResultJson}
+                        className="px-2 py-1 rounded text-[10px] font-mono bg-cyan-700/35 hover:bg-cyan-700/50 border border-cyan-300/30 text-foreground/90"
+                      >
+                        Download JSON
+                      </button>
+                      <button
+                        onClick={downloadResultCsv}
+                        disabled={!hasCsvRows}
+                        className="px-2 py-1 rounded text-[10px] font-mono bg-emerald-700/35 hover:bg-emerald-700/50 border border-emerald-300/30 text-foreground/90 disabled:opacity-40 disabled:cursor-not-allowed"
+                      >
+                        Download CSV
+                      </button>
+                    </div>
+                    {hasCsvRows ? (
+                      <div className="overflow-auto border border-foreground/20 rounded">
+                        <table className="w-full text-[10px] border-collapse">
+                          <thead className="bg-foreground/10 sticky top-0">
+                            <tr>
+                              {tableHeaders.map((header) => (
+                                <th key={header} className="text-left px-2 py-1 border-b border-foreground/20 whitespace-nowrap text-foreground/90">
+                                  {header}
+                                </th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {tableRows.map((row, rowIndex) => (
+                              <tr key={rowIndex} className="odd:bg-foreground/5">
+                                {tableHeaders.map((header) => (
+                                  <td key={`${rowIndex}-${header}`} className="px-2 py-1 border-b border-foreground/10 align-top text-foreground/90">
+                                    {row[header] == null ? '' : String(row[header])}
+                                  </td>
+                                ))}
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    ) : (
+                      <pre className="text-foreground/90">{JSON.stringify(executionResult, null, 2)}</pre>
+                    )}
+                  </>
+                ) : (
+                  <span className="text-foreground/30 italic">No structured result found yet. Run the pipeline to populate this view.</span>
+                )}
+              </div>
             ) : (
               <div className="flex-1 w-full h-full overflow-y-auto p-3 font-mono text-[11px] whitespace-pre-wrap flex flex-col break-all">
                 {executionLogs.length === 0 ? (
