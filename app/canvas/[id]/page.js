@@ -138,6 +138,7 @@ const SharedCanvasPage = () => {
   const { addToast } = useUIStore();
   const nodes = useUIStore(state => state.nodes);
   const edges = useUIStore(state => state.edges);
+  const drawings = useUIStore(state => state.drawings);
   const savedPipelineName = useUIStore(state => state.savedPipelineName);
 
   const [loading, setLoading] = useState(true);
@@ -163,6 +164,8 @@ const SharedCanvasPage = () => {
   const pendingSaveSnapshot = useRef(null);
   const saveInFlight = useRef(false);
   const hasHydratedPipeline = useRef(false);
+  const supportsDrawingsColumn = useRef(true);
+  const drawingsSchemaWarned = useRef(false);
   const activeUserId = useRef(null);
   const activeUserLabel = useRef('Collaborator');
   const activeUserColor = useRef('#67e8f9');
@@ -190,15 +193,18 @@ const SharedCanvasPage = () => {
   }, []);
 
   // ── Autosave — reads canEditRef (stable), no stale closure ─────────────────
-  const queueAutosave = useCallback((newNodes, newEdges) => {
+  const queueAutosave = useCallback((newNodes, newEdges, newDrawings = []) => {
     if (!canEditRef.current || isUpdatingFromRemote.current || !hasHydratedPipeline.current) return;
 
-    const snapshot = JSON.stringify({ nodes: newNodes, edges: newEdges });
+    const snapshot = supportsDrawingsColumn.current
+      ? JSON.stringify({ nodes: newNodes, edges: newEdges, drawings: newDrawings })
+      : JSON.stringify({ nodes: newNodes, edges: newEdges });
     if (snapshot === lastSavedState.current) return;
 
     pendingSaveSnapshot.current = {
       nodes: newNodes,
       edges: newEdges,
+      drawings: newDrawings,
       snapshot,
     };
   }, []); // no canEdit dependency — reads ref instead
@@ -227,14 +233,41 @@ const SharedCanvasPage = () => {
       saveInFlight.current = true;
       try {
         useUIStore.getState().setSyncState('saving');
-        const { error } = await supabase
+
+        const basePayload = {
+          nodes: pending.nodes,
+          edges: pending.edges,
+          updated_at: new Date().toISOString(),
+        };
+
+        const payload = supportsDrawingsColumn.current
+          ? { ...basePayload, drawings: pending.drawings }
+          : basePayload;
+
+        let { error } = await supabase
           .from('pipelines')
-          .update({
-            nodes: pending.nodes,
-            edges: pending.edges,
-            updated_at: new Date().toISOString(),
-          })
+          .update(payload)
           .eq('id', pipelineId);
+
+        const missingDrawingsColumn =
+          error?.code === 'PGRST204' &&
+          String(error?.message || '').includes("'drawings' column");
+
+        if (missingDrawingsColumn) {
+          supportsDrawingsColumn.current = false;
+          ({ error } = await supabase
+            .from('pipelines')
+            .update(basePayload)
+            .eq('id', pipelineId));
+
+          if (!drawingsSchemaWarned.current) {
+            drawingsSchemaWarned.current = true;
+            const toast = useUIStore.getState().addToast;
+            if (toast) {
+              toast('Drawings sync is unavailable until the database schema is updated.', 'info');
+            }
+          }
+        }
 
         if (error) throw error;
 
@@ -248,6 +281,7 @@ const SharedCanvasPage = () => {
         localStorage.setItem(`pipeline_backup_${pipelineId}`, JSON.stringify({
           nodes: pending.nodes,
           edges: pending.edges,
+          drawings: pending.drawings,
           ts: Date.now()
         }));
       } finally {
@@ -285,7 +319,7 @@ const SharedCanvasPage = () => {
       });
     }
 
-    queueAutosave(newNodes, newEdges);
+    queueAutosave(newNodes, newEdges, newDrawings);
   }, [channel, queueAutosave]); // no canEdit dep — uses ref
 
   const broadcastEditingNode = useCallback((nodeId) => {
@@ -514,18 +548,30 @@ const SharedCanvasPage = () => {
 
   /** Discard: just navigate without saving. */
   const handleDiscardAndLeave = useCallback(async () => {
-    // If unnamed, assign an auto-generated "Unnamed (N)" label so the user can
-    // still find the pipeline in the dashboard (it won't be truly deleted).
     const pipelineId = pathname.split('/').pop();
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (user && pipelineId) {
-        const autoName = await nextUnnamedLabel(user.id);
-        await supabase
-          .from('pipelines')
-          .update({ name: autoName, updated_at: new Date().toISOString() })
-          .eq('id', pipelineId)
-          .eq('user_id', user.id);
+        const shouldDeleteEmptyDraft = isUnnamedPipeline(savedPipelineName)
+          && Array.isArray(nodes)
+          && nodes.length === 0
+          && Array.isArray(drawings)
+          && drawings.length === 0;
+
+        if (shouldDeleteEmptyDraft) {
+          await supabase
+            .from('pipelines')
+            .delete()
+            .eq('id', pipelineId)
+            .eq('user_id', user.id);
+        } else {
+          const autoName = await nextUnnamedLabel(user.id);
+          await supabase
+            .from('pipelines')
+            .update({ name: autoName, updated_at: new Date().toISOString() })
+            .eq('id', pipelineId)
+            .eq('user_id', user.id);
+        }
       }
     } catch {
       // Non-fatal — just navigate
@@ -533,7 +579,7 @@ const SharedCanvasPage = () => {
     setLeaveModalOpen(false);
     leaveAllowed.current = true;
     router.push(pendingNavTarget.current || '/dashboard');
-  }, [pathname, router]);
+  }, [pathname, router, savedPipelineName, nodes, drawings]);
 
   // ── beforeunload interception (tab/window close) ──────────────────────────
   useEffect(() => {
@@ -646,7 +692,7 @@ const SharedCanvasPage = () => {
         isUpdatingFromRemote.current = true;
         let normalizedNodes = normalizeGraphData(data.nodes);
         let normalizedEdges = normalizeGraphData(data.edges);
-        const normalizedDrawings = normalizeGraphData(data.drawings);
+        let normalizedDrawings = normalizeGraphData(data.drawings);
         
         // Recover fallback locally saved progress
         try {
@@ -656,11 +702,12 @@ const SharedCanvasPage = () => {
             if (fallback.nodes && fallback.edges) {
               normalizedNodes = normalizeGraphData(fallback.nodes);
               normalizedEdges = normalizeGraphData(fallback.edges);
+              normalizedDrawings = normalizeGraphData(fallback.drawings);
               setTimeout(() => {
                 const addToast = useUIStore.getState().addToast;
                 if (addToast) addToast("Recovered unsaved local changes.", "info");
                 // Force an autosave of recovered changes shortly after load
-                queueAutosave(normalizedNodes, normalizedEdges);
+                queueAutosave(normalizedNodes, normalizedEdges, normalizedDrawings);
               }, 500);
             }
           }
@@ -669,7 +716,7 @@ const SharedCanvasPage = () => {
         setNodes(normalizedNodes);
         setEdges(normalizedEdges);
         setDrawings(normalizedDrawings);
-        lastSavedState.current = JSON.stringify({ nodes: normalizedNodes, edges: normalizedEdges });
+        lastSavedState.current = JSON.stringify({ nodes: normalizedNodes, edges: normalizedEdges, drawings: normalizedDrawings });
         pendingSaveSnapshot.current = null;
         useUIStore.getState().setSyncState('saved');
         hasHydratedPipeline.current = true;

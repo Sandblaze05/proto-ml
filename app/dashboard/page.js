@@ -344,16 +344,37 @@ const DashboardPage = () => {
 		}
 
 		const targetFolder = folderName === UNCATEGORIZED_FOLDER_NAME ? null : folderName
+		const pipeline = myPipelines.find(p => p.id === pipelineId)
+		const currentFolder = pipeline?.folder || null
+
+		// No-op move: avoid unnecessary writes and notifications.
+		if (currentFolder === targetFolder) {
+			setMovingToFolder(null)
+			return
+		}
 
 		try {
-			const { error } = await supabase
+			const { data, error } = await supabase
 				.from('pipelines')
 				.update({ folder: targetFolder, original_folder: null })
 				.eq('id', pipelineId)
+				.eq('user_id', user.id)
+				.select('id, folder, original_folder')
+				.maybeSingle()
 
 			if (error) throw error
+			if (!data) {
+				setMovingToFolder(null)
+				return
+			}
 
-			setMyPipelines(prev => prev.map(p => p.id === pipelineId ? { ...p, folder: targetFolder, original_folder: null } : p))
+			const didMove = (data.folder || null) === targetFolder
+			if (!didMove) {
+				setMovingToFolder(null)
+				return
+			}
+
+			setMyPipelines(prev => prev.map(p => p.id === pipelineId ? { ...p, folder: data.folder, original_folder: data.original_folder } : p))
 			setMovingToFolder(null)
 			addToast(`Pipeline moved to ${folderName}.`, 'success')
 		} catch (err) {

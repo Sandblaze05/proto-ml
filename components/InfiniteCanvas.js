@@ -1724,7 +1724,7 @@ function InteractiveCanvas({ onCanvasChange, onPointerMove, onEditingNodeChange,
       <LiveCursors cursors={remoteCursors} viewportTransform={transform} />
       <LiveNodeEditors editors={remoteNodeEditors} nodes={nodes} viewportTransform={transform} />
 
-      {!readOnly && nodes.length === 0 && (
+      {!readOnly && nodes.length === 0 && drawings.length === 0 && (
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
           <div className="max-w-md text-center bg-black/40 backdrop-blur-sm p-6 rounded-3xl border border-foreground/20 shadow-[0_15px_30px_rgba(0,0,0,0.5)]">
             <p className="font-mono text-foreground/70 text-sm leading-relaxed">
