@@ -2,7 +2,23 @@ import { describe, it, expect, vi } from 'vitest';
 import { useExecutionStore } from '../../store/useExecutionStore.js';
 
 function resetExecutionStore() {
-  useExecutionStore.setState({ nodes: {}, edges: [] });
+  useExecutionStore.setState({
+    nodes: {},
+    edges: [],
+    executionRuntime: {
+      mode: 'pipeline_topological',
+      failurePolicy: 'fail-fast',
+    },
+    executionLock: {
+      isLocked: false,
+      lockedBy: null,
+      runId: null,
+      acquiredAt: null,
+    },
+    activeRunId: null,
+    runs: {},
+    nodeStatuses: {},
+  });
 }
 
 describe('useExecutionStore', () => {
@@ -20,6 +36,8 @@ describe('useExecutionStore', () => {
       const state = useExecutionStore.getState();
       expect(state).toHaveProperty('nodes');
       expect(state).toHaveProperty('edges');
+      expect(state).toHaveProperty('executionRuntime');
+      expect(state).toHaveProperty('executionLock');
       expect(state).toHaveProperty('setExecutionGraph');
       expect(state).toHaveProperty('clearExecutionGraph');
       expect(typeof state.nodes).toBe('object');
@@ -42,6 +60,14 @@ describe('useExecutionStore', () => {
       expect(typeof state.removeExecutionEdge).toBe('function');
       expect(typeof state.validateConnection).toBe('function');
       expect(typeof state.canConnect).toBe('function');
+      expect(typeof state.configureExecutionRuntime).toBe('function');
+      expect(typeof state.acquireExecutionLock).toBe('function');
+      expect(typeof state.releaseExecutionLock).toBe('function');
+      expect(typeof state.beginRun).toBe('function');
+      expect(typeof state.markNodeStatus).toBe('function');
+      expect(typeof state.completeRun).toBe('function');
+      expect(typeof state.failRun).toBe('function');
+      expect(typeof state.applyOneOffWriteBack).toBe('function');
     });
   });
 
@@ -176,6 +202,50 @@ describe('useExecutionStore', () => {
       expect(state.canConnect('src', 'tgt', 'features', 'batches')).toBe(false);
       expect(warnSpy).not.toHaveBeenCalled();
       warnSpy.mockRestore();
+    });
+
+    it('tracks run lifecycle and node statuses for fail-fast orchestration', () => {
+      resetExecutionStore();
+      const state = useExecutionStore.getState();
+
+      state.beginRun({ runId: 'run-1', mode: 'pipeline_topological', failurePolicy: 'fail-fast' });
+      state.markNodeStatus({ runId: 'run-1', nodeId: 'd1', status: 'running' });
+      state.markNodeStatus({ runId: 'run-1', nodeId: 'd1', status: 'succeeded' });
+      state.markNodeStatus({ runId: 'run-1', nodeId: 't1', status: 'failed', error: 'boom' });
+      state.failRun({ runId: 'run-1', failedNodeId: 't1', error: 'boom' });
+
+      const next = useExecutionStore.getState();
+      expect(next.activeRunId).toBeNull();
+      expect(next.runs['run-1'].status).toBe('failed');
+      expect(next.runs['run-1'].failedNodeId).toBe('t1');
+      expect(next.nodeStatuses['run-1'].d1.status).toBe('succeeded');
+      expect(next.nodeStatuses['run-1'].t1.status).toBe('failed');
+    });
+
+    it('enforces execution lock and supports one-off write-back', () => {
+      resetExecutionStore();
+      const state = useExecutionStore.getState();
+
+      state.addExecutionNode('n1', { type: 'transform.core.map', config: {} });
+      const lock = state.acquireExecutionLock({ lockedBy: 'pipeline', runId: 'run-2' });
+      expect(lock.ok).toBe(true);
+
+      const secondLock = useExecutionStore.getState().acquireExecutionLock({ lockedBy: 'one_off', runId: 'run-3' });
+      expect(secondLock.ok).toBe(false);
+
+      const release = useExecutionStore.getState().releaseExecutionLock({ runId: 'run-2' });
+      expect(release.ok).toBe(true);
+
+      const writeBack = useExecutionStore.getState().applyOneOffWriteBack({
+        nodeId: 'n1',
+        output: { rows: [{ a: 1 }] },
+        metadata: { mode: 'one_off_compile' },
+      });
+
+      expect(writeBack.ok).toBe(true);
+      const next = useExecutionStore.getState();
+      expect(next.nodes.n1.lastOutput).toEqual({ rows: [{ a: 1 }] });
+      expect(next.nodes.n1.outputProvenance.source).toBe('one_off');
     });
   });
 });

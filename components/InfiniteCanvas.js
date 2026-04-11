@@ -1344,6 +1344,17 @@ function InteractiveCanvas({ onCanvasChange, onPointerMove, onEditingNodeChange,
     useUIStore.getState().onEdgesChange(changes);
   }, [readOnly, saveToHistory]);
 
+  useEffect(() => {
+    const normalizedEdges = (edges || []).map((edge) => ({
+      source: edge.source,
+      target: edge.target,
+      sourceHandle: edge.sourceHandle,
+      targetHandle: edge.targetHandle,
+    }));
+
+    useExecutionStore.setState({ edges: normalizedEdges });
+  }, [edges]);
+
 
   useEffect(() => {
     if (initialized.current) return;

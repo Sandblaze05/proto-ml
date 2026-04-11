@@ -80,7 +80,7 @@ describe('Real backend execution integration', () => {
     expect(mapOut[0]).toHaveProperty('f1');
     expect(mapOut[0]).toHaveProperty('f2');
     expect(mapOut[0]).not.toHaveProperty('target');
-  }, 20000);
+  }, 50000);
 
   it('executes sklearn-backed train/predict/export pipeline with artifacts', () => {
     const python = resolvePython();

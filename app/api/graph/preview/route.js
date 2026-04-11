@@ -1,18 +1,32 @@
 import { NextResponse } from 'next/server';
 import { bootstrapPluginsFromRepo } from '../../../../lib/plugins/pluginBootstrap.js';
 import { compileExecutionGraph } from '../../../../lib/executor/pipelineCompiler.js';
+import { buildNodeDiagnostics } from '../../../../lib/executor/nodeDiagnostics.js';
 
 export async function POST(request) {
   const body = await request.json();
-  const { graph, targetNodeId, n = 5, validationMode = 'strict', seed } = body || {};
+  const {
+    graph,
+    targetNodeId,
+    n = 5,
+    validationMode = 'strict',
+    seed,
+    executionMode = 'one_off_compile',
+    writeBack = false,
+    failurePolicy = 'fail-fast',
+  } = body || {};
   if (!graph || !targetNodeId) {
     return NextResponse.json({ error: 'Missing graph or targetNodeId in request body' }, { status: 400 });
   }
 
   const normalizedMode = validationMode === 'relax' ? 'relax' : 'strict';
+  const normalizedExecutionMode = executionMode === 'pipeline_topological' ? 'pipeline_topological' : 'one_off_compile';
+  const normalizedFailurePolicy = failurePolicy === 'fail-fast' ? 'fail-fast' : 'fail-fast';
+  const requestedWriteBack = writeBack === true;
 
   try {
     await bootstrapPluginsFromRepo();
+    const nodeDiagnostics = buildNodeDiagnostics(graph);
 
     const validation = compileExecutionGraph(graph, { validationMode: normalizedMode, validateOnly: true });
     if (!validation.ok) {
@@ -37,11 +51,29 @@ export async function POST(request) {
 
       const executor = createDefaultExecutor();
       const sample = await executor.preview(graph, targetNodeId, n);
+      const writeBackPayload = requestedWriteBack
+        ? {
+            nodeId: targetNodeId,
+            output: sample,
+            provenance: {
+              source: 'one_off',
+              mode: normalizedExecutionMode,
+            },
+          }
+        : null;
+
       return NextResponse.json({
         ok: true,
         sample,
         warnings: validation.warnings || [],
         metadata: validation.metadata,
+        nodeDiagnostics,
+        execution: {
+          mode: normalizedExecutionMode,
+          failurePolicy: normalizedFailurePolicy,
+          writeBackRequested: requestedWriteBack,
+        },
+        writeBackPayload,
       });
     } catch (previewErr) {
       // Preview execution can fail in backend-unavailable scenarios; still return workable compiled code.
@@ -66,6 +98,12 @@ export async function POST(request) {
         sample: null,
         generatedCode: compiled.code,
         warnings: [...(validation.warnings || []), ...(compiled.warnings || [])],
+        nodeDiagnostics,
+        execution: {
+          mode: normalizedExecutionMode,
+          failurePolicy: normalizedFailurePolicy,
+          writeBackRequested: requestedWriteBack,
+        },
         metadata: {
           ...validation.metadata,
           fallbackCompilation: compiled.metadata,

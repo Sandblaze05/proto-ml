@@ -36,4 +36,34 @@ describe('RemoteJupyterRunner', () => {
     const status = await runner.checkStatus(submitted.jobId);
     expect(status.status).toBe('cancelled');
   });
+
+  it('stores structured topological run result as final status', async () => {
+    const runner = new RemoteJupyterRunner();
+    const structured = await runner.submitStructuredResult(
+      {
+        summary: 'Topological pipeline run completed successfully.',
+        execution: {
+          ok: true,
+          order: ['d1', 't1'],
+          nodeStatuses: {
+            d1: { status: 'succeeded' },
+            t1: { status: 'succeeded' },
+          },
+        },
+      },
+      {
+        provider: 'local',
+        kernel: 'topological',
+        status: 'succeeded',
+      },
+    );
+
+    expect(structured.status).toBe('succeeded');
+    const status = await runner.checkStatus(structured.jobId);
+    expect(status.status).toBe('succeeded');
+
+    const result = await runner.fetchResult(structured.jobId);
+    expect(result.status).toBe('succeeded');
+    expect(result.output.execution.order).toEqual(['d1', 't1']);
+  });
 });

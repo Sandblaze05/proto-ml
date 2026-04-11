@@ -6,7 +6,7 @@ import { Wrench, Settings2, Code2, Eye, ChevronDown, ChevronUp, Lock } from 'luc
 import { useExecutionStore } from '../../store/useExecutionStore';
 import { useUIStore } from '../../store/useUIStore';
 import { generateTransformPythonCode } from '../../lib/pythonTemplates/transformNodeTemplate';
-import { previewNode } from '../../lib/executionClient';
+import { previewGraphClient } from '../../lib/executor/clientPreviewExecutor';
 import MonacoCodeEditor from './MonacoCodeEditor';
 
 const TABS = ['Config', 'Code', 'Preview'];
@@ -234,6 +234,18 @@ export default function TransformNode({ data, id, selected }) {
   const [previewing, setPreviewing] = useState(false);
   const [previewResult, setPreviewResult] = useState(null);
 
+  const incomingEdgeSignature = useMemo(() => {
+    const incoming = (execEdges || [])
+      .filter((edge) => edge.target === id)
+      .map((edge) => `${edge.source}:${edge.sourceHandle || ''}->${edge.targetHandle || ''}`)
+      .sort();
+    return incoming.join('|');
+  }, [execEdges, id]);
+
+  useEffect(() => {
+    setPreviewResult(null);
+  }, [incomingEdgeSignature]);
+
   useEffect(() => {
     if (codeViewNodeId !== id && !execNodes[codeViewNodeId]) {
       setCodeViewNodeId(id);
@@ -301,8 +313,8 @@ export default function TransformNode({ data, id, selected }) {
     setPreviewResult(null);
     try {
       const graph = { nodes: execNodes, edges: execEdges };
-      const res = await previewNode(graph, id, count);
-      setPreviewResult(res?.sample ?? res);
+      const res = await previewGraphClient(graph, id, count);
+      setPreviewResult(res);
     } catch (error) {
       setPreviewResult({ error: String(error) });
     } finally {
@@ -447,7 +459,8 @@ export default function TransformNode({ data, id, selected }) {
           id={out}
           title={`Output port: ${out || `out_${idx + 1}`}`}
           style={{
-            top: collapsed ? 44 + 6 + idx * 22 + 9 : 44 + 34 + 220 + 6 + idx * 22 + 9,
+            top: 'auto',
+            bottom: 10 + ((outputs.length - 1 - idx) * 18),
             background: '#67e8f9',
             border: '2px solid #141414',
             width: 10,

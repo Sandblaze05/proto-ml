@@ -5,11 +5,29 @@ function connectionResult(ok, code, message, details = {}) {
   return { ok, code, message, details };
 }
 
+function nowIso() {
+  return new Date().toISOString();
+}
+
 export const useExecutionStore = create((set, get) => ({
   // Dictionary of node_id → full execution node model
   nodes: {},
   // List of edges { source, target, sourceHandle, targetHandle }
   edges: [],
+  // Runtime execution contract defaults.
+  executionRuntime: {
+    mode: 'pipeline_topological',
+    failurePolicy: 'fail-fast',
+  },
+  executionLock: {
+    isLocked: false,
+    lockedBy: null,
+    runId: null,
+    acquiredAt: null,
+  },
+  activeRunId: null,
+  runs: {},
+  nodeStatuses: {},
 
   setExecutionGraph: ({ nodes = {}, edges = [] } = {}) => {
     set({
@@ -20,6 +38,205 @@ export const useExecutionStore = create((set, get) => ({
 
   clearExecutionGraph: () => {
     set({ nodes: {}, edges: [] });
+  },
+
+  configureExecutionRuntime: ({ mode, failurePolicy } = {}) => {
+    set((state) => ({
+      executionRuntime: {
+        mode: mode === 'one_off_compile' ? 'one_off_compile' : (mode === 'pipeline_topological' ? 'pipeline_topological' : state.executionRuntime.mode),
+        failurePolicy: failurePolicy === 'fail-fast' ? 'fail-fast' : state.executionRuntime.failurePolicy,
+      },
+    }));
+  },
+
+  acquireExecutionLock: ({ lockedBy = 'pipeline', runId = null } = {}) => {
+    const state = get();
+    if (state.executionLock.isLocked) {
+      return {
+        ok: false,
+        reason: 'LOCKED',
+        lock: state.executionLock,
+      };
+    }
+
+    const nextLock = {
+      isLocked: true,
+      lockedBy,
+      runId,
+      acquiredAt: nowIso(),
+    };
+    set({ executionLock: nextLock });
+    return { ok: true, lock: nextLock };
+  },
+
+  releaseExecutionLock: ({ runId = null } = {}) => {
+    const state = get();
+    if (!state.executionLock.isLocked) {
+      return { ok: true, lock: state.executionLock };
+    }
+
+    if (runId && state.executionLock.runId && state.executionLock.runId !== runId) {
+      return {
+        ok: false,
+        reason: 'RUN_MISMATCH',
+        lock: state.executionLock,
+      };
+    }
+
+    const nextLock = {
+      isLocked: false,
+      lockedBy: null,
+      runId: null,
+      acquiredAt: null,
+    };
+    set({ executionLock: nextLock });
+    return { ok: true, lock: nextLock };
+  },
+
+  beginRun: ({ runId, mode, failurePolicy } = {}) => {
+    if (!runId) {
+      return { ok: false, reason: 'MISSING_RUN_ID' };
+    }
+
+    const state = get();
+    const existingStatuses = state.nodeStatuses?.[runId] || {};
+    const runRecord = {
+      runId,
+      mode: mode || state.executionRuntime.mode,
+      failurePolicy: failurePolicy || state.executionRuntime.failurePolicy,
+      status: 'running',
+      startedAt: nowIso(),
+      completedAt: null,
+      failedNodeId: null,
+      error: null,
+    };
+
+    set({
+      activeRunId: runId,
+      runs: {
+        ...state.runs,
+        [runId]: runRecord,
+      },
+      nodeStatuses: {
+        ...state.nodeStatuses,
+        [runId]: existingStatuses,
+      },
+    });
+
+    return { ok: true, run: runRecord };
+  },
+
+  markNodeStatus: ({ runId, nodeId, status, error = null } = {}) => {
+    if (!runId || !nodeId || !status) {
+      return { ok: false, reason: 'MISSING_FIELDS' };
+    }
+
+    const allowed = new Set(['pending', 'running', 'succeeded', 'failed', 'skipped']);
+    if (!allowed.has(status)) {
+      return { ok: false, reason: 'INVALID_STATUS' };
+    }
+
+    const state = get();
+    const byRun = state.nodeStatuses?.[runId] || {};
+    const prev = byRun[nodeId] || {};
+    const nextNodeStatus = {
+      ...prev,
+      status,
+      startedAt: status === 'running' ? (prev.startedAt || nowIso()) : (prev.startedAt || null),
+      updatedAt: nowIso(),
+      completedAt: status === 'succeeded' || status === 'failed' || status === 'skipped' ? nowIso() : null,
+      error,
+    };
+
+    set({
+      nodeStatuses: {
+        ...state.nodeStatuses,
+        [runId]: {
+          ...byRun,
+          [nodeId]: nextNodeStatus,
+        },
+      },
+    });
+
+    return { ok: true, nodeStatus: nextNodeStatus };
+  },
+
+  completeRun: ({ runId } = {}) => {
+    if (!runId) return { ok: false, reason: 'MISSING_RUN_ID' };
+    const state = get();
+    const run = state.runs?.[runId];
+    if (!run) return { ok: false, reason: 'RUN_NOT_FOUND' };
+
+    const nextRun = {
+      ...run,
+      status: 'succeeded',
+      completedAt: nowIso(),
+    };
+
+    set({
+      runs: {
+        ...state.runs,
+        [runId]: nextRun,
+      },
+      activeRunId: state.activeRunId === runId ? null : state.activeRunId,
+    });
+
+    return { ok: true, run: nextRun };
+  },
+
+  failRun: ({ runId, failedNodeId = null, error = null } = {}) => {
+    if (!runId) return { ok: false, reason: 'MISSING_RUN_ID' };
+    const state = get();
+    const run = state.runs?.[runId];
+    if (!run) return { ok: false, reason: 'RUN_NOT_FOUND' };
+
+    const nextRun = {
+      ...run,
+      status: 'failed',
+      failedNodeId,
+      error,
+      completedAt: nowIso(),
+    };
+
+    set({
+      runs: {
+        ...state.runs,
+        [runId]: nextRun,
+      },
+      activeRunId: state.activeRunId === runId ? null : state.activeRunId,
+    });
+
+    return { ok: true, run: nextRun };
+  },
+
+  applyOneOffWriteBack: ({ nodeId, output, metadata = {} } = {}) => {
+    if (!nodeId) return { ok: false, reason: 'MISSING_NODE_ID' };
+
+    const state = get();
+    const node = state.nodes?.[nodeId];
+    if (!node) return { ok: false, reason: 'NODE_NOT_FOUND' };
+
+    const writeBack = {
+      output,
+      source: 'one_off',
+      writtenAt: nowIso(),
+      metadata,
+    };
+
+    const nextNode = {
+      ...node,
+      lastOutput: output,
+      outputProvenance: writeBack,
+    };
+
+    set({
+      nodes: {
+        ...state.nodes,
+        [nodeId]: nextNode,
+      },
+    });
+
+    return { ok: true, node: nextNode };
   },
 
   // ── Node Actions ──────────────────────────────────────────────────────────

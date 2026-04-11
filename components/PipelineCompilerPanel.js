@@ -1,14 +1,16 @@
 'use client'
 
 import React, { useEffect, useRef, useState } from 'react'
-import { SidebarClose, Code2, PlayCircle, AlertCircle, CheckCircle2 } from 'lucide-react'
+import { SidebarClose, Code2, PlayCircle, AlertCircle, CheckCircle2, Terminal, Settings2, Play } from 'lucide-react'
 import gsap from 'gsap'
 import { useUIStore } from '@/store/useUIStore'
 import { compileExecutionGraph } from '@/lib/executor/pipelineCompiler'
 import MonacoCodeEditor from './nodes/MonacoCodeEditor'
+import JupyterClient from '@/lib/executor/jupyterClient'
 
 const PipelineCompilerPanel = () => {
   const panelRef = useRef(null)
+  const logsEndRef = useRef(null)
   const [panelOpen, setPanelOpen] = useState(false)
   const [panelHover, setPanelHover] = useState(false)
   const [compiledCode, setCompiledCode] = useState('')
@@ -16,6 +18,14 @@ const PipelineCompilerPanel = () => {
   const [compileWarnings, setCompileWarnings] = useState([])
   const [compileMeta, setCompileMeta] = useState(null)
   const [validationMode, setValidationMode] = useState('strict')
+
+  // Execution State
+  const [activeTab, setActiveTab] = useState('code') // 'code' | 'logs'
+  const [jupyterUrl, setJupyterUrl] = useState('http://localhost:8888')
+  const [jupyterToken, setJupyterToken] = useState('')
+  const [isExecuting, setIsExecuting] = useState(false)
+  const [executionLogs, setExecutionLogs] = useState([])
+  const [showSettings, setShowSettings] = useState(false)
 
   const uiNodes = useUIStore(s => s.nodes)
   const uiEdges = useUIStore(s => s.edges)
@@ -69,6 +79,13 @@ const PipelineCompilerPanel = () => {
     return () => tween.kill();
   }, [panelHover, panelOpen]);
 
+  // Auto-scroll logs
+  useEffect(() => {
+    if (activeTab === 'logs' && logsEndRef.current) {
+      logsEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [executionLogs, activeTab]);
+
   const handleCompile = () => {
     const uiGraph = buildCompilerGraphFromUI()
     const result = compileExecutionGraph(uiGraph, { validationMode })
@@ -76,6 +93,88 @@ const PipelineCompilerPanel = () => {
     setCompileErrors(result.errors || [])
     setCompileWarnings(result.warnings || [])
     setCompileMeta(result.metadata || null)
+    setActiveTab('code')
+  }
+
+  const handleExecute = async () => {
+    if (!compiledCode) return;
+    setIsExecuting(true);
+    setActiveTab('logs');
+    setExecutionLogs([{ type: 'system', text: `Connecting to Jupyter at ${jupyterUrl}...` }]);
+
+    try {
+      const appProtocol = typeof window !== 'undefined' ? window.location.protocol : '';
+      const appHost = typeof window !== 'undefined' ? window.location.hostname : '';
+      const runtimeUrl = new URL(jupyterUrl);
+      const isLocalKernel = ['localhost', '127.0.0.1'].includes(runtimeUrl.hostname);
+      const isMixedContent = appProtocol === 'https:' && runtimeUrl.protocol === 'http:';
+
+      if (isMixedContent) {
+        throw new Error('Blocked by browser mixed-content policy: this app is loaded over HTTPS but Jupyter URL is HTTP. Use an HTTPS Jupyter endpoint (or tunnel), or run the app locally over HTTP.');
+      }
+
+      if (isLocalKernel && appHost && !['localhost', '127.0.0.1'].includes(appHost)) {
+        setExecutionLogs(prev => [
+          ...prev,
+          {
+            type: 'system',
+            text: 'Localhost kernel detected while app is remote. Browser can only reach your local kernel from a local app session or via a public tunnel endpoint.',
+          },
+        ]);
+      }
+
+      const client = new JupyterClient(jupyterUrl, jupyterToken);
+      
+      // Step 1: List / create kernel
+      let kernelId;
+      setExecutionLogs(prev => [...prev, { type: 'system', text: 'Fetching kernels...' }]);
+      const kernels = await client.listKernels();
+      
+      if (kernels && kernels.length > 0) {
+        kernelId = kernels[0].id; // reuse existing kernel
+        setExecutionLogs(prev => [...prev, { type: 'system', text: `Reusing existing kernel ${kernelId}...` }]);
+      } else {
+        setExecutionLogs(prev => [...prev, { type: 'system', text: 'Starting new kernel...' }]);
+        const newKernel = await client.startKernel();
+        kernelId = newKernel.id;
+      }
+
+      // Step 2: Execute code
+      setExecutionLogs(prev => [...prev, { type: 'system', text: 'Executing compiled pipeline...\n' + '-'.repeat(40) }]);
+      
+      const result = await client.executeCode(kernelId, compiledCode, {
+        onStream: (name, text) => {
+          setExecutionLogs(prev => [...prev, { type: name, text }]);
+        },
+        onDisplayData: (data) => {
+          if (data['text/plain']) {
+            setExecutionLogs(prev => [...prev, { type: 'stdout', text: data['text/plain'] }]);
+          }
+        },
+        onError: (err) => {
+          setExecutionLogs(prev => [...prev, { type: 'stderr', text: `${err.ename}: ${err.evalue}\n${(err.traceback || []).join('\n')}` }]);
+        },
+        onConnected: () => {
+          // Socket connected
+        },
+        onComplete: (status) => {
+          setExecutionLogs(prev => [...prev, { type: 'system', text: `\n${'-'.repeat(40)}\nExecution finished with status: ${status}` }]);
+        }
+      });
+      
+      if (result.status !== 'ok') {
+         setExecutionLogs(prev => [...prev, { type: 'stderr', text: `Pipeline execution failed or aborted.` }]);
+      }
+    } catch (err) {
+      const message = String(err?.message || err || 'Unknown error');
+      const isNetworkFailure = /NetworkError|Failed to fetch|fetch resource/i.test(message);
+      const hint = isNetworkFailure
+        ? '\nHint: If this app is not running on localhost, a local Jupyter URL (http://localhost:8888) is unreachable from the browser context. Use a publicly reachable HTTPS Jupyter endpoint or run the app locally.'
+        : '';
+      setExecutionLogs(prev => [...prev, { type: 'stderr', text: `\n[Fatal Error]: ${message}${hint}` }]);
+    } finally {
+      setIsExecuting(false);
+    }
   }
 
   return (
@@ -100,7 +199,7 @@ const PipelineCompilerPanel = () => {
         ref={panelRef}
         onMouseEnter={() => setPanelHover(true)}
         onMouseLeave={() => setPanelHover(false)}
-        className={`z-[150] flex flex-col fixed py-4 px-4 gap-2 items-center right-4 top-[80px] bottom-[24px] rounded-2xl border-3 border-foreground w-100 bg-background/90 backdrop-blur-md overflow-hidden shadow-2xl ${panelOpen ? 'pointer-events-auto' : 'pointer-events-none'}`}
+        className={`z-[150] flex flex-col fixed py-4 px-4 gap-2 items-center right-4 top-[80px] bottom-[24px] rounded-2xl border-3 border-foreground w-120 bg-background/90 backdrop-blur-md overflow-hidden shadow-2xl ${panelOpen ? 'pointer-events-auto' : 'pointer-events-none'}`}
       >
         <span className={`w-full flex items-center justify-between`}>
           <button
@@ -112,7 +211,7 @@ const PipelineCompilerPanel = () => {
           </button>
           <span className='flex flex-col gap-3 items-center ml-auto mr-0 w-3/4'>
             <h1 className={`text-2xl pt-1 font-bold font-mono tracking-tighter ${panelOpen && 'pointer-events-none'}`}>
-              Compiler
+              Compiler & Execution
             </h1>
             <div className='mr-5 w-full bg-foreground h-px' />
           </span>
@@ -142,10 +241,51 @@ const PipelineCompilerPanel = () => {
             </div>
           </div>
 
-          {compileMeta && (
-            <div className='text-[10px] font-mono text-foreground/50 mt-3 mb-1 shrink-0'>
-              nodes: {compileMeta.nodeCount} | edges: {compileMeta.edgeCount} | datasets: {compileMeta.datasetCount}
-            </div>
+          <div className='mt-3 flex items-center justify-between shrink-0 p-2 border border-foreground/20 rounded bg-black/20'>
+             <div className='text-[11px] font-bold font-mono flex items-center gap-1.5'>
+               <Terminal size={14} /> Jupyter Engine
+             </div>
+             <div className='flex items-center gap-2'>
+               <button
+                 onClick={() => setShowSettings(!showSettings)}
+                 className='p-1 rounded hover:bg-foreground/10 text-foreground/70'
+                 title="Runtime Settings"
+               >
+                 <Settings2 size={14} />
+               </button>
+               <button
+                 onClick={handleExecute}
+                 disabled={isExecuting || !compiledCode || compileErrors.length > 0}
+                 className='px-3 py-1.5 rounded text-[11px] font-mono bg-emerald-700/35 hover:bg-emerald-700/50 disabled:opacity-50 disabled:cursor-not-allowed border border-emerald-300/30 flex items-center gap-1.5 shadow-md transition-all cursor-pointer'
+               >
+                 <Play size={12} fill="currentColor" /> {isExecuting ? 'Running...' : 'Run Pipeline'}
+               </button>
+             </div>
+          </div>
+
+          {showSettings && (
+             <div className="mt-2 p-3 bg-black/30 border border-foreground/20 rounded flex flex-col gap-2 shrink-0">
+               <label className="flex flex-col text-[10px] font-mono text-foreground/70">
+                 Jupyter Base URL (Colab/Kaggle/Local)
+                 <input 
+                   type="text" 
+                   value={jupyterUrl} 
+                   onChange={e => setJupyterUrl(e.target.value)}
+                   className="mt-1 px-2 py-1 bg-black/50 border border-foreground/30 rounded text-foreground outline-none focus:border-cyan-500"
+                   placeholder="http://localhost:8888"
+                 />
+               </label>
+               <label className="flex flex-col text-[10px] font-mono text-foreground/70">
+                 Access Token (Optional)
+                 <input 
+                   type="text" 
+                   value={jupyterToken} 
+                   onChange={e => setJupyterToken(e.target.value)}
+                   className="mt-1 px-2 py-1 bg-black/50 border border-foreground/30 rounded text-foreground outline-none focus:border-cyan-500"
+                   placeholder="Enter token..."
+                 />
+               </label>
+             </div>
           )}
 
           {compileErrors.length > 0 && (
@@ -158,7 +298,7 @@ const PipelineCompilerPanel = () => {
           )}
 
           {compileWarnings.length > 0 && (
-            <div className='mt-3 p-3 rounded bg-amber-900/20 border border-amber-500/30 text-[11px] font-mono text-amber-200 shadow-inner shrink-0 overflow-y-auto max-h-[120px]'>
+            <div className='mt-2 p-3 rounded bg-amber-900/20 border border-amber-500/30 text-[11px] font-mono text-amber-200 shadow-inner shrink-0 overflow-y-auto max-h-[120px]'>
               <div className='flex items-center gap-1.5 mb-2 font-bold text-[12px]'><AlertCircle size={14} /> Compile Warnings</div>
               {compileWarnings.map((warn, i) => (
                 <div key={i} className="mb-1 leading-relaxed">- {warn}</div>
@@ -166,21 +306,50 @@ const PipelineCompilerPanel = () => {
             </div>
           )}
 
-          {compiledCode && compileErrors.length === 0 && (
-            <div className='mt-3 p-2 rounded bg-emerald-900/20 border border-emerald-500/30 text-[11px] font-mono text-emerald-300 flex items-center gap-1.5 shadow-inner shrink-0'>
-              <CheckCircle2 size={14} /> Compile successful
-            </div>
-          )}
-
-          <div className="flex-1 mt-4 border border-foreground/20 rounded-lg overflow-hidden bg-black/40 mb-2 flex flex-col min-h-0">
-            <MonacoCodeEditor
-              title='Compiled Pipeline Python'
-              language='python'
-              value={compiledCode}
-              readOnly
-              height="100%"
-            />
+          <div className="flex bg-black/40 border border-foreground/20 rounded-t-lg mt-3 overflow-hidden shrink-0">
+             <button 
+               onClick={() => setActiveTab('code')}
+               className={`flex-1 py-1.5 text-[11px] font-mono border-b-2 transition-colors ${activeTab === 'code' ? 'border-cyan-400 text-foreground bg-foreground/10' : 'border-transparent text-foreground/50 hover:bg-foreground/5'}`}
+             >
+               Python Code
+             </button>
+             <button 
+               onClick={() => setActiveTab('logs')}
+               className={`flex-1 py-1.5 text-[11px] font-mono border-b-2 transition-colors ${activeTab === 'logs' ? 'border-emerald-400 text-foreground bg-foreground/10' : 'border-transparent text-foreground/50 hover:bg-foreground/5'}`}
+             >
+               Execution Logs 
+               {isExecuting && <span className="inline-block ml-2 w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />}
+             </button>
           </div>
+
+          <div className="flex-1 border border-t-0 border-foreground/20 rounded-b-lg overflow-hidden bg-black/60 flex flex-col min-h-0 relative">
+            {activeTab === 'code' ? (
+              <MonacoCodeEditor
+                title='Compiled Pipeline Python'
+                language='python'
+                value={compiledCode || "# Pipeline not compiled yet.\n# Click 'Compile' to generate code."}
+                readOnly
+                height="100%"
+              />
+            ) : (
+              <div className="flex-1 w-full h-full overflow-y-auto p-3 font-mono text-[11px] whitespace-pre-wrap flex flex-col break-all">
+                {executionLogs.length === 0 ? (
+                  <span className="text-foreground/30 italic">No execution logs yet. Run the pipeline to see output.</span>
+                ) : (
+                  executionLogs.map((log, i) => (
+                    <span 
+                      key={i} 
+                      className={`${log.type === 'stderr' ? 'text-red-400' : log.type === 'system' ? 'text-cyan-400' : 'text-foreground/90'}`}
+                    >
+                      {log.text}
+                    </span>
+                  ))
+                )}
+                <div ref={logsEndRef} />
+              </div>
+            )}
+          </div>
+
         </div>
       </div>
     </>

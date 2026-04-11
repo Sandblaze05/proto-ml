@@ -5,7 +5,7 @@ import { Handle, Position, useStore } from 'reactflow';
 import { FolderOpen, Eye, Code2, ChevronDown, ChevronUp, ImageIcon, Database, FileText, Braces, Globe, Table2, Upload, ShieldCheck, List, Search, Link2, Trash2, Lock } from 'lucide-react';
 import { useExecutionStore } from '../../store/useExecutionStore';
 import { useUIStore } from '../../store/useUIStore';
-import { previewNode } from '../../lib/executionClient';
+import { previewGraphClient } from '../../lib/executor/clientPreviewExecutor';
 import {
   createClientUpload,
   deleteClientUpload,
@@ -18,6 +18,7 @@ import {
 } from '../../lib/clientUploadStore';
 import { generateDatasetPythonCode } from '../../lib/pythonTemplates/datasetNodeTemplate';
 import MonacoCodeEditor from './MonacoCodeEditor';
+import { getUploadInputMode } from './datasetUploadMode';
 
 const STRICT_CLIENT_ONLY_DATASETS = true;
 
@@ -264,6 +265,7 @@ function SourceTab({
 }) {
   const fileRef = useRef(null);
   const [uploading, setUploading] = useState(false);
+  const { useDirectoryPicker, acceptCsvFiles } = getUploadInputMode(nodeType, config.source_mode);
 
   const triggerUpload = useCallback(() => {
     if (fileRef.current) fileRef.current.click();
@@ -272,13 +274,25 @@ function SourceTab({
   useEffect(() => {
     const el = fileRef.current;
     if (!el) return;
+
     try {
-      el.setAttribute('webkitdirectory', '');
-      el.setAttribute('directory', '');
+      if (useDirectoryPicker) {
+        el.setAttribute('webkitdirectory', '');
+        el.setAttribute('directory', '');
+      } else {
+        el.removeAttribute('webkitdirectory');
+        el.removeAttribute('directory');
+      }
+
+      if (acceptCsvFiles) {
+        el.setAttribute('accept', '.csv,text/csv');
+      } else {
+        el.removeAttribute('accept');
+      }
     } catch {
       // ignore
     }
-  }, []);
+  }, [useDirectoryPicker, acceptCsvFiles]);
 
   const handleFiles = useCallback(async (e) => {
     const files = e.target.files;
@@ -1023,6 +1037,14 @@ export default function DatasetNode({ data, id, selected }) {
   const [busyAction, setBusyAction] = useState(false);
   const [codeExpanded, setCodeExpanded] = useState(false);
 
+  const incomingEdgeSignature = useMemo(() => {
+    const incoming = (execEdges || [])
+      .filter((edge) => edge.target === id)
+      .map((edge) => `${edge.source}:${edge.sourceHandle || ''}->${edge.targetHandle || ''}`)
+      .sort();
+    return incoming.join('|');
+  }, [execEdges, id]);
+
   const accent = TYPE_HEX[type] ?? '#faebd7';
   const Icon = TYPE_ICONS[type] ?? Database;
 
@@ -1085,6 +1107,10 @@ export default function DatasetNode({ data, id, selected }) {
   useEffect(() => {
     localConfigRef.current = localConfig;
   }, [localConfig]);
+
+  useEffect(() => {
+    setPreviewResult(null);
+  }, [incomingEdgeSignature]);
 
   const applyConfigPatch = useCallback((patch = {}) => {
     const nextConfig = { ...localConfigRef.current, ...patch };
@@ -1206,8 +1232,8 @@ export default function DatasetNode({ data, id, selected }) {
       }
 
       const graph = { nodes: execNodes, edges: execEdges };
-      const res = await previewNode(graph, id, count);
-      setPreviewResult(res?.sample ?? res);
+      const res = await previewGraphClient(graph, id, count);
+      setPreviewResult(res);
     } catch (err) {
       setPreviewResult({ error: String(err) });
     } finally {
@@ -1617,7 +1643,8 @@ export default function DatasetNode({ data, id, selected }) {
           position={Position.Right}
           id={out.name}
           style={{
-            top: collapsed ? 57 + idx * 18 : 313 + idx * 22,
+            top: 'auto',
+            bottom: 10 + ((normalizedOutputs.length - 1 - idx) * 18),
             background: portHex(out.datatype),
             border: '2px solid #141414',
             width: 10,

@@ -355,7 +355,46 @@ describe('Pipeline Compiler & Template Generation', () => {
       expect(first.ok).toBe(true);
       expect(second.ok).toBe(true);
       expect(first.metadata.order).toEqual(second.metadata.order);
+      expect(first.metadata.dependencyMap).toEqual(second.metadata.dependencyMap);
       expect(first.code).toEqual(second.code);
+    });
+
+    it('emits dependency map metadata for topological orchestration', () => {
+      const result = compileExecutionGraph({
+        nodes: {
+          d1: { id: 'd1', type: 'dataset.csv', config: {} },
+          t1: { id: 't1', type: 'transform.core.map', config: { operation: 'identity' } },
+          s1: { id: 's1', type: 'lifecycle.split', config: {} },
+        },
+        edges: [
+          { source: 'd1', target: 't1', sourceHandle: 'out', targetHandle: 'in' },
+          { source: 't1', target: 's1', sourceHandle: 'out', targetHandle: 'dataset' },
+        ],
+      });
+
+      expect(result.ok).toBe(true);
+      expect(result.metadata.dependencyMap).toEqual({
+        d1: [],
+        t1: ['d1'],
+        s1: ['t1'],
+      });
+    });
+
+    it('includes dependency map in validate-only mode', () => {
+      const result = compileExecutionGraph({
+        nodes: {
+          d1: { id: 'd1', type: 'dataset.csv', config: {} },
+          t1: { id: 't1', type: 'transform.core.map', config: { operation: 'identity' } },
+        },
+        edges: [
+          { source: 'd1', target: 't1', sourceHandle: 'out', targetHandle: 'in' },
+        ],
+      }, { validateOnly: true });
+
+      expect(result.ok).toBe(true);
+      expect(result.code).toBe('');
+      expect(result.metadata.order).toEqual(['d1', 't1']);
+      expect(result.metadata.dependencyMap).toEqual({ d1: [], t1: ['d1'] });
     });
 
     it('handles datasets with various types (json, csv, image, text)', () => {

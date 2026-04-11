@@ -224,4 +224,65 @@ describe('GraphExecutor preview', () => {
     const result = await executor.preview(graph, 'j', 5);
     expect(result).toEqual([{ id: 'expected-left' }, { id: 'expected-right' }]);
   });
+
+  it('executes full graph in topological order with node statuses', async () => {
+    const executor = createExecutorWithDatasetMock('dataset.csv', async () => ([
+      { x: 1, y: 2 },
+      { x: 2, y: 4 },
+    ]));
+
+    const graph = {
+      nodes: [
+        { id: 'd1', type: 'dataset.csv', config: {} },
+        { id: 't1', type: 'transform.core.map', config: { operation: 'identity' } },
+        { id: 's1', type: 'lifecycle.split', config: { train_pct: 50, val_pct: 50, test_pct: 0, shuffle: false } },
+      ],
+      edges: [
+        { source: 'd1', target: 't1', sourceHandle: 'out', targetHandle: 'in' },
+        { source: 't1', target: 's1', sourceHandle: 'out', targetHandle: 'dataset' },
+      ],
+    };
+
+    const run = await executor.executeTopological(graph, { failurePolicy: 'fail-fast' });
+    expect(run.ok).toBe(true);
+    expect(run.status).toBe('succeeded');
+    expect(run.order).toEqual(['d1', 't1', 's1']);
+    expect(run.nodeStatuses.d1.status).toBe('succeeded');
+    expect(run.nodeStatuses.t1.status).toBe('succeeded');
+    expect(run.nodeStatuses.s1.status).toBe('succeeded');
+  });
+
+  it('stops fail-fast and marks remaining nodes as skipped', async () => {
+    const executor = new GraphExecutor({
+      get: (nodeType) => {
+        if (nodeType === 'dataset.csv') {
+          return () => ({ getSample: async () => [{ x: 1 }] });
+        }
+        if (nodeType === 'transform.core.map') {
+          return () => ({ getSample: async () => ({ error: 'forced transform failure', type: 'RuntimeError' }) });
+        }
+        return runtimeFactories.get(nodeType);
+      },
+    });
+
+    const graph = {
+      nodes: [
+        { id: 'd1', type: 'dataset.csv', config: {} },
+        { id: 't1', type: 'transform.core.map', config: { operation: 'identity' } },
+        { id: 's1', type: 'lifecycle.split', config: { train_pct: 50, val_pct: 50, test_pct: 0, shuffle: false } },
+      ],
+      edges: [
+        { source: 'd1', target: 't1', sourceHandle: 'out', targetHandle: 'in' },
+        { source: 't1', target: 's1', sourceHandle: 'out', targetHandle: 'dataset' },
+      ],
+    };
+
+    const run = await executor.executeTopological(graph, { failurePolicy: 'fail-fast' });
+    expect(run.ok).toBe(false);
+    expect(run.status).toBe('failed');
+    expect(run.failedNodeId).toBe('t1');
+    expect(run.nodeStatuses.d1.status).toBe('succeeded');
+    expect(run.nodeStatuses.t1.status).toBe('failed');
+    expect(run.nodeStatuses.s1.status).toBe('skipped');
+  });
 });
