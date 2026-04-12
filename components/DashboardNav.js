@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useEffect, useRef, useState } from 'react'
-import { SidebarClose, Menu, Share2, Copy, Check, Save, Edit2, Eye } from 'lucide-react'
+import { SidebarClose, Menu, Share2, Copy, Check, Save, Edit2, Eye, Layout, Cloud, RefreshCcw, CloudOff, Download, Upload } from 'lucide-react'
 import CustomDropdown from './ui/CustomDropdown'
 import gsap from 'gsap'
 import NodePalette from './NodePalette'
@@ -32,10 +32,11 @@ const DashboardNav = () => {
     { value: 'edit', label: 'Can Edit', icon: Edit2 },
   ]
 
-  const { nodes, edges, addToast, draftPipelineName } = useUIStore();
+  const { nodes, edges, drawings, addToast, draftPipelineName, syncState, setNodes, setEdges, setDrawings } = useUIStore();
   const supabase = createClient();
   const pathname = usePathname();
   const router = useRouter();
+  const importRef = useRef(null);
   const pathPipelineId = pathname?.startsWith('/canvas/') ? pathname.split('/').pop() : null;
   const effectivePipelineId = pathPipelineId || currentPipelineId;
 
@@ -279,6 +280,61 @@ const DashboardNav = () => {
     setTimeout(() => setCopied(false), 2000);
   };
 
+  // ── Export pipeline as JSON ──────────────────────────────────────────────────
+  const handleExport = () => {
+    try {
+      const pipelineName = (draftPipelineName || 'pipeline').trim().replace(/\s+/g, '_') || 'pipeline';
+      const payload = {
+        version: 1,
+        name: draftPipelineName || 'Exported Pipeline',
+        exportedAt: new Date().toISOString(),
+        nodes: nodes || [],
+        edges: edges || [],
+        drawings: drawings || [],
+      };
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${pipelineName}_${Date.now()}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      addToast('Pipeline exported as JSON.', 'success');
+    } catch (err) {
+      console.error('Export error:', err);
+      addToast('Failed to export pipeline.', 'error');
+    }
+  };
+
+  // ── Import pipeline from JSON ────────────────────────────────────────────────
+  const handleImportFile = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      try {
+        const parsed = JSON.parse(evt.target.result);
+        const importedNodes = Array.isArray(parsed.nodes) ? parsed.nodes : [];
+        const importedEdges = Array.isArray(parsed.edges) ? parsed.edges : [];
+        const importedDrawings = Array.isArray(parsed.drawings) ? parsed.drawings : [];
+        if (!importedNodes.length && !importedEdges.length) {
+          addToast('No valid pipeline data found in file.', 'error');
+          return;
+        }
+        setNodes(importedNodes);
+        setEdges(importedEdges);
+        setDrawings(importedDrawings);
+        addToast(`Imported "${parsed.name || file.name}" successfully.`, 'success');
+      } catch {
+        addToast('Invalid JSON file. Please export a valid pipeline.', 'error');
+      } finally {
+        // Reset so the same file can be re-imported
+        if (importRef.current) importRef.current.value = '';
+      }
+    };
+    reader.readAsText(file);
+  };
+
   useEffect(() => {
     if (!navRef.current) return
 
@@ -307,11 +363,72 @@ const DashboardNav = () => {
 
   return (
     <>
+      {/* Floating Top Controls above the sidebar - Aligned with the Rename input on the right */}
+      <div className={`z-200 fixed left-4 top-3 flex items-center gap-2 transition-all duration-400 ${navOpen ? 'opacity-100 translate-x-0' : 'opacity-0 -translate-x-10 pointer-events-none'}`}>
+        <button
+          onClick={() => router.push('/dashboard')}
+          className="flex items-center gap-2 px-4 h-10 bg-foreground text-background text-[11px] font-black uppercase rounded-full hover:opacity-90 transition-all shadow-xl cursor-pointer whitespace-nowrap border-2 border-foreground box-border"
+        >
+          <Layout size={14} /> My Projects
+        </button>
+
+        <div className='flex items-center bg-background/95 border-2 border-foreground/40 rounded-full h-10 px-4 shadow-lg backdrop-blur box-border'>
+          {syncState === 'saving' && (
+            <div className="flex items-center gap-2 opacity-80 pointer-events-none">
+              <RefreshCcw size={14} className="animate-spin text-foreground" />
+              <span className="text-[10px] uppercase font-bold tracking-wider text-foreground pt-px">Saving...</span>
+            </div>
+          )}
+          {syncState === 'saved' && (
+            <div className="flex items-center gap-2 opacity-60 pointer-events-none">
+              <Cloud size={15} className="text-foreground" />
+              <span className="text-[10px] uppercase font-bold tracking-wider text-foreground pt-px">Saved to DB</span>
+            </div>
+          )}
+          {syncState === 'error' && (
+            <div className="flex items-center gap-2 text-rose-500 opacity-90 cursor-help" title="Saved strictly to browser local storage due to connection error">
+              <CloudOff size={15} />
+              <span className="text-[10px] uppercase font-bold tracking-wider pt-px">Local Backup</span>
+            </div>
+          )}
+        </div>
+
+        {/* Export / Import JSON */}
+        <div className="flex items-center bg-background/95 border-2 border-foreground/40 rounded-full h-10 shadow-lg backdrop-blur overflow-hidden box-border transition-colors group">
+          <button
+            onClick={handleExport}
+            title="Export pipeline as JSON"
+            className="flex items-center gap-1.5 px-3 h-full text-foreground text-[10px] font-black uppercase hover:bg-foreground hover:text-background transition-all whitespace-nowrap"
+          >
+            <Download size={13} />
+            Export
+          </button>
+          
+          <div className="w-px h-full bg-foreground/30 group-hover:bg-foreground/50 transition-colors" />
+
+          <button
+            onClick={() => importRef.current?.click()}
+            title="Import pipeline from JSON"
+            className="flex items-center gap-1.5 px-3 h-full text-foreground text-[10px] font-black uppercase hover:bg-foreground hover:text-background transition-all whitespace-nowrap"
+          >
+            <Upload size={13} />
+            Import
+          </button>
+        </div>
+        <input
+          ref={importRef}
+          type="file"
+          accept=".json,application/json"
+          className="hidden"
+          onChange={handleImportFile}
+        />
+      </div>
+
       <div
         ref={navRef}
         onMouseEnter={() => setNavHover(true)}
         onMouseLeave={() => setNavHover(false)}
-        className={`z-100 fixed py-4 px-4 flex flex-col gap-2 items-center left-4 top-1/2 -translate-y-[50%] rounded-2xl border-3 border-foreground h-170 bg-background/90 backdrop-blur-md w-100 overflow-hidden shadow-2xl`}
+        className={`z-100 fixed py-4 px-4 flex flex-col gap-2 items-center left-4 top-16 rounded-2xl border-3 border-foreground h-auto max-h-[calc(100vh-80px)] bg-background/90 backdrop-blur-md w-100 overflow-hidden shadow-2xl`}
       >
         <span className='w-full flex items-center justify-between'>
           <span className='flex flex-col gap-3 items-center w-full'>

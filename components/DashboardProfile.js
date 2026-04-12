@@ -203,26 +203,7 @@ const DashboardProfile = ({ activeCollaborators = [] }) => {
 
   return (
     <div className='z-200 fixed top-3 right-6 flex flex-row items-center gap-3 pr-2'>
-      <div className='flex items-center bg-background/95 border-2 border-foreground/40 rounded-full h-10 px-3 shadow-md backdrop-blur'>
-        {syncState === 'saving' && (
-          <div className="flex items-center gap-1.5 opacity-60 pointer-events-none">
-            <RefreshCcw size={12} className="animate-spin text-foreground" />
-            <span className="text-[10px] uppercase font-bold tracking-wider text-foreground pt-px">Saving...</span>
-          </div>
-        )}
-        {syncState === 'saved' && (
-          <div className="flex items-center gap-1.5 opacity-50 pointer-events-none">
-            <Cloud size={13} className="text-foreground" />
-            <span className="text-[10px] uppercase font-bold tracking-wider text-foreground pt-px">Saved to DB</span>
-          </div>
-        )}
-        {syncState === 'error' && (
-          <div className="flex items-center gap-1.5 text-rose-500 opacity-90 cursor-help" title="Saved strictly to browser local storage due to connection error">
-            <CloudOff size={13} />
-            <span className="text-[10px] uppercase font-bold tracking-wider pt-px">Local Backup</span>
-          </div>
-        )}
-      </div>
+
 
       <div className='w-56'>
         <input

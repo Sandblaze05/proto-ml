@@ -13,7 +13,41 @@ import { bootstrapClientPlugins } from '@/lib/plugins/clientPluginBootstrap';
 import { forkPipeline } from '@/lib/community';
 import CanvasSkeleton from '@/components/canvas/CanvasSkeleton';
 
-const CURSOR_COLORS = ['#67e8f9', '#f472b6', '#f59e0b', '#34d399', '#a78bfa', '#fb7185', '#22c55e', '#60a5fa'];
+const hueToHex = (hue) => {
+  const saturation = 0.76;
+  const lightness = 0.62;
+  const chroma = (1 - Math.abs(2 * lightness - 1)) * saturation;
+  const huePrime = hue / 60;
+  const x = chroma * (1 - Math.abs((huePrime % 2) - 1));
+  const match = lightness - chroma / 2;
+  let red = 0;
+  let green = 0;
+  let blue = 0;
+
+  if (huePrime < 1) {
+    red = chroma;
+    green = x;
+  } else if (huePrime < 2) {
+    red = x;
+    green = chroma;
+  } else if (huePrime < 3) {
+    green = chroma;
+    blue = x;
+  } else if (huePrime < 4) {
+    green = x;
+    blue = chroma;
+  } else if (huePrime < 5) {
+    red = x;
+    blue = chroma;
+  } else {
+    red = chroma;
+    blue = x;
+  }
+
+  return [red, green, blue]
+    .map((channel) => Math.round((channel + match) * 255).toString(16).padStart(2, '0'))
+    .join('');
+};
 
 const pickCursorColor = (seed) => {
   const value = String(seed || '');
@@ -23,7 +57,7 @@ const pickCursorColor = (seed) => {
     hash = (hash * 31 + value.charCodeAt(index)) >>> 0;
   }
 
-  return CURSOR_COLORS[hash % CURSOR_COLORS.length];
+  return `#${hueToHex(hash % 360)}`;
 };
 
 const supabase = createClient();
@@ -172,6 +206,8 @@ const SharedCanvasPage = () => {
   const lastCursorBroadcastAt = useRef(0);
   const lastNodeEditBroadcast = useRef({ nodeId: undefined, ts: 0 });
   const remoteAnimationFrame = useRef(null);
+  const channelRef = useRef(null);
+  const isChannelReadyRef = useRef(false);
 
   // KEY FIX: canEditRef is always current — avoids stale closures in callbacks
   const canEditRef = useRef(false);
@@ -306,8 +342,9 @@ const SharedCanvasPage = () => {
   const broadcastChanges = useCallback((newNodes, newEdges, newDrawings, meta = {}) => {
     if (!canEditRef.current || !hasHydratedPipeline.current) return;
 
-    if (channel && !isUpdatingFromRemote.current) {
-      channel.send({
+    const ch = channelRef.current;
+    if (ch && isChannelReadyRef.current && !isUpdatingFromRemote.current) {
+      ch.send({
         type: 'broadcast',
         event: 'canvas-update',
         payload: {
@@ -320,10 +357,12 @@ const SharedCanvasPage = () => {
     }
 
     queueAutosave(newNodes, newEdges, newDrawings);
-  }, [channel, queueAutosave]); // no canEdit dep — uses ref
+  }, [queueAutosave]); // stable ref — no channel/canEdit dep
 
   const broadcastEditingNode = useCallback((nodeId) => {
-    if (!canEditRef.current || !channel) return;
+    if (!canEditRef.current) return;
+    const ch = channelRef.current;
+    if (!ch || !isChannelReadyRef.current) return;
 
     const now = Date.now();
     if (lastNodeEditBroadcast.current.nodeId === nodeId && now - lastNodeEditBroadcast.current.ts < 120) {
@@ -331,7 +370,7 @@ const SharedCanvasPage = () => {
     }
     lastNodeEditBroadcast.current = { nodeId, ts: now };
 
-    channel.send({
+    ch.send({
       type: 'broadcast',
       event: 'node-focus-update',
       payload: {
@@ -342,7 +381,7 @@ const SharedCanvasPage = () => {
         ts: now,
       },
     });
-  }, [channel]);
+  }, []); // stable ref — no channel dep
 
   const animateRemoteGraphTo = useCallback((nextNodes, nextEdges) => {
     if (remoteAnimationFrame.current) {
@@ -389,13 +428,15 @@ const SharedCanvasPage = () => {
   }, [setEdges, setNodes]);
 
   const handlePointerMove = useCallback((x, y) => {
-    if (!canEditRef.current || !channel) return;
+    if (!canEditRef.current) return;
+    const ch = channelRef.current;
+    if (!ch || !isChannelReadyRef.current) return;
 
     const now = Date.now();
     if (now - lastCursorBroadcastAt.current < 33) return;
     lastCursorBroadcastAt.current = now;
 
-    channel.send({
+    ch.send({
       type: 'broadcast',
       event: 'cursor-update',
       payload: {
@@ -408,7 +449,7 @@ const SharedCanvasPage = () => {
         ts: now,
       },
     });
-  }, [channel]);
+  }, []); // stable ref — no channel dep
 
   const handleFork = useCallback(async () => {
     const pipelineId = pathname.split('/').pop();
@@ -597,7 +638,7 @@ const SharedCanvasPage = () => {
     const pipelineId = pathname.split('/').pop();
     if (!pipelineId) return;
 
-    let channelRef = null;
+    let localChannel = null;
     let isMounted = true;
 
     const bootstrap = async () => {
@@ -612,11 +653,22 @@ const SharedCanvasPage = () => {
         if (!isMounted) return;
 
         const user = authData?.user;
+        let userHandle = null;
 
         if (!user) {
           setLoading(false);
           router.push('/?signup=true');
           return;
+        } else {
+          // Fetch handle
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('handle')
+            .eq('id', user.id)
+            .maybeSingle();
+          if (profile?.handle) {
+            userHandle = profile.handle;
+          }
         }
 
         const { data, error } = await supabase
@@ -727,8 +779,14 @@ const SharedCanvasPage = () => {
           return;
         }
 
-        const newChannel = supabase.channel(`pipeline:${pipelineId}`);
-        channelRef = newChannel;
+        const newChannel = supabase.channel(`pipeline:${pipelineId}`, {
+          config: {
+            broadcast: { self: false, ack: false },
+          },
+        });
+        localChannel = newChannel;
+        channelRef.current = newChannel;
+        isChannelReadyRef.current = false;
 
         newChannel
           .on('presence', { event: 'sync' }, () => {
@@ -794,12 +852,20 @@ const SharedCanvasPage = () => {
           })
           .subscribe(async (status) => {
             if (status === 'SUBSCRIBED' && isMounted) {
+              isChannelReadyRef.current = true;
               activeUserId.current = user?.id || `anon-${Math.random().toString(36).slice(2, 10)}`;
-              const emailLabel = user?.email ? user.email.split('@')[0] : 'Collaborator';
-              activeUserLabel.current = emailLabel;
+              
+              let label = 'Collaborator';
+              if (userHandle) {
+                label = `@${userHandle}`;
+              } else if (user?.email) {
+                label = user.email.split('@')[0];
+              }
+              
+              activeUserLabel.current = label;
               activeUserColor.current = pickCursorColor(user?.id || user?.email || activeUserId.current);
               await newChannel.track({
-                user: user ? user.email : 'Anonymous',
+                user: label,
                 user_id: activeUserId.current,
                 avatar_url: user?.user_metadata.avatar_url,
               });
@@ -828,15 +894,17 @@ const SharedCanvasPage = () => {
 
     return () => {
       isMounted = false;
+      isChannelReadyRef.current = false;
+      channelRef.current = null;
       if (remoteAnimationFrame.current) {
         cancelAnimationFrame(remoteAnimationFrame.current);
         remoteAnimationFrame.current = null;
       }
-      if (channelRef) {
-        supabase.removeChannel(channelRef);
+      if (localChannel) {
+        supabase.removeChannel(localChannel);
       }
     };
-  }, [animateRemoteGraphTo, claimPublicShare, normalizeGraphData, pathname, requestedAccess, setNodes, setEdges, setDrawings]);
+  }, [animateRemoteGraphTo, claimPublicShare, normalizeGraphData, pathname, queueAutosave, requestedAccess, router, setNodes, setEdges, setDrawings]);
 
   useEffect(() => {
     const cleanupId = setInterval(() => {
@@ -913,13 +981,7 @@ const SharedCanvasPage = () => {
         </div>
       )}
 
-      {/* My Projects — guarded navigation */}
-      <button
-        onClick={() => guardedNavigate('/dashboard')}
-        className="absolute bottom-4 left-4 z-100 flex items-center gap-2 px-4 py-2 bg-foreground text-background text-xs font-bold rounded-full hover:opacity-90 transition-all shadow-xl cursor-pointer"
-      >
-        <Layout size={14} /> My Projects
-      </button>
+
 
       {/* Leave modal */}
       {leaveModalOpen && (

@@ -2,7 +2,6 @@
 
 import * as React from 'react';
 import { AnimatePresence, motion, useMotionValue } from 'motion/react';
-import { MousePointer2 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 
@@ -81,7 +80,7 @@ export const CursorMark = React.forwardRef(function CursorMark(
     <motion.div
       ref={pointerRef}
       data-role="cursor-mark"
-      className={cx('pointer-events-none absolute z-9999 -translate-x-1/2 -translate-y-1/2', className)}
+      className={cx('pointer-events-none absolute z-9999 -translate-x-[3px] -translate-y-[3px]', className)}
       style={{ top: y, left: x, ...style }}
       initial={{ scale: 0, opacity: 0 }}
       animate={{ scale: 1, opacity: 1 }}
@@ -89,11 +88,22 @@ export const CursorMark = React.forwardRef(function CursorMark(
       {...rest}
     >
       <div className="flex items-start gap-1">
-        <MousePointer2
-          size={16}
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          width="18"
+          height="18"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden="true"
           className="shrink-0"
-          style={{ color, filter: 'drop-shadow(0 2px 6px rgba(0, 0, 0, 0.35))', transform: 'rotate(-18deg)' }}
-        />
+          style={{ color, filter: 'drop-shadow(0 2px 6px rgba(0, 0, 0, 0.35))' }}
+        >
+          <path d="M4.037 4.688a.495.495 0 0 1 .651-.651l16 6.5a.5.5 0 0 1-.063.947l-6.124 1.58a2 2 0 0 0-1.438 1.435l-1.579 6.126a.5.5 0 0 1-.947.063z" />
+        </svg>
         {(showLabel || label) && label ? (
           <span
             className="mt-0.5 whitespace-nowrap text-[10px] font-medium leading-none drop-shadow-[0_1px_2px_rgba(0,0,0,0.65)]"
@@ -125,6 +135,7 @@ export const Cursor = React.forwardRef(function Cursor({ className, style, ...re
 
     if (active) {
       const previousCursor = container.style.cursor;
+      // eslint-disable-next-line react-hooks/immutability -- This intentionally updates the DOM cursor style for the optional local cursor helper.
       container.style.cursor = 'none';
 
       return () => {

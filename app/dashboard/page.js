@@ -5,8 +5,9 @@ import { createClient } from '@/lib/supabase/client'
 import DashboardSidebar from '@/components/dashboard/DashboardSidebar'
 import DashboardTopBar from '@/components/dashboard/DashboardTopBar'
 import PipelineThumbnail from '@/components/PipelineThumbnail'
-import { Share2, Trash2, Layout, Clock, User, ExternalLink, Edit2, Check, X, Copy, Search, Grid, List, SortAsc, SortDesc, Folder, FolderPlus, ChevronRight, ChevronDown, Star, StarOff, GripVertical, Users, Eye, MoreVertical, Globe, Zap, Workflow, Cpu, Bot, Activity } from 'lucide-react'
+import { Share2, Trash2, Layout, Clock, User, ExternalLink, Edit2, Check, X, Copy, Search, Grid, List, SortAsc, SortDesc, Folder, FolderPlus, ChevronRight, ChevronDown, Star, StarOff, GripVertical, Users, Eye, MoreVertical, Globe, Zap, Bot, Activity } from 'lucide-react'
 import Link from 'next/link'
+import Image from 'next/image'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useUIStore } from '@/store/useUIStore'
 import { publishToCommunity } from '@/lib/community'
@@ -644,18 +645,29 @@ const DashboardPage = () => {
 		try {
 			let error = null
 			if (shareMode === 'email') {
-				const response = await supabase
+				// Select-then-write — partial unique index is incompatible with upsert onConflict
+				const { data: existingShare } = await supabase
 					.from('pipeline_shares')
-					.upsert(
-						{
-							pipeline_id: selectedPipeline.id,
-							owner_id: user.id,
-							share_scope: 'email',
-							shared_with_email: normalizedEmail,
-							permission: sharePermission,
-						},
-						{ onConflict: 'pipeline_id,shared_with_email' }
-					)
+					.select('id')
+					.eq('pipeline_id', selectedPipeline.id)
+					.eq('share_scope', 'email')
+					.eq('shared_with_email', normalizedEmail)
+					.maybeSingle()
+
+				const response = existingShare?.id
+					? await supabase
+							.from('pipeline_shares')
+							.update({ permission: sharePermission })
+							.eq('id', existingShare.id)
+					: await supabase
+							.from('pipeline_shares')
+							.insert({
+								pipeline_id: selectedPipeline.id,
+								owner_id: user.id,
+								share_scope: 'email',
+								shared_with_email: normalizedEmail,
+								permission: sharePermission,
+							})
 				error = response.error
 			} else {
 				const deleteResponse = await supabase
@@ -792,7 +804,7 @@ const DashboardPage = () => {
 							{viewMode === 'list' ? (
 								<div className="w-14 h-14 rounded-2xl bg-foreground/10 flex items-center justify-center shrink-0 border border-foreground/10 group-hover:border-foreground/20 transition-all pointer-events-none relative overflow-hidden">
 									<div className="absolute inset-0 bg-[#FAEBD7]/5 animate-pulse" />
-									<Workflow size={28} className="text-[#FAEBD7] relative z-10 opacity-80" />
+									<Image src="/pipeline.png" alt="" width={36} height={36} className="relative z-10 object-contain opacity-90" />
 								</div>
 							) : (
 								<PipelineThumbnail nodes={p.nodes} edges={p.edges} />
@@ -883,7 +895,7 @@ const DashboardPage = () => {
 							{viewMode === 'list' ? (
 								<div className="w-14 h-14 rounded-2xl bg-linear-to-br from-blue-500/20 to-indigo-500/20 flex items-center justify-center shrink-0 border border-blue-500/20 group-hover:border-blue-500/40 transition-all pointer-events-none relative overflow-hidden">
 									<div className="absolute inset-0 bg-blue-400/5 animate-pulse" />
-									<Workflow size={28} className="text-blue-400 relative z-10" />
+									<Image src="/pipeline.png" alt="" width={36} height={36} className="relative z-10 object-contain opacity-90" />
 								</div>
 							) : (
 								<PipelineThumbnail nodes={p.nodes} edges={p.edges} />
@@ -1037,7 +1049,7 @@ const DashboardPage = () => {
 													{viewMode === 'list' ? (
 														<div className="w-14 h-14 rounded-2xl bg-foreground/10 flex items-center justify-center shrink-0 border border-foreground/10 group-hover:border-foreground/20 transition-all pointer-events-none relative overflow-hidden">
 															<div className="absolute inset-0 bg-[#FAEBD7]/5 animate-pulse" />
-															<Cpu size={28} className="text-[#FAEBD7] relative z-10 opacity-80" />
+															<Image src="/pipeline.png" alt="" width={36} height={36} className="relative z-10 object-contain opacity-90" />
 														</div>
 													) : (
 														<PipelineThumbnail nodes={p.nodes} edges={p.edges} />
@@ -1282,7 +1294,7 @@ const DashboardPage = () => {
 					<div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
 						<div className="bg-background border border-foreground/20 rounded-3xl p-8 shadow-2xl max-w-md w-full">
 							<h3 className="text-xl font-bold mb-2 flex items-center gap-2"><Users size={20} className="text-amber-400" /> Publish Pipeline</h3>
-							<p className="text-foreground/50 text-sm mb-6">Make "{publishModal.name}" visible to the community gallery.</p>
+							<p className="text-foreground/50 text-sm mb-6">Make &quot;{publishModal.name}&quot; visible to the community gallery.</p>
 							
 							<div className="space-y-4 mb-8">
 								<div>
@@ -1323,7 +1335,7 @@ const DashboardPage = () => {
 							</div>
 							<h3 className="text-xl font-bold mb-2">Delete {confirmDelete.type === 'folder' ? 'Folder' : 'Pipeline'}?</h3>
 							<p className="text-foreground/50 text-sm mb-8">
-								Are you sure you want to delete <span className="text-foreground font-bold">"{confirmDelete.name}"</span>?
+								Are you sure you want to delete <span className="text-foreground font-bold">&quot;{confirmDelete.name}&quot;</span>?
 								{confirmDelete.type === 'folder' ? " All pipelines inside will be gone forever." : " This action cannot be undone."}
 							</p>
 							<div className="flex gap-3">
