@@ -12,6 +12,33 @@ export const useUIStore = create((set, get) => ({
   edges: [],
   drawings: [],
   readOnly: false,
+
+  // ── Jupyter cell-mode execution state ────────────────────────────────────
+  // { [nodeId]: { status: 'idle'|'running'|'success'|'error'|'skipped', logs: [], error: null, startedAt, completedAt } }
+  nodeExecutionState: {},
+
+  setNodeExecutionState: (nodeId, patch) => {
+    set((state) => ({
+      nodeExecutionState: {
+        ...state.nodeExecutionState,
+        [nodeId]: {
+          ...(state.nodeExecutionState[nodeId] || { status: 'idle', logs: [], error: null }),
+          ...patch,
+        },
+      },
+    }));
+  },
+
+  clearNodeExecutionStates: () => set({ nodeExecutionState: {} }),
+
+  // ── Jupyter session config (kernelId persists across cell runs) ──────────
+  jupyterSession: { url: 'http://localhost:8888', token: '', kernelId: null },
+
+  setJupyterSession: (patch) => {
+    set((state) => ({
+      jupyterSession: { ...state.jupyterSession, ...patch },
+    }));
+  },
   setReadOnly: (val) => set({ readOnly: val }),
   canvasViewport: { x: 0, y: 0, zoom: 1, width: 1280, height: 720 },
   history: [],

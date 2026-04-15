@@ -108,6 +108,18 @@ const TYPE_HEX = {
 const TABS = ['Source', 'Code', 'Preview'];
 const TAB_ICONS = { Source: FolderOpen, Code: Code2, Preview: Eye };
 
+// Live execution status badge — reads from the UI store reactively
+function NodeExecBadge({ nodeId }) {
+  const execState = useUIStore(s => s.nodeExecutionState[nodeId])
+  const status = execState?.status
+  if (!status || status === 'idle') return null
+  if (status === 'running') return <span className="inline-block w-2 h-2 rounded-full bg-amber-400 animate-pulse" title="Running" />
+  if (status === 'success') return <span className="inline-block w-2 h-2 rounded-full bg-emerald-400" title="Success" />
+  if (status === 'error') return <span className="inline-block w-2 h-2 rounded-full bg-red-500" title={execState?.error || 'Error'} />
+  if (status === 'skipped') return <span className="inline-block w-2 h-2 rounded-full bg-foreground/20" title="Skipped" />
+  return null
+}
+
 function Field({ label, children }) {
   return (
     <div className="mb-2">
@@ -1537,6 +1549,7 @@ export default function DatasetNode({ data, id, selected }) {
           </div>
         </div>
         <div className="flex items-center gap-2">
+          <NodeExecBadge nodeId={id} />
           {isLocked && <Lock size={12} color={accent} className="opacity-60" />}
           {collapsed ? <ChevronDown size={14} color="#faebd760" /> : <ChevronUp size={14} color="#faebd760" />}
         </div>

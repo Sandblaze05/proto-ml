@@ -51,7 +51,7 @@ const DashboardNav = () => {
       }
 
       setCurrentPipelineId(pipelineId);
-      
+
       const { data: { user } } = await supabase.auth.getUser();
       if (!user?.id) {
         setIsOwner(false);
@@ -78,7 +78,7 @@ const DashboardNav = () => {
     setIsSaving(true);
     try {
       const { data: { user }, error: userError } = await supabase.auth.getUser();
-      
+
       if (userError) throw userError;
       if (!user) {
         addToast('You must be logged in to save a pipeline.', 'error');
@@ -89,11 +89,11 @@ const DashboardNav = () => {
       // This is especially important for accounts created before current migrations or on first save.
       const { error: profileCheckError } = await supabase
         .from('profiles')
-        .upsert({ 
+        .upsert({
           id: user.id,
           username: user.user_metadata?.full_name || user.email?.split('@')[0] || 'User'
         }, { onConflict: 'id' });
-      
+
       if (profileCheckError) {
         console.warn('Profile sync warning (you might need to create a profile manually):', profileCheckError);
       }
@@ -160,7 +160,7 @@ const DashboardNav = () => {
       }
 
       if (finalError) throw finalError;
-      
+
       addToast('Pipeline saved successfully!', 'success');
 
       // If we're on a new canvas (/canvas), redirect to the specific ID
@@ -185,7 +185,7 @@ const DashboardNav = () => {
     setIsSharing(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      
+
       if (!user) {
         addToast('You must be logged in to share a pipeline.', 'error');
         return;
@@ -403,7 +403,7 @@ const DashboardNav = () => {
             <Download size={13} />
             Export
           </button>
-          
+
           <div className="w-px h-full bg-foreground/30 group-hover:bg-foreground/50 transition-colors" />
 
           <button
@@ -428,7 +428,8 @@ const DashboardNav = () => {
         ref={navRef}
         onMouseEnter={() => setNavHover(true)}
         onMouseLeave={() => setNavHover(false)}
-        className={`z-100 fixed py-4 px-4 flex flex-col gap-2 items-center left-4 top-16 rounded-2xl border-3 border-foreground h-auto max-h-[calc(100vh-80px)] bg-background/90 backdrop-blur-md w-100 overflow-hidden shadow-2xl`}
+        style={{ willChange: 'transform' }}
+        className={`z-100 fixed py-4 px-4 flex flex-col gap-2 items-center left-4 top-16 rounded-2xl border-3 border-foreground h-auto max-h-[calc(100vh-80px)] bg-background w-100 overflow-hidden shadow-2xl`}
       >
         <span className='w-full flex items-center justify-between'>
           <span className='flex flex-col gap-3 items-center w-full'>
@@ -555,13 +556,13 @@ const DashboardNav = () => {
 
             {shareGenerated && (
               <div className="flex items-center gap-2 bg-foreground/5 p-2 rounded-lg border border-foreground/10 mt-4">
-                <input 
-                  type="text" 
-                  readOnly 
-                  value={shareLink} 
+                <input
+                  type="text"
+                  readOnly
+                  value={shareLink}
                   className="flex-1 bg-transparent border-none outline-none text-foreground text-sm font-mono px-2"
                 />
-                <button 
+                <button
                   onClick={handleCopy}
                   className="p-2 bg-foreground text-background rounded-md hover:opacity-90 transition-opacity flex items-center gap-2"
                 >
@@ -575,7 +576,7 @@ const DashboardNav = () => {
               <p className="text-xs text-red-400 mt-3">Open a saved pipeline to share it.</p>
             )}
 
-            <button 
+            <button
               onClick={() => {
                 setShareModalOpen(false);
                 setShareMode('email');
