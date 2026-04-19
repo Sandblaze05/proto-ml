@@ -32,12 +32,17 @@ export const useUIStore = create((set, get) => ({
   clearNodeExecutionStates: () => set({ nodeExecutionState: {} }),
 
   // ── Jupyter session config (kernelId persists across cell runs) ──────────
-  jupyterSession: { url: 'http://localhost:8888', token: '', kernelId: null },
+  jupyterSession: { url: 'http://localhost:8888', token: '', kernelId: null, allowInsecure: false },
 
   setJupyterSession: (patch) => {
-    set((state) => ({
-      jupyterSession: { ...state.jupyterSession, ...patch },
-    }));
+    set((state) => {
+      const next = { ...state.jupyterSession, ...patch };
+      if (typeof window !== 'undefined') {
+        const { url, token, allowInsecure } = next;
+        localStorage.setItem('proto-ml-jupyter-session', JSON.stringify({ url, token, allowInsecure }));
+      }
+      return { jupyterSession: next };
+    });
   },
   setReadOnly: (val) => set({ readOnly: val }),
   canvasViewport: { x: 0, y: 0, zoom: 1, width: 1280, height: 720 },
@@ -54,16 +59,31 @@ export const useUIStore = create((set, get) => ({
   activeAnnotationShape: null, // shapeType string or null
   setActiveAnnotationShape: (shape) => set({ activeAnnotationShape: shape }),
   showMinimap: false,
-  hydrateShowMinimap: () => {
+  hydrateUI: () => {
     if (typeof window === 'undefined') return;
-    const stored = localStorage.getItem('proto-ml-minimap');
-    if (stored === null) return;
-    set({ showMinimap: stored === 'true' });
+    try {
+      // Minimap
+      const storedMinimap = localStorage.getItem('proto-ml-minimap');
+      if (storedMinimap !== null) {
+        set({ showMinimap: storedMinimap === 'true' });
+      }
+
+      // Jupyter Session
+      const storedJupyter = localStorage.getItem('proto-ml-jupyter-session');
+      if (storedJupyter !== null) {
+        const parsed = JSON.parse(storedJupyter);
+        set((state) => ({
+          jupyterSession: { ...state.jupyterSession, ...parsed }
+        }));
+      }
+    } catch (e) {
+      console.warn('Failed to hydrate UI store:', e);
+    }
   },
   setShowMinimap: (val) => {
     set({ showMinimap: val });
     if (typeof window !== 'undefined') {
-      localStorage.setItem('proto-ml-minimap', val);
+      localStorage.setItem('proto-ml-minimap', String(val));
     }
   },
 

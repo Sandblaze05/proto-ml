@@ -312,7 +312,13 @@ const SharedCanvasPage = () => {
         useUIStore.getState().setSyncState('saved');
         localStorage.removeItem(`pipeline_backup_${pipelineId}`);
       } catch (err) {
-        console.error('Error auto-saving pipeline:', err);
+        console.error('Error auto-saving pipeline:', {
+          message: err?.message || 'Unknown error',
+          code: err?.code,
+          details: err?.details,
+          hint: err?.hint,
+          error: err
+        });
         useUIStore.getState().setSyncState('error');
         localStorage.setItem(`pipeline_backup_${pipelineId}`, JSON.stringify({
           nodes: pending.nodes,

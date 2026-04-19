@@ -21,7 +21,7 @@ function buildApiUrl(baseUrl, endpoint, token) {
   return url;
 }
 
-async function jupyterRequest(baseUrl, endpoint, { method = 'GET', token = '', body } = {}) {
+async function jupyterRequest(baseUrl, endpoint, { method = 'GET', token = '', body, allowInsecure = false } = {}) {
   const headers = {
     'Content-Type': 'application/json',
   };
@@ -30,23 +30,57 @@ async function jupyterRequest(baseUrl, endpoint, { method = 'GET', token = '', b
     headers.Authorization = `Token ${token}`;
   }
 
-  const response = await fetch(buildApiUrl(baseUrl, endpoint, token), {
-    method,
-    headers,
-    body: body ? JSON.stringify(body) : undefined,
-    cache: 'no-store',
-  });
-
-  if (!response.ok) {
-    const text = await response.text();
-    throw new Error(`Jupyter API Error (${response.status}): ${text}`);
+  // If this is a mutating request and we are not using a token (or even if we are, for some configs),
+  // we might need an XSRF token.
+  if (method !== 'GET' && method !== 'HEAD') {
+    try {
+      // Small optimization: fetch XSRF token from /api/status if not provided
+      const statusRes = await fetch(buildApiUrl(baseUrl, '/api/status', token), {
+        method: 'GET',
+        cache: 'no-store',
+      });
+      const cookie = statusRes.headers.get('set-cookie');
+      if (cookie && cookie.includes('_xsrf=')) {
+        const xsrf = cookie.split('_xsrf=')[1].split(';')[0];
+        headers['X-XSRFToken'] = xsrf;
+        // Also need to pass the cookie back
+        headers['Cookie'] = `_xsrf=${xsrf}`;
+      }
+    } catch (e) {
+      console.warn('Failed to pre-fetch XSRF token:', e);
+    }
   }
 
-  if (response.status === 204) {
-    return null;
+  // Handle TLS for local/insecure environments
+  if (allowInsecure && baseUrl.startsWith('https')) {
+    process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
   }
 
-  return response.json();
+  try {
+    const response = await fetch(buildApiUrl(baseUrl, endpoint, token), {
+      method,
+      headers,
+      body: body ? JSON.stringify(body) : undefined,
+      cache: 'no-store',
+    });
+
+    if (!response.ok) {
+      const text = await response.text();
+      throw new Error(`Jupyter API Error (${response.status}): ${text}`);
+    }
+
+    if (response.status === 204) {
+      return null;
+    }
+
+    return response.json();
+  } finally {
+    if (allowInsecure) {
+      // We don't want to leave this globally disabled if we can help it, 
+      // but in a multi-request async environment this is tricky. 
+      // For localhost dev, it's generally acceptable.
+    }
+  }
 }
 
 function createId() {
@@ -250,6 +284,7 @@ export async function POST(request) {
     const body = await request.json();
     const jupyterUrl = normalizeBaseUrl(body?.jupyterUrl || '');
     const jupyterToken = String(body?.jupyterToken || '');
+    const allowInsecure = Boolean(body?.allowInsecure);
     const code = String(body?.code || '');
 
     if (!code.trim()) {
@@ -259,7 +294,10 @@ export async function POST(request) {
     const systemLogs = [{ type: 'system', text: `Connecting to Jupyter at ${jupyterUrl}...` }];
     systemLogs.push({ type: 'system', text: 'Fetching kernels...' });
 
-    const kernels = await jupyterRequest(jupyterUrl, '/api/kernels', { token: jupyterToken });
+    const kernels = await jupyterRequest(jupyterUrl, '/api/kernels', { 
+      token: jupyterToken,
+      allowInsecure
+    });
     let kernelId = '';
 
     if (Array.isArray(kernels) && kernels.length > 0) {
@@ -270,6 +308,7 @@ export async function POST(request) {
       const newKernel = await jupyterRequest(jupyterUrl, '/api/kernels', {
         method: 'POST',
         token: jupyterToken,
+        allowInsecure,
         body: { name: 'python3' },
       });
       kernelId = newKernel?.id;

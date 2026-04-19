@@ -28,8 +28,8 @@ const DashboardProfile = ({ activeCollaborators = [] }) => {
   const setSavedPipelineName = useUIStore(s => s.setSavedPipelineName)
   const showMinimap = useUIStore(s => s.showMinimap)
   const setShowMinimap = useUIStore(s => s.setShowMinimap)
-  const hydrateShowMinimap = useUIStore(s => s.hydrateShowMinimap)
   const syncState = useUIStore(s => s.syncState)
+  const hydrateUI = useUIStore(s => s.hydrateUI)
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => setUser(data?.user ?? null))
@@ -89,8 +89,8 @@ const DashboardProfile = ({ activeCollaborators = [] }) => {
   }, [pipelineNameDraft, setDraftPipelineName])
 
   useEffect(() => {
-    hydrateShowMinimap()
-  }, [hydrateShowMinimap])
+    hydrateUI()
+  }, [hydrateUI])
 
   useEffect(() => {
     const handler = (e) => {
@@ -202,7 +202,7 @@ const DashboardProfile = ({ activeCollaborators = [] }) => {
   }, [activeCollaborators])
 
   return (
-    <div className='z-200 fixed top-3 right-6 flex flex-row items-center gap-3 pr-2'>
+    <div className='z-200 fixed top-3 right-6 flex flex-row items-start gap-3 pr-2'>
 
 
       <div className='w-56'>

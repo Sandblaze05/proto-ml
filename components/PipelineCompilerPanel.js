@@ -283,11 +283,19 @@ const PipelineCompilerPanel = () => {
   const setJupyterSession = useUIStore(s => s.setJupyterSession)
   const setNodeExecutionState = useUIStore(s => s.setNodeExecutionState)
   const clearNodeExecutionStates = useUIStore(s => s.clearNodeExecutionStates)
+  const hydrateUI = useUIStore(s => s.hydrateUI)
+
+  // Hydrate UI settings on mount
+  useEffect(() => {
+    hydrateUI()
+  }, [hydrateUI])
 
   const jupyterUrl = jupyterSession.url
   const jupyterToken = jupyterSession.token
+  const allowInsecure = jupyterSession.allowInsecure
   const setJupyterUrl = (url) => setJupyterSession({ url })
   const setJupyterToken = (token) => setJupyterSession({ token })
+  const setAllowInsecure = (val) => setJupyterSession({ allowInsecure: val })
 
   const [isExecuting, setIsExecuting] = useState(false)
   const [executionLogs, setExecutionLogs] = useState([])
@@ -371,7 +379,7 @@ const PipelineCompilerPanel = () => {
       const response = await fetch('/api/jupyter/execute', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ jupyterUrl, jupyterToken, code: compiledCode }),
+        body: JSON.stringify({ jupyterUrl, jupyterToken, code: compiledCode, allowInsecure }),
       })
       const data = await response.json()
       if (!response.ok || !data?.ok) throw new Error(data?.error || `Execution failed (${response.status})`)
@@ -424,7 +432,7 @@ const PipelineCompilerPanel = () => {
     let kernelId = null
     try {
       const kRes = await fetch(
-        `/api/jupyter/kernel?jupyterUrl=${encodeURIComponent(jupyterUrl)}&jupyterToken=${encodeURIComponent(jupyterToken)}&fresh=true`
+        `/api/jupyter/kernel?jupyterUrl=${encodeURIComponent(jupyterUrl)}&jupyterToken=${encodeURIComponent(jupyterToken)}&fresh=true&allowInsecure=${allowInsecure}`
       )
       const kData = await kRes.json()
       if (!kData.ok) throw new Error(kData.error || 'Kernel creation failed')
@@ -449,7 +457,7 @@ const PipelineCompilerPanel = () => {
       const bRes = await fetch('/api/jupyter/cell', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ jupyterUrl, jupyterToken, kernelId, code: bootstrapCode, nodeId: '__bootstrap' }),
+        body: JSON.stringify({ jupyterUrl, jupyterToken, kernelId, code: bootstrapCode, nodeId: '__bootstrap', allowInsecure }),
       })
       const bData = await bRes.json()
       if (!bData.ok) throw new Error(bData.stderr || bData.error || 'Bootstrap failed')
@@ -480,7 +488,7 @@ const PipelineCompilerPanel = () => {
         const res = await fetch('/api/jupyter/cell', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ jupyterUrl, jupyterToken, kernelId, code, nodeId }),
+          body: JSON.stringify({ jupyterUrl, jupyterToken, kernelId, code, nodeId, allowInsecure }),
         })
         const data = await res.json()
 
@@ -655,6 +663,15 @@ const PipelineCompilerPanel = () => {
                 className="px-2.5 py-1.5 bg-background border border-foreground/20 rounded-md text-sm text-foreground outline-none focus:border-cyan-500"
                 placeholder="Optional"
               />
+            </label>
+            <label className="flex items-center gap-2 cursor-pointer mt-1">
+              <input
+                type="checkbox"
+                checked={allowInsecure}
+                onChange={e => setAllowInsecure(e.target.checked)}
+                className="w-3 h-3 rounded border-foreground/20"
+              />
+              <span className="text-[10px] font-medium text-foreground/70 uppercase tracking-wide">Allow Insecure (Self-signed SSL)</span>
             </label>
             {jupyterSession.kernelId && (
               <div className="text-[10px] text-foreground/40">

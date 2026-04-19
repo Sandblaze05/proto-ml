@@ -29,6 +29,10 @@ async function executeCellOnKernel(baseUrl, token, kernelId, code) {
   const wsUrl = new URL(normalizeEndpoint(`/api/kernels/${kernelId}/channels`), `${wsBase}/`);
   if (token) wsUrl.searchParams.set('token', token);
 
+  // If we have an XSRF token (likely from a previous REST call), we should pass it.
+  // WebSockets to Jupyter don't usually require XSRF if the token is in the URL,
+  // but some proxies do.
+
   return new Promise((resolve, reject) => {
     const ws = new WebSocket(wsUrl.toString());
     const sessionId = createId();
@@ -176,6 +180,16 @@ export async function POST(request) {
     }
     if (!code.trim()) {
       return NextResponse.json({ ok: false, error: 'code is empty.' }, { status: 400 });
+    }
+
+    const allowInsecure = Boolean(body?.allowInsecure);
+
+    // If we are using a Jupyter instance that requires XSRF but no token is provided,
+    // we should try to pre-fetch the XSRF cookie here even for the WS connection,
+    // or just ensure REST calls (like kernel creation) handled it.
+    
+    if (allowInsecure && jupyterUrl.startsWith('https')) {
+      process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
     }
 
     const result = await executeCellOnKernel(jupyterUrl, jupyterToken, kernelId, code);
