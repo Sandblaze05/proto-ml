@@ -1354,6 +1354,24 @@ function InteractiveCanvas({ onCanvasChange, onPointerMove, onEditingNodeChange,
     useExecutionStore.setState({ edges: normalizedEdges });
   }, [edges]);
 
+  useEffect(() => {
+    const nextExecutionNodes = {};
+    (nodes || []).forEach((node) => {
+      if (node.data?.nodeModel) {
+        const model = node.data.nodeModel;
+        nextExecutionNodes[node.id] = {
+          ...model,
+          id: node.id,
+          // Ensure inputs/outputs are simple name arrays for the executor
+          inputs: Array.isArray(model.inputs) ? model.inputs.map((p) => (typeof p === 'string' ? p : p.name)) : [],
+          outputs: Array.isArray(model.outputs) ? model.outputs.map((p) => (typeof p === 'string' ? p : p.name)) : [],
+        };
+      }
+    });
+
+    useExecutionStore.setState({ nodes: nextExecutionNodes });
+  }, [nodes]);
+
 
   useEffect(() => {
     if (initialized.current) return;

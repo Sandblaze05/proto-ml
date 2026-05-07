@@ -878,35 +878,37 @@ function PreviewTab({ config, nodeType, previewing, onRunPreview, previewResult 
       {previewResult && Array.isArray(previewResult.rows) && previewResult.rows.length > 0 && (
         <div className="mt-3">
           <div className="text-[9px] text-[#faebd7]/50 mb-1 font-mono uppercase">Data Preview (first 5 rows)</div>
-          <div className="border border-[#faebd7]/20 rounded overflow-hidden bg-black/60">
-            {/* Table Header */}
-            <div className="grid gap-px bg-[#faebd7]/10 border-b border-[#faebd7]/20" style={{ gridTemplateColumns: `repeat(${Math.min(Object.keys(previewResult.rows[0] || {}).length, 8)}, minmax(60px, 1fr))` }}>
-              {Object.keys(previewResult.rows[0] || {}).slice(0, 8).map((col) => (
-                <div key={col} className="px-2 py-1 text-[8px] font-mono font-semibold text-[#faebd7]/80 bg-black/40 whitespace-nowrap overflow-hidden text-ellipsis">
-                  {col}
+          <div className="border border-[#faebd7]/20 rounded overflow-x-auto bg-black/60 scrollbar-thin scrollbar-track-transparent scrollbar-thumb-[#faebd7]/20">
+            <div style={{ minWidth: 'max-content' }}>
+              {/* Table Header */}
+              <div className="flex gap-px bg-[#faebd7]/10 border-b border-[#faebd7]/20">
+                {Object.keys(previewResult.rows[0] || {}).map((col) => (
+                  <div key={col} className="px-2 py-1 text-[8px] font-mono font-semibold text-[#faebd7]/80 bg-black/40 whitespace-nowrap overflow-hidden text-ellipsis min-w-[80px] max-w-[150px]">
+                    {col}
+                  </div>
+                ))}
+              </div>
+              {/* Table Rows */}
+              {previewResult.rows.slice(0, 5).map((row, idx) => (
+                <div key={idx} className="flex gap-px border-t border-[#faebd7]/10">
+                  {Object.keys(row || {}).map((col) => {
+                    const val = row[col];
+                    const isObj = val !== null && typeof val === 'object';
+                    const displayVal = val === null ? '∅' : val === undefined ? '—' : isObj ? JSON.stringify(val) : String(val);
+                    return (
+                      <div
+                        key={col}
+                        className="px-2 py-1 text-[8px] font-mono text-[#faebd7]/70 bg-black/20 whitespace-nowrap overflow-hidden text-ellipsis min-w-[80px] max-w-[150px]"
+                        title={isObj ? JSON.stringify(val, null, 2) : String(val)}
+                      >
+                        {displayVal}
+                      </div>
+                    );
+                  })}
                 </div>
               ))}
             </div>
-            {/* Table Rows */}
-            {previewResult.rows.slice(0, 5).map((row, idx) => (
-              <div key={idx} className="grid gap-px border-t border-[#faebd7]/10" style={{ gridTemplateColumns: `repeat(${Math.min(Object.keys(row || {}).length, 8)}, minmax(60px, 1fr))` }}>
-                {Object.keys(row || {}).slice(0, 8).map((col) => {
-                  const val = row[col];
-                  const displayVal = val === null ? '∅' : val === undefined ? '—' : String(val).length > 20 ? String(val).substring(0, 17) + '…' : String(val);
-                  return (
-                    <div key={col} className="px-2 py-1 text-[8px] font-mono text-[#faebd7]/70 bg-black/20 whitespace-nowrap overflow-hidden text-ellipsis" title={String(val)}>
-                      {displayVal}
-                    </div>
-                  );
-                })}
-              </div>
-            ))}
           </div>
-          {Object.keys(previewResult.rows[0] || {}).length > 8 && (
-            <div className="text-[8px] text-[#faebd7]/40 mt-1 font-mono">
-              ... and {Object.keys(previewResult.rows[0] || {}).length - 8} more columns
-            </div>
-          )}
         </div>
       )}
 
