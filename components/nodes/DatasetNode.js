@@ -20,7 +20,7 @@ import { generateDatasetPythonCode } from '../../lib/pythonTemplates/datasetNode
 import MonacoCodeEditor from './MonacoCodeEditor';
 import { getUploadInputMode } from './datasetUploadMode';
 
-const STRICT_CLIENT_ONLY_DATASETS = true;
+const STRICT_CLIENT_ONLY_DATASETS = false;
 
 const PORT_TW = {
   tensor: { dot: 'bg-purple-400', badge: 'text-purple-400 bg-purple-400/10 border-purple-400/30' },

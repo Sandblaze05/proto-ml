@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useEffect, useState, useMemo } from 'react'
+import React, { Suspense, useEffect, useState, useMemo } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import DashboardSidebar from '@/components/dashboard/DashboardSidebar'
 import DashboardTopBar from '@/components/dashboard/DashboardTopBar'
@@ -19,7 +19,7 @@ const DRAFT_PIPELINE_NAME_KEY = 'protoMlDraftPipelineName'
 const STARRED_FOLDER_NAME = 'Starred'
 const UNCATEGORIZED_FOLDER_NAME = 'Uncategorized'
 
-const DashboardPage = () => {
+const DashboardPageContent = () => {
 	const [myPipelines, setMyPipelines] = useState([])
 	const [sharedPipelines, setSharedPipelines] = useState([])
 	const [communityPipelines, setCommunityPipelines] = useState([])
@@ -1467,4 +1467,10 @@ const DashboardPage = () => {
 	)
 }
 
-export default DashboardPage
+export default function DashboardPage() {
+	return (
+		<Suspense fallback={<DashboardSkeleton />}>
+			<DashboardPageContent />
+		</Suspense>
+	)
+}

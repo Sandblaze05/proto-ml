@@ -10,7 +10,10 @@ import gsap from 'gsap'
 import { useUIStore } from '@/store/useUIStore'
 import { compileExecutionGraph } from '@/lib/executor/pipelineCompiler'
 import { compilePipelineCells, compileBootstrapCell } from '@/lib/executor/nodeCellCompiler'
+import { BrowserJupyterClient, extractStructuredResult } from '@/lib/executor/browserJupyterClient'
 import MonacoCodeEditor from './nodes/MonacoCodeEditor'
+
+const NON_COMPILABLE_TYPES = ['annotationNode', 'shapeNode']
 
 function NodeStatusIcon({ status, size = 10 }) {
   if (status === 'running') return (
@@ -25,10 +28,7 @@ function NodeStatusIcon({ status, size = 10 }) {
 
 function CellLogGroup({ nodeId, nodeLabel, nodeType, status, logs = [], error = null }) {
   const [expanded, setExpanded] = useState(status === 'error')
-
-  useEffect(() => {
-    if (status === 'error') setExpanded(true)
-  }, [status])
+  const isExpanded = expanded || status === 'error'
 
   const bgColor = status === 'error' ? 'bg-red-950/15' : status === 'running' ? 'bg-amber-950/10' : 'bg-foreground/5'
 
@@ -41,9 +41,9 @@ function CellLogGroup({ nodeId, nodeLabel, nodeType, status, logs = [], error = 
         <NodeStatusIcon status={status} size={12} />
         <span className="flex-1 text-xs font-mono font-medium text-foreground/90 truncate">{nodeLabel || nodeId}</span>
         <span className="text-[10px] font-mono text-foreground/40 shrink-0 bg-foreground/5 px-1.5 py-0.5 rounded">{nodeType}</span>
-        {expanded ? <ChevronDown size={12} className="text-foreground/40 shrink-0" /> : <ChevronRight size={12} className="text-foreground/40 shrink-0" />}
+        {isExpanded ? <ChevronDown size={12} className="text-foreground/40 shrink-0" /> : <ChevronRight size={12} className="text-foreground/40 shrink-0" />}
       </button>
-      {expanded && (
+      {isExpanded && (
         <div className="px-3 pb-3 font-mono text-[10px] space-y-1">
           {error && (
             <div className="text-red-400 whitespace-pre-wrap break-all leading-relaxed bg-red-950/20 p-2 rounded border border-red-500/20">{error}</div>
@@ -96,7 +96,7 @@ const CellRunPanel = ({
         {cellRunLog.length === 0 && !isCellRunning ? (
           <div className="flex flex-col items-center justify-center h-full gap-3 text-foreground/30">
             <Zap size={32} className="opacity-20" />
-            <span className="text-sm text-center px-8">Click "Run Pipeline" to execute nodes sequentially</span>
+            <span className="text-sm text-center px-8">Click &quot;Run Pipeline&quot; to execute nodes sequentially</span>
           </div>
         ) : (
           <div className="space-y-1">
@@ -225,6 +225,40 @@ const LogsPanel = ({ isExecuting, executionLogs, handleExecute, compiledCode, co
 }
 
 const ResultPanel = ({ executionResult, downloadResultJson, downloadResultCsv, hasCsvRows, resultRows, tableHeaders, tableRows }) => {
+  const getMetrics = () => {
+    if (!executionResult) return null;
+    if (executionResult.metrics) return executionResult.metrics;
+    if (executionResult.final_output?.metrics) return executionResult.final_output.metrics;
+    if (executionResult.leaf_outputs) {
+      const firstId = Object.keys(executionResult.leaf_outputs)[0];
+      if (firstId && executionResult.leaf_outputs[firstId]?.metrics) return executionResult.leaf_outputs[firstId].metrics;
+    }
+    return null;
+  };
+
+  const getTrainedModel = () => {
+    if (!executionResult) return null;
+    if (executionResult.trained_model) return executionResult.trained_model;
+    if (executionResult.final_output?.trained_model) return executionResult.final_output.trained_model;
+    if (executionResult.leaf_outputs) {
+      const firstId = Object.keys(executionResult.leaf_outputs)[0];
+      if (firstId && executionResult.leaf_outputs[firstId]?.trained_model) return executionResult.leaf_outputs[firstId].trained_model;
+    }
+    return null;
+  };
+
+  const getLogsAndArtifacts = () => {
+    if (!executionResult) return { logs: null, artifacts: null };
+    const finalOut = executionResult.final_output || {};
+    const artifacts = executionResult.artifacts || finalOut.artifacts;
+    const logs = executionResult.logs || finalOut.logs;
+    return { logs, artifacts };
+  };
+
+  const metrics = getMetrics();
+  const model = getTrainedModel();
+  const { logs, artifacts } = getLogsAndArtifacts();
+
   return (
     <div className="flex flex-col h-full">
       <div className="flex-1 overflow-y-auto p-3">
@@ -234,7 +268,54 @@ const ResultPanel = ({ executionResult, downloadResultJson, downloadResultCsv, h
               <button onClick={downloadResultJson} className="px-2.5 py-1.5 rounded-md bg-cyan-700/40 hover:bg-cyan-700/60 text-xs font-medium border border-cyan-500/30">JSON</button>
               <button onClick={downloadResultCsv} disabled={!hasCsvRows} className="px-2.5 py-1.5 rounded-md bg-emerald-700/40 hover:bg-emerald-700/60 text-xs font-medium border border-emerald-500/30 disabled:opacity-40 disabled:cursor-not-allowed">CSV</button>
             </div>
-            {hasCsvRows ? (
+            
+            {(!hasCsvRows && (metrics || model || logs || artifacts)) ? (
+              <div className="space-y-4">
+                {metrics && (
+                  <div className="p-3 bg-violet-950/10 border border-violet-500/20 rounded-lg">
+                    <h3 className="text-xs font-bold text-violet-300 font-mono mb-2 uppercase tracking-wide">Key Metrics</h3>
+                    <div className="grid grid-cols-2 gap-2">
+                      {Object.entries(metrics).map(([k, v]) => (
+                        <div key={k} className="p-2 bg-background/50 border border-foreground/5 rounded-md">
+                          <div className="text-[10px] text-foreground/40 font-mono capitalize truncate">{k.replace('_', ' ')}</div>
+                          <div className="text-sm font-bold text-violet-400 font-mono mt-0.5">{typeof v === 'number' ? v.toFixed(4) : String(v)}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {model && (
+                  <div className="p-3 bg-cyan-950/10 border border-cyan-500/20 rounded-lg">
+                    <h3 className="text-xs font-bold text-cyan-300 font-mono mb-2 uppercase tracking-wide">Trained Model</h3>
+                    <div className="space-y-1.5 font-mono text-[11px] text-foreground/80">
+                      <div><span className="text-foreground/40">Status:</span> <span className="text-emerald-400 font-bold uppercase">{model.trained ? 'Trained' : 'Initialized'}</span></div>
+                      {model.epochs_run !== undefined && <div><span className="text-foreground/40">Epochs:</span> {model.epochs_run}</div>}
+                      {model.seen_train_samples !== undefined && <div><span className="text-foreground/40">Seen Samples:</span> {model.seen_train_samples}</div>}
+                      {model.family && <div><span className="text-foreground/40">Algorithm:</span> <span className="text-cyan-400">{model.family}</span></div>}
+                      {model.target_column && <div><span className="text-foreground/40">Target Column:</span> <span className="text-amber-400">{model.target_column}</span></div>}
+                    </div>
+                  </div>
+                )}
+
+                {(logs || artifacts) && (
+                  <div className="p-3 bg-emerald-950/10 border border-emerald-500/20 rounded-lg">
+                    <h3 className="text-xs font-bold text-emerald-300 font-mono mb-2 uppercase tracking-wide">Run Logs & Artifacts</h3>
+                    <div className="space-y-1 font-mono text-[10px] text-foreground/80 break-all">
+                      {logs?.run_dir && <div><span className="text-foreground/40">Run Directory:</span> <span className="text-emerald-400/80">{logs.run_dir}</span></div>}
+                      {artifacts?.artifact_dir && <div><span className="text-foreground/40">Artifact Dir:</span> <span className="text-emerald-400/80">{artifacts.artifact_dir}</span></div>}
+                      {logs?.learning_rate !== undefined && <div><span className="text-foreground/40">Learning Rate:</span> {logs.learning_rate}</div>}
+                      {logs?.optimizer && <div><span className="text-foreground/40">Optimizer:</span> <span className="text-cyan-300">{logs.optimizer}</span></div>}
+                    </div>
+                  </div>
+                )}
+                
+                <details className="mt-2 bg-foreground/5 rounded-md p-2">
+                  <summary className="text-[10px] text-foreground/40 cursor-pointer font-mono font-medium hover:text-foreground/60 select-none">View raw execution result (JSON)</summary>
+                  <pre className="text-[10px] text-foreground/80 whitespace-pre-wrap font-mono mt-2 pt-2 border-t border-foreground/5">{JSON.stringify(executionResult, null, 2)}</pre>
+                </details>
+              </div>
+            ) : hasCsvRows ? (
               <div className="overflow-auto rounded-lg border border-foreground/10">
                 <table className="w-full text-xs border-collapse">
                   <thead className="bg-foreground/5 sticky top-0">
@@ -332,8 +413,6 @@ const PipelineCompilerPanel = () => {
     return () => tween.kill()
   }, [panelHover, panelOpen])
 
-  const NON_COMPILABLE_TYPES = ['annotationNode', 'shapeNode']
-
   const buildCompilerGraphFromUI = useCallback(() => {
     const filteredNodes = (uiNodes || []).filter(n => !NON_COMPILABLE_TYPES.includes(n.type))
     
@@ -376,22 +455,39 @@ const PipelineCompilerPanel = () => {
     setExecutionResult(null)
 
     try {
-      const response = await fetch('/api/jupyter/execute', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ jupyterUrl, jupyterToken, code: compiledCode, allowInsecure }),
-      })
-      const data = await response.json()
-      if (!response.ok || !data?.ok) throw new Error(data?.error || `Execution failed (${response.status})`)
+      const client = new BrowserJupyterClient(jupyterUrl, jupyterToken)
+      const logs = [
+        { type: 'system', text: `Connecting directly to Jupyter at ${jupyterUrl}...\n` },
+        { type: 'system', text: 'Starting browser-managed kernel...\n' },
+      ]
+      setExecutionLogs(logs)
 
-      setExecutionLogs(prev => [...prev, ...(Array.isArray(data.logs) ? data.logs : [])])
-      setExecutionResult(data?.structuredResult ?? null)
+      const kernelId = await client.startKernel({ fresh: false })
+      setJupyterSession({ kernelId })
+      logs.push({ type: 'system', text: `Executing compiled pipeline on kernel ${kernelId}...\n${'-'.repeat(40)}\n` })
+      setExecutionLogs([...logs])
+
+      const execution = await client.executeCode(kernelId, compiledCode)
+      const allLogs = [
+        ...logs,
+        ...execution.logs,
+        {
+          type: execution.status === 'ok' ? 'system' : 'stderr',
+          text: `\n${'-'.repeat(40)}\nExecution finished with status: ${execution.status}`,
+        },
+      ]
+      setExecutionLogs(allLogs)
+      setExecutionResult(extractStructuredResult(allLogs))
+
+      if (execution.status !== 'ok') {
+        throw new Error(`Execution failed with status: ${execution.status}`)
+      }
     } catch (err) {
       setExecutionLogs(prev => [...prev, { type: 'stderr', text: `\n[Fatal Error]: ${String(err?.message || err)}` }])
     } finally {
       setIsExecuting(false)
     }
-  }, [compiledCode, jupyterUrl, jupyterToken])
+  }, [compiledCode, jupyterUrl, jupyterToken, setJupyterSession])
 
   const handleCellRun = useCallback(async () => {
     if (isCellRunning) return
@@ -431,12 +527,8 @@ const PipelineCompilerPanel = () => {
 
     let kernelId = null
     try {
-      const kRes = await fetch(
-        `/api/jupyter/kernel?jupyterUrl=${encodeURIComponent(jupyterUrl)}&jupyterToken=${encodeURIComponent(jupyterToken)}&fresh=true&allowInsecure=${allowInsecure}`
-      )
-      const kData = await kRes.json()
-      if (!kData.ok) throw new Error(kData.error || 'Kernel creation failed')
-      kernelId = kData.kernelId
+      const client = new BrowserJupyterClient(jupyterUrl, jupyterToken)
+      kernelId = await client.startKernel({ fresh: true })
       setJupyterSession({ kernelId })
     } catch (err) {
       setCellRunLog([{
@@ -453,14 +545,13 @@ const PipelineCompilerPanel = () => {
     }
 
     try {
+      const client = new BrowserJupyterClient(jupyterUrl, jupyterToken)
       const bootstrapCode = compileBootstrapCell()
-      const bRes = await fetch('/api/jupyter/cell', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ jupyterUrl, jupyterToken, kernelId, code: bootstrapCode, nodeId: '__bootstrap', allowInsecure }),
-      })
-      const bData = await bRes.json()
-      if (!bData.ok) throw new Error(bData.stderr || bData.error || 'Bootstrap failed')
+      const bootstrap = await client.executeCode(kernelId, bootstrapCode, { username: 'proto-ml-bootstrap' })
+      if (bootstrap.status !== 'ok') {
+        const stderr = bootstrap.logs.filter(log => log.type === 'stderr').map(log => log.text).join('\n')
+        throw new Error(stderr || 'Bootstrap failed')
+      }
     } catch (err) {
       setCellRunLog(prev => [{
         nodeId: '__bootstrap_error',
@@ -477,6 +568,8 @@ const PipelineCompilerPanel = () => {
 
     let overallOk = true
 
+    const client = new BrowserJupyterClient(jupyterUrl, jupyterToken)
+
     for (let i = 0; i < order.length; i++) {
       const { nodeId, node, code } = order[i]
       const nodeLabel = node?.label || node?.type || nodeId
@@ -485,16 +578,11 @@ const PipelineCompilerPanel = () => {
       setNodeExecutionState(nodeId, { status: 'running', startedAt: Date.now(), logs: [], error: null })
 
       try {
-        const res = await fetch('/api/jupyter/cell', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ jupyterUrl, jupyterToken, kernelId, code, nodeId, allowInsecure }),
-        })
-        const data = await res.json()
+        const data = await client.executeCode(kernelId, code, { username: `proto-ml-node-${nodeId}` })
 
         const nodeLogs = Array.isArray(data.logs) ? data.logs : []
-        const nodeError = (!data.ok || data.status !== 'ok')
-          ? (data.stderr || data.error || `Cell execution failed with status: ${data.status}`)
+        const nodeError = data.status !== 'ok'
+          ? (nodeLogs.filter(log => log.type === 'stderr').map(log => log.text).join('\n') || `Cell execution failed with status: ${data.status}`)
           : null
         const nodeStatus = nodeError ? 'error' : 'success'
 

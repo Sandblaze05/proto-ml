@@ -9,6 +9,36 @@ function nowIso() {
   return new Date().toISOString();
 }
 
+function normalizePortName(port) {
+  if (typeof port === 'string') return port;
+  if (port && typeof port.name === 'string') return port.name;
+  return '';
+}
+
+function portFromNodeModel(node, direction, handle) {
+  if (!node || !handle) return null;
+
+  const portMap = direction === 'output' ? node.portMap?.outputs : node.portMap?.inputs;
+  if (portMap && portMap[handle]) return portMap[handle];
+
+  const registryPort = direction === 'output'
+    ? getOutputPort(node.type, handle)
+    : getInputPort(node.type, handle);
+  if (registryPort) return registryPort;
+
+  const localPorts = direction === 'output' ? node.outputs : node.inputs;
+  const match = Array.isArray(localPorts)
+    ? localPorts.find((port) => normalizePortName(port) === handle)
+    : null;
+
+  if (!match) return null;
+  return typeof match === 'string' ? { name: match, datatype: 'any' } : match;
+}
+
+function nodeLabel(node, fallback) {
+  return node?.label || getNodeDef(node?.type)?.label || node?.type || fallback;
+}
+
 export const useExecutionStore = create((set, get) => ({
   // Dictionary of node_id → full execution node model
   nodes: {},
@@ -340,95 +370,81 @@ export const useExecutionStore = create((set, get) => ({
    */
   validateConnection: (sourceId, targetId, sourceHandle, targetHandle) => {
     const state = get();
+    if (!sourceId || !targetId) {
+      return connectionResult(false, 'MISSING_ENDPOINT', 'Start and end nodes are required.');
+    }
+    if (sourceId === targetId) {
+      return connectionResult(false, 'SELF_CONNECTION', 'A node cannot connect to itself.');
+    }
+    if (!sourceHandle || !targetHandle) {
+      return connectionResult(false, 'MISSING_HANDLE', 'Connect a named output port to a named input port.');
+    }
+
     const sourceNode = state.nodes[sourceId];
     const targetNode = state.nodes[targetId];
-
     if (!sourceNode || !targetNode) {
-      return connectionResult(false, 'MISSING_NODE', 'Source or target node is missing in execution store.', {
-        sourceId,
-        targetId,
-      });
+      return connectionResult(false, 'UNKNOWN_NODE', 'Both nodes must be registered before they can be connected.');
     }
 
-    const srcOutputs = sourceNode.outputs ?? [];
-    const tgtInputs  = targetNode.inputs  ?? [];
-
-    if (srcOutputs.length === 0) {
-      return connectionResult(false, 'SOURCE_HAS_NO_OUTPUTS', 'Source node does not expose output ports.', {
-        sourceId,
-        sourceType: sourceNode.type,
-      });
-    }
-    if (tgtInputs.length === 0) {
-      return connectionResult(false, 'TARGET_HAS_NO_INPUTS', 'Target node does not expose input ports.', {
-        targetId,
-        targetType: targetNode.type,
-      });
+    const sourcePort = portFromNodeModel(sourceNode, 'output', sourceHandle);
+    if (!sourcePort) {
+      return connectionResult(false, 'UNKNOWN_SOURCE_PORT', `${nodeLabel(sourceNode, sourceId)} does not have output "${sourceHandle}".`);
     }
 
-    // ── Capability validation (domain-level): source.produces must intersect target.accepts ──
-    const srcDef = getNodeDef(sourceNode.type);
-    const tgtDef = getNodeDef(targetNode.type);
-    const srcProduces = sourceNode.produces ?? srcDef?.produces;
-    const tgtAccepts = targetNode.accepts ?? tgtDef?.accepts;
-    if (Array.isArray(srcProduces) && srcProduces.length > 0 && Array.isArray(tgtAccepts) && tgtAccepts.length > 0) {
-      const hasCompatibleDomain = srcProduces.some((d) => d === '*' || tgtAccepts.includes(d) || tgtAccepts.includes('*'));
+    const targetPort = portFromNodeModel(targetNode, 'input', targetHandle);
+    if (!targetPort) {
+      return connectionResult(false, 'UNKNOWN_TARGET_PORT', `${nodeLabel(targetNode, targetId)} does not have input "${targetHandle}".`);
+    }
+
+    const sourceDef = getNodeDef(sourceNode.type);
+    const targetDef = getNodeDef(targetNode.type);
+    const sourceProduces = sourceNode.produces ?? sourceDef?.produces;
+    const targetAccepts = targetNode.accepts ?? targetDef?.accepts;
+    if (Array.isArray(sourceProduces) && sourceProduces.length > 0 && Array.isArray(targetAccepts) && targetAccepts.length > 0) {
+      const hasCompatibleDomain = sourceProduces.some((domain) => (
+        domain === '*' || targetAccepts.includes(domain) || targetAccepts.includes('*')
+      ));
       if (!hasCompatibleDomain) {
-        return connectionResult(false, 'CAPABILITY_MISMATCH', 'Node capability mismatch: source output domain is not accepted by target.', {
-          sourceType: sourceNode.type,
-          targetType: targetNode.type,
-          srcProduces,
-          tgtAccepts,
-          suggestedFix: 'Insert a compatible adapter transform between source and target.',
+        return connectionResult(false, 'CAPABILITY_MISMATCH', `${nodeLabel(targetNode, targetId)} does not accept ${sourceProduces.join(', ')} data.`, {
+          suggestedFix: 'Insert a compatible transform between these nodes.',
         });
       }
     }
 
-    // ── Typed validation (when handles are known) ──
-    if (sourceHandle && targetHandle && sourceNode.type && targetNode.type) {
-      const sourcePort = getOutputPort(sourceNode.type, sourceHandle);
-      const targetPort = getInputPort(targetNode.type, targetHandle);
-
-      if (!sourcePort || !targetPort) {
-        return connectionResult(false, 'PORT_NOT_FOUND', 'Referenced source or target handle does not exist on node definition.', {
-          sourceType: sourceNode.type,
-          targetType: targetNode.type,
-          sourceHandle,
-          targetHandle,
-        });
-      }
-
-      if (sourcePort && targetPort) {
-        const compatible = arePortsCompatible(sourcePort, targetPort);
-        if (compatible) {
-          return connectionResult(true, 'OK', 'Connection is compatible.', {
-            sourceType: sourceNode.type,
-            targetType: targetNode.type,
-            sourceHandle,
-            targetHandle,
-          });
-        }
-
-        const sourceRole = inferPortRole(sourcePort);
-        const targetRole = inferPortRole(targetPort);
-        return connectionResult(false, 'PORT_TYPE_MISMATCH', 'Port datatype or role mismatch.', {
-          sourceType: sourceNode.type,
-          targetType: targetNode.type,
-          sourceHandle,
-          targetHandle,
-          sourceDatatype: sourcePort.datatype,
-          targetDatatype: targetPort.datatype,
-          sourceRole,
-          targetRole,
-          suggestedFix: 'Use an adapter node or choose matching ports.',
-        });
-      }
+    const duplicateInput = state.edges.some((edge) => (
+      edge.target === targetId &&
+      edge.targetHandle === targetHandle &&
+      !(edge.source === sourceId && edge.sourceHandle === sourceHandle)
+    ));
+    if (duplicateInput) {
+      return connectionResult(false, 'INPUT_ALREADY_CONNECTED', `Input "${targetHandle}" already has a connection.`, {
+        suggestedFix: 'Remove the existing edge first.',
+      });
     }
 
-    // ── Fallback: basic existence check for generic nodes ──
-    return connectionResult(true, 'OK_FALLBACK', 'Connection accepted via generic fallback.', {
-      sourceType: sourceNode.type,
-      targetType: targetNode.type,
+    const duplicateEdge = state.edges.some((edge) => (
+      edge.source === sourceId &&
+      edge.target === targetId &&
+      edge.sourceHandle === sourceHandle &&
+      edge.targetHandle === targetHandle
+    ));
+    if (duplicateEdge) {
+      return connectionResult(false, 'DUPLICATE_EDGE', 'That exact connection already exists.');
+    }
+
+    if (!arePortsCompatible(sourcePort, targetPort)) {
+      const sourceType = sourcePort.datatype || inferPortRole(sourcePort);
+      const targetType = targetPort.datatype || inferPortRole(targetPort);
+      return connectionResult(
+        false,
+        'INCOMPATIBLE_PORTS',
+        `"${sourceHandle}" (${sourceType}) cannot feed "${targetHandle}" (${targetType}).`,
+      );
+    }
+
+    return connectionResult(true, 'OK', 'Connection allowed.', {
+      sourceRole: inferPortRole(sourcePort),
+      targetRole: inferPortRole(targetPort),
     });
   },
 

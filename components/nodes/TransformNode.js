@@ -367,16 +367,7 @@ export default function TransformNode({ data, id, selected }) {
           : '0 4px 20px rgba(0,0,0,0.55)',
       }}
     >
-      {inputs.map((inp, idx) => (
-        <Handle
-          key={`in-${inp || idx}`}
-          type="target"
-          position={Position.Left}
-          id={inp}
-          style={{ top: 22 + idx * 16, background: '#fbbf24', border: 'none', width: 8, height: 8 }}
-          title={`Input port: ${inp || `in_${idx + 1}`}`}
-        />
-      ))}
+
 
       <div
         className="flex items-center justify-between px-2.5 py-2 cursor-grab active:cursor-grabbing"
@@ -398,6 +389,36 @@ export default function TransformNode({ data, id, selected }) {
           {collapsed ? <ChevronDown size={14} color="#faebd760" /> : <ChevronUp size={14} color="#faebd760" />}
         </div>
       </div>
+
+      {inputs.length > 0 && (
+        <div className="flex flex-col items-start gap-1 px-2.5 pt-1.5 pb-2.5 border-b border-[#faebd7]/5">
+          {inputs.map((inp, idx) => (
+            <div key={inp || idx} className="flex items-center gap-1.5 relative w-full">
+              <Handle
+                type="target"
+                position={Position.Left}
+                id={inp}
+                title={`Input port: ${inp || `in_${idx + 1}`}`}
+                style={{
+                  top: '50%',
+                  left: '-14px',
+                  transform: 'translateY(-50%)',
+                  background: '#fbbf24',
+                  border: '2px solid #141414',
+                  width: 10,
+                  height: 10,
+                  borderRadius: '50%',
+                  zIndex: 10,
+                }}
+              />
+              <div className="w-2 h-2 rounded-full shrink-0 bg-amber-400" />
+              <span className="text-[8px] font-mono px-1.5 py-px rounded border text-amber-300 bg-amber-400/10 border-amber-400/30">
+                {inp}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
 
       {!collapsed && (
         <div className="nodrag">
