@@ -376,24 +376,11 @@ export const useExecutionStore = create((set, get) => ({
     if (sourceId === targetId) {
       return connectionResult(false, 'SELF_CONNECTION', 'A node cannot connect to itself.');
     }
-    if (!sourceHandle || !targetHandle) {
-      return connectionResult(false, 'MISSING_HANDLE', 'Connect a named output port to a named input port.');
-    }
 
     const sourceNode = state.nodes[sourceId];
     const targetNode = state.nodes[targetId];
     if (!sourceNode || !targetNode) {
       return connectionResult(false, 'UNKNOWN_NODE', 'Both nodes must be registered before they can be connected.');
-    }
-
-    const sourcePort = portFromNodeModel(sourceNode, 'output', sourceHandle);
-    if (!sourcePort) {
-      return connectionResult(false, 'UNKNOWN_SOURCE_PORT', `${nodeLabel(sourceNode, sourceId)} does not have output "${sourceHandle}".`);
-    }
-
-    const targetPort = portFromNodeModel(targetNode, 'input', targetHandle);
-    if (!targetPort) {
-      return connectionResult(false, 'UNKNOWN_TARGET_PORT', `${nodeLabel(targetNode, targetId)} does not have input "${targetHandle}".`);
     }
 
     const sourceDef = getNodeDef(sourceNode.type);
@@ -406,9 +393,24 @@ export const useExecutionStore = create((set, get) => ({
       ));
       if (!hasCompatibleDomain) {
         return connectionResult(false, 'CAPABILITY_MISMATCH', `${nodeLabel(targetNode, targetId)} does not accept ${sourceProduces.join(', ')} data.`, {
-          suggestedFix: 'Insert a compatible transform between these nodes.',
+          suggestedFix: 'Insert a compatible adapter transform between these nodes.',
         });
       }
+    }
+
+    if (!sourceHandle || !targetHandle) {
+      return connectionResult(false, 'MISSING_HANDLE', 'Connect a named output port to a named input port.');
+    }
+
+    const sourcePort = portFromNodeModel(sourceNode, 'output', sourceHandle);
+    const targetPort = portFromNodeModel(targetNode, 'input', targetHandle);
+    if (!sourcePort || !targetPort) {
+      return connectionResult(false, 'PORT_NOT_FOUND', 'Referenced source or target handle does not exist on node definition.', {
+        sourceType: sourceNode.type,
+        targetType: targetNode.type,
+        sourceHandle,
+        targetHandle,
+      });
     }
 
     const duplicateInput = state.edges.some((edge) => (
