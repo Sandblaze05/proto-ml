@@ -237,3 +237,51 @@ body {
   -ms-overflow-style: none;
   scrollbar-width: none;
 }
+
+/* ============================================================================
+   Version Control Graph Diff Styles
+   ============================================================================ */
+
+.react-flow__node.diff-node-added {
+  border: 3px solid #10b981 !important;
+  box-shadow: 0 0 25px rgba(16, 185, 129, 0.5) !important;
+  border-radius: 12px;
+  background-color: rgba(16, 185, 129, 0.05) !important;
+}
+
+.react-flow__node.diff-node-removed {
+  opacity: 0.4 !important;
+  filter: grayscale(80%) !important;
+  border: 3px dashed #ef4444 !important;
+  box-shadow: 0 0 25px rgba(239, 68, 68, 0.4) !important;
+  border-radius: 12px;
+  background-color: rgba(239, 68, 68, 0.05) !important;
+  pointer-events: auto !important;
+}
+
+.react-flow__node.diff-node-modified {
+  border: 3px solid #f59e0b !important;
+  box-shadow: 0 0 25px rgba(245, 158, 11, 0.5) !important;
+  border-radius: 12px;
+  background-color: rgba(245, 158, 11, 0.05) !important;
+}
+
+.react-flow__node.diff-node-moved {
+  border: 3px dashed #38bdf8 !important;
+  border-radius: 12px;
+  background-color: rgba(56, 189, 248, 0.05) !important;
+}
+
+.diff-edge-added .react-flow__edge-path {
+  stroke: #10b981 !important;
+  stroke-width: 4 !important;
+  filter: drop-shadow(0 0 8px rgba(16, 185, 129, 0.5));
+}
+
+.diff-edge-removed .react-flow__edge-path {
+  stroke: #ef4444 !important;
+  stroke-width: 3 !important;
+  stroke-dasharray: 6 6 !important;
+  opacity: 0.7 !important;
+  filter: drop-shadow(0 0 6px rgba(239, 68, 68, 0.4));
+}

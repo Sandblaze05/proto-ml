@@ -12,6 +12,10 @@ import { createClient } from '@/lib/supabase/client';
 import { bootstrapClientPlugins } from '@/lib/plugins/clientPluginBootstrap';
 import { forkPipeline } from '@/lib/community';
 import CanvasSkeleton from '@/components/canvas/CanvasSkeleton';
+import VersionToolbar from '@/components/versioning/VersionToolbar';
+import CommitDialog from '@/components/versioning/CommitDialog';
+import HistoryPanel from '@/components/versioning/HistoryPanel';
+import { useVersionStore } from '@/store/useVersionStore';
 
 const hueToHex = (hue) => {
   const saturation = 0.76;
@@ -232,6 +236,9 @@ const SharedCanvasPage = () => {
   const queueAutosave = useCallback((newNodes, newEdges, newDrawings = []) => {
     if (!canEditRef.current || isUpdatingFromRemote.current || !hasHydratedPipeline.current) return;
 
+    // Check dirty state for version control
+    useVersionStore.getState().checkDirty(newNodes, newEdges);
+
     const snapshot = supportsDrawingsColumn.current
       ? JSON.stringify({ nodes: newNodes, edges: newEdges, drawings: newDrawings })
       : JSON.stringify({ nodes: newNodes, edges: newEdges });
@@ -244,6 +251,25 @@ const SharedCanvasPage = () => {
       snapshot,
     };
   }, []); // no canEdit dependency — reads ref instead
+
+  // ── Auto-commit listener effect ──
+  const _autoCommitPending = useVersionStore(s => s._autoCommitPending);
+  const doCommit = useVersionStore(s => s.doCommit);
+  const clearAutoCommitPending = useVersionStore(s => s.clearAutoCommitPending);
+
+  useEffect(() => {
+    if (_autoCommitPending) {
+      doCommit({
+        message: 'Auto-save version',
+        nodes,
+        edges,
+        drawings,
+        isAuto: true
+      }).then(() => {
+        clearAutoCommitPending();
+      });
+    }
+  }, [_autoCommitPending, nodes, edges, drawings, doCommit, clearAutoCommitPending]);
 
   useEffect(() => {
     bootstrapClientPlugins().catch(() => {
@@ -778,6 +804,11 @@ const SharedCanvasPage = () => {
         pendingSaveSnapshot.current = null;
         useUIStore.getState().setSyncState('saved');
         hasHydratedPipeline.current = true;
+        
+        if (isMounted) {
+          useVersionStore.getState().initVersioning(pipelineId, user.id);
+        }
+
         setTimeout(() => { if (isMounted) isUpdatingFromRemote.current = false; }, 100);
 
         if (pipelineIsSnapshot) {
@@ -909,6 +940,7 @@ const SharedCanvasPage = () => {
       if (localChannel) {
         supabase.removeChannel(localChannel);
       }
+      useVersionStore.getState().destroy();
     };
   }, [animateRemoteGraphTo, claimPublicShare, normalizeGraphData, pathname, queueAutosave, requestedAccess, router, setNodes, setEdges, setDrawings]);
 
@@ -957,6 +989,9 @@ const SharedCanvasPage = () => {
           <DashboardNav />
           <DashboardProfile activeCollaborators={collaborators} />
           <PipelineCompilerPanel />
+          <VersionToolbar />
+          <CommitDialog />
+          <HistoryPanel />
         </>
       ) : (
         <DashboardProfile activeCollaborators={collaborators} />

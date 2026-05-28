@@ -23,6 +23,8 @@ import { useDroppable } from '@dnd-kit/core';
 
 import { useUIStore } from '../store/useUIStore';
 import { useExecutionStore } from '../store/useExecutionStore';
+import { useVersionStore } from '../store/useVersionStore';
+import DiffDetailPanel from './versioning/DiffDetailPanel';
 import DatasetNode from './nodes/DatasetNode';
 import TransformNode from './nodes/TransformNode';
 import AnnotationNode from './nodes/AnnotationNode';
@@ -1249,6 +1251,84 @@ function InteractiveCanvas({ onCanvasChange, onPointerMove, onEditingNodeChange,
     activeTool, setActiveTool, undo, redo, saveToHistory, setCanvasViewport
   } = useUIStore();
 
+  const {
+    compareMode,
+    diffStatusMap,
+    diffResult,
+    diffEdgeSets
+  } = useVersionStore();
+
+  const isFlowReadOnly = readOnly || compareMode;
+
+  const displayNodes = useMemo(() => {
+    if (!compareMode || !diffStatusMap) return nodes;
+
+    const formattedActive = nodes.map(n => {
+      const diff = diffStatusMap.get(n.id);
+      if (!diff) return n;
+
+      let borderClass = '';
+      if (diff.status === 'added') {
+        borderClass = 'diff-node-added';
+      } else if (diff.status === 'modified') {
+        borderClass = 'diff-node-modified';
+      } else if (diff.status === 'moved') {
+        borderClass = 'diff-node-moved';
+      }
+
+      return {
+        ...n,
+        className: `${n.className || ''} ${borderClass}`.trim(),
+      };
+    });
+
+    const removedNodesList = diffResult?.removedNodes || [];
+    const ghostNodes = removedNodesList.map(r => {
+      const nodeA = r.before;
+      return {
+        ...nodeA,
+        id: nodeA.id,
+        draggable: false,
+        className: `${nodeA.className || ''} diff-node-removed`.trim(),
+        data: {
+          ...nodeA.data,
+          nodeModel: {
+            ...nodeA.data?.nodeModel,
+            readOnly: true
+          }
+        }
+      };
+    });
+
+    return [...formattedActive, ...ghostNodes];
+  }, [nodes, compareMode, diffStatusMap, diffResult]);
+
+  const displayEdges = useMemo(() => {
+    if (!compareMode || !diffEdgeSets) return edges;
+
+    const formattedActive = edges.map(e => {
+      const key = `${e.source || ''}|${e.sourceHandle || ''}|${e.target || ''}|${e.targetHandle || ''}`;
+      if (diffEdgeSets.addedEdgeKeys.has(key)) {
+        return {
+          ...e,
+          className: `${e.className || ''} diff-edge-added`.trim(),
+        };
+      }
+      return e;
+    });
+
+    const removedEdgesList = diffResult?.removedEdges || [];
+    const ghostEdges = removedEdgesList.map((e, idx) => {
+      return {
+        ...e,
+        id: `removed-edge-${idx}`,
+        className: `${e.className || ''} diff-edge-removed`.trim(),
+      };
+    });
+
+    return [...formattedActive, ...ghostEdges];
+  }, [edges, compareMode, diffEdgeSets, diffResult]);
+
   const wasDraggingRef = useRef(false);
 
   // Sync changes to remote peers
@@ -1278,6 +1358,11 @@ function InteractiveCanvas({ onCanvasChange, onPointerMove, onEditingNodeChange,
   const rfHeight = useStore((s) => s.height);
 
   const [selectedNodes, setSelectedNodes] = useState([]);
+  useOnSelectionChange({
+    onChange: ({ nodes }) => {
+      setSelectedNodes(nodes || []);
+    },
+  });
   const [menu, setMenu] = useState(null);
   const [isSpotlightOpen, setIsSpotlightOpen] = useState(false);
   const [droppingOver, setDroppingOver] = useState(false);
@@ -1303,7 +1388,7 @@ function InteractiveCanvas({ onCanvasChange, onPointerMove, onEditingNodeChange,
         }
       }
 
-      if (!readOnly && !isTyping && !e.metaKey && !e.ctrlKey && !e.altKey) {
+      if (!isFlowReadOnly && !isTyping && !e.metaKey && !e.ctrlKey && !e.altKey) {
         const key = e.key.toLowerCase();
         if (key === 'v') setActiveTool('select');
         if (key === 'd') setActiveTool('draw');
@@ -1323,25 +1408,25 @@ function InteractiveCanvas({ onCanvasChange, onPointerMove, onEditingNodeChange,
     };
     window.addEventListener('keydown', handleKeys);
     return () => window.removeEventListener('keydown', handleKeys);
-  }, [readOnly, undo, redo, setActiveTool]);
+  }, [isFlowReadOnly, undo, redo, setActiveTool]);
 
   const onNodesChange = useCallback((changes) => {
-    if (readOnly) return;
+    if (isFlowReadOnly) return;
 
     // Save to history when dragging or significant changes happen
     const isDraggableChange = changes.some(c => c.type === 'position' && c.dragging === false);
     if (isDraggableChange) saveToHistory();
 
     useUIStore.getState().onNodesChange(changes);
-  }, [readOnly, saveToHistory]);
+  }, [isFlowReadOnly, saveToHistory]);
 
   const onEdgesChange = useCallback((changes) => {
-    if (readOnly) return;
+    if (isFlowReadOnly) return;
 
     const isRemoval = changes.some(c => c.type === 'remove');
     if (isRemoval) saveToHistory();
     useUIStore.getState().onEdgesChange(changes);
-  }, [readOnly, saveToHistory]);
+  }, [isFlowReadOnly, saveToHistory]);
 
   useEffect(() => {
     const normalizedEdges = (edges || []).map((edge) => ({
@@ -1697,22 +1782,22 @@ function InteractiveCanvas({ onCanvasChange, onPointerMove, onEditingNodeChange,
         />
       )}
       <ReactFlow
-        nodes={nodes}
-        edges={edges}
+        nodes={displayNodes}
+        edges={displayEdges}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
-        onConnect={readOnly ? undefined : onConnect}
-        onConnectStart={readOnly ? undefined : onConnectStart}
-        onConnectEnd={readOnly ? undefined : onConnectEnd}
-        onNodeContextMenu={readOnly ? undefined : onNodeContextMenu}
-        onEdgeContextMenu={readOnly ? undefined : onEdgeContextMenu}
-        onPaneContextMenu={readOnly ? undefined : onPaneContextMenu}
+        onConnect={isFlowReadOnly ? undefined : onConnect}
+        onConnectStart={isFlowReadOnly ? undefined : onConnectStart}
+        onConnectEnd={isFlowReadOnly ? undefined : onConnectEnd}
+        onNodeContextMenu={isFlowReadOnly ? undefined : onNodeContextMenu}
+        onEdgeContextMenu={isFlowReadOnly ? undefined : onEdgeContextMenu}
+        onPaneContextMenu={isFlowReadOnly ? undefined : onPaneContextMenu}
         onPaneClick={onPaneClick}
         fitView
         fitViewOptions={{ padding: 0.2 }}
         panOnScroll={true}
         zoomOnScroll={true}
-        panOnDrag={readOnly ? true : activeTool === 'select'}
+        panOnDrag={isFlowReadOnly ? true : activeTool === 'select'}
         selectionOnDrag={activeTool === 'select'}
         selectionKeyCode="Shift"
         selectionMode="box"
@@ -1721,28 +1806,35 @@ function InteractiveCanvas({ onCanvasChange, onPointerMove, onEditingNodeChange,
         edgeTypes={edgeTypes}
         minZoom={0.1}
         maxZoom={2}
-        deleteKeyCode={readOnly ? null : ['Backspace', 'Delete']}
+        deleteKeyCode={isFlowReadOnly ? null : ['Backspace', 'Delete']}
         onNodesDelete={onNodesDelete}
-        nodesDraggable={!readOnly}
-        nodesConnectable={!readOnly}
+        nodesDraggable={!isFlowReadOnly}
+        nodesConnectable={!isFlowReadOnly}
         elementsSelectable={true}
         style={{ background: 'transparent' }}
         proOptions={{ hideAttribution: true }}
       >
         <Background gap={16} size={1} color="#faebd7" opacity={0.1} />
-        <ZoomControls readOnly={readOnly} />
+        <ZoomControls readOnly={isFlowReadOnly} />
         <EdgeAwareMiniMap />
         <DrawingLayer />
       </ReactFlow>
 
 
       <Spotlight isOpen={isSpotlightOpen} onClose={() => setIsSpotlightOpen(false)} />
-      {!readOnly && <FloatingToolbar />}
+      {!isFlowReadOnly && <FloatingToolbar />}
       <ShapeLayerComponents />
       <LiveCursors cursors={remoteCursors} viewportTransform={transform} />
       <LiveNodeEditors editors={remoteNodeEditors} nodes={nodes} viewportTransform={transform} />
 
-      {!readOnly && nodes.length === 0 && drawings.length === 0 && (
+      {compareMode && selectedNodes.length > 0 && (
+        <DiffDetailPanel
+          selectedNodeId={selectedNodes[0].id}
+          onClose={() => setSelectedNodes([])}
+        />
+      )}
+
+      {!isFlowReadOnly && nodes.length === 0 && drawings.length === 0 && (
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
           <div className="max-w-md text-center bg-black/40 backdrop-blur-sm p-6 rounded-3xl border border-foreground/20 shadow-[0_15px_30px_rgba(0,0,0,0.5)]">
             <p className="font-mono text-foreground/70 text-sm leading-relaxed">
