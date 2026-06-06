@@ -265,6 +265,59 @@ export const useUIStore = create((set, get) => ({
     });
   },
 
+  groupSelectedNodes: () => {
+    const selectedNodes = get().nodes.filter(n => n.selected && n.type !== 'groupNode');
+    if (selectedNodes.length < 1) {
+      get().addToast('Select at least one node to group', 'info');
+      return;
+    }
+
+    get().saveToHistory();
+
+    // Calculate bounding box
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    selectedNodes.forEach(n => {
+      const x = n.position.x;
+      const y = n.position.y;
+      const w = n.measured?.width || n.width || 200;
+      const h = n.measured?.height || n.height || 100;
+      
+      if (x < minX) minX = x;
+      if (y < minY) minY = y;
+      if (x + w > maxX) maxX = x + w;
+      if (y + h > maxY) maxY = y + h;
+    });
+
+    const padding = 40;
+    const groupId = `group-${Math.random().toString(36).substring(2, 7)}`;
+    const groupNode = {
+      id: groupId,
+      type: 'groupNode',
+      position: { x: minX - padding, y: minY - padding - 20 },
+      style: { width: (maxX - minX) + padding * 2, height: (maxY - minY) + padding * 2 + 20 },
+      data: { label: 'New Group' },
+      zIndex: 5,
+    };
+
+    const updatedNodes = get().nodes.map(n => {
+      if (n.selected && n.type !== 'groupNode') {
+        return {
+          ...n,
+          parentId: groupId,
+          position: {
+            x: n.position.x - (minX - padding),
+            y: n.position.y - (minY - padding - 20)
+          },
+          extent: 'parent'
+        };
+      }
+      return n;
+    });
+
+    set({ nodes: [groupNode, ...updatedNodes] });
+    get().addToast('Nodes grouped', 'success');
+  },
+
   setNodes: (nodes) => set({ nodes }),
   setEdges: (edges) => set({ edges }),
 }));

@@ -16,7 +16,7 @@ import {
   View, Minus, Plus, Maximize, Minimize2, Trash2,
   AlignCenterHorizontal, AlignCenterVertical,
   CheckCircle2, AlertCircle, Info, X, Wand2,
-  MousePointer2, Pencil, Eraser, Type, Undo2, Redo2, ChevronLeft, ChevronRight, Lock, Unlock
+  MousePointer2, Pencil, Eraser, Type, Undo2, Redo2, ChevronLeft, ChevronRight, Lock, Unlock, Boxes
 } from 'lucide-react';
 import gsap from 'gsap';
 import { useDroppable } from '@dnd-kit/core';
@@ -29,9 +29,20 @@ import DatasetNode from './nodes/DatasetNode';
 import TransformNode from './nodes/TransformNode';
 import AnnotationNode from './nodes/AnnotationNode';
 import ShapeNode from './nodes/ShapeNode';
+import GroupNode from './nodes/GroupNode';
 import { getPaletteCategories } from './NodePalette';
 import { ANNOTATION_SHAPES, RectIcon } from './AnnotationsPanel';
 import { v4 as uuidv4 } from 'uuid';
+import {
+  createClientUpload,
+  deleteClientUpload,
+  inspectClientUpload,
+  listClientUploads,
+  previewClientUpload,
+  previewClientImageUpload,
+  validateClientUpload,
+  validateClientUploadJoins,
+} from '../lib/clientUploadStore';
 import { generateDatasetPythonCode } from '@/lib/pythonTemplates/datasetNodeTemplate';
 import { generateTransformPythonCode } from '@/lib/pythonTemplates/transformNodeTemplate';
 import { generateLifecyclePythonCode } from '@/lib/pythonTemplates/lifecycleNodeTemplate';
@@ -238,7 +249,8 @@ const nodeTypes = {
   datasetNode: DatasetNode,
   transformNode: TransformNode,
   annotationNode: AnnotationNode,
-  shapeNode: ShapeNode
+  shapeNode: ShapeNode,
+  groupNode: GroupNode
 };
 const edgeTypes = {};
 
@@ -1258,6 +1270,13 @@ function InteractiveCanvas({ onCanvasChange, onPointerMove, onEditingNodeChange,
     diffEdgeSets
   } = useVersionStore();
 
+  const { addExecutionNode, addExecutionEdge, validateConnection, removeExecutionNode, nodeStatuses } = useExecutionStore();
+  const { setNodeRef } = useDroppable({ id: 'canvas-droppable' });
+  const { project, screenToFlowPosition } = useReactFlow();
+  const transform = useStore((s) => s.transform);
+  const rfWidth = useStore((s) => s.width);
+  const rfHeight = useStore((s) => s.height);
+
   const isFlowReadOnly = readOnly || compareMode;
 
   const displayNodes = useMemo(() => {
@@ -1304,19 +1323,36 @@ function InteractiveCanvas({ onCanvasChange, onPointerMove, onEditingNodeChange,
   }, [nodes, compareMode, diffStatusMap, diffResult]);
 
   const displayEdges = useMemo(() => {
-    if (!compareMode || !diffEdgeSets) return edges;
-
+    // 1. Base formatting (from current edges)
     const formattedActive = edges.map(e => {
+      const sourceStatus = nodeStatuses[e.source]?.status;
+      let extraClass = '';
+      if (sourceStatus === 'running') extraClass = 'executing';
+      else if (sourceStatus === 'success') extraClass = 'completed';
+
+      if (!compareMode || !diffEdgeSets) {
+        return {
+          ...e,
+          className: `${e.className || ''} ${extraClass}`.trim(),
+        };
+      }
+
       const key = `${e.source || ''}|${e.sourceHandle || ''}|${e.target || ''}|${e.targetHandle || ''}`;
       if (diffEdgeSets.addedEdgeKeys.has(key)) {
         return {
           ...e,
-          className: `${e.className || ''} diff-edge-added`.trim(),
+          className: `${e.className || ''} ${extraClass} diff-edge-added`.trim(),
         };
       }
-      return e;
+      return {
+        ...e,
+        className: `${e.className || ''} ${extraClass}`.trim(),
+      };
     });
 
+    if (!compareMode || !diffResult) return formattedActive;
+
+    // 2. Add ghost edges for removed connections in diff mode
     const removedEdgesList = diffResult?.removedEdges || [];
     const ghostEdges = removedEdgesList.map((e, idx) => {
       return {
@@ -1327,7 +1363,7 @@ function InteractiveCanvas({ onCanvasChange, onPointerMove, onEditingNodeChange,
     });
 
     return [...formattedActive, ...ghostEdges];
-  }, [edges, compareMode, diffEdgeSets, diffResult]);
+  }, [edges, compareMode, diffEdgeSets, diffResult, nodeStatuses]);
 
   const wasDraggingRef = useRef(false);
 
@@ -1349,13 +1385,6 @@ function InteractiveCanvas({ onCanvasChange, onPointerMove, onEditingNodeChange,
 
     onCanvasChange(nodes, edges, drawings, { reason: 'graph-change' });
   }, [nodes, edges, drawings, onCanvasChange]);
-
-  const { addExecutionNode, addExecutionEdge, validateConnection, removeExecutionNode } = useExecutionStore();
-  const { setNodeRef } = useDroppable({ id: 'canvas-droppable' });
-  const { project, screenToFlowPosition } = useReactFlow();
-  const transform = useStore((s) => s.transform);
-  const rfWidth = useStore((s) => s.width);
-  const rfHeight = useStore((s) => s.height);
 
   const [selectedNodes, setSelectedNodes] = useState([]);
   useOnSelectionChange({
@@ -1511,6 +1540,16 @@ function InteractiveCanvas({ onCanvasChange, onPointerMove, onEditingNodeChange,
 
   const [isConnecting, setIsConnecting] = useState(false);
 
+  const isValidConnection = useCallback((connection) => {
+    const res = validateConnection(
+      connection.source,
+      connection.target,
+      connection.sourceHandle,
+      connection.targetHandle,
+    );
+    return res.ok;
+  }, [validateConnection]);
+
   const onConnect = useCallback((connection) => {
     if (readOnly) return;
 
@@ -1613,7 +1652,7 @@ function InteractiveCanvas({ onCanvasChange, onPointerMove, onEditingNodeChange,
 
   // ── Drag-to-canvas handlers ────────────────────────────────────────────────
   const onCanvasDragOver = useCallback((e) => {
-    if (e.dataTransfer.types.includes('application/proto-ml-node')) {
+    if (e.dataTransfer.types.includes('application/proto-ml-node') || e.dataTransfer.types.includes('Files')) {
       e.preventDefault();
       e.dataTransfer.dropEffect = 'copy';
       setDroppingOver(true);
@@ -1627,11 +1666,66 @@ function InteractiveCanvas({ onCanvasChange, onPointerMove, onEditingNodeChange,
     }
   }, []);
 
-  const onCanvasDrop = useCallback((e) => {
+  const onCanvasDrop = useCallback(async (e) => {
     if (readOnly) return;
 
     e.preventDefault();
     setDroppingOver(false);
+
+    // Handle native file drop
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      const files = Array.from(e.dataTransfer.files);
+      const position = screenToFlowPosition({ x: e.clientX, y: e.clientY });
+      
+      try {
+        const upload = await createClientUpload(files);
+        if (upload && upload.uploadId) {
+          const isImage = upload.metadata?.sourceType === 'image';
+          const nodeType = isImage ? 'image_dataset' : 'csv_dataset';
+          const label = isImage ? 'Image Dataset' : 'CSV Dataset';
+          const newId = `dataset-${uuidv4().slice(0, 6)}`;
+          
+          const initialConfig = { 
+            path: `client://${upload.uploadId}`,
+            uploadId: upload.uploadId,
+            ...upload.metadata?.stats
+          };
+
+          const pythonCode = generateDatasetPythonCode(nodeType, initialConfig);
+          const outputs = upload.metadata?.schema?.columns || [];
+
+          addNode({
+            id: newId,
+            type: 'datasetNode',
+            position,
+            zIndex: 100,
+            data: {
+              nodeModel: {
+                type: nodeType, label, inputs: [], outputs,
+                config: initialConfig, schema: upload.metadata?.schema, 
+                metadata: upload.metadata, pythonCode,
+              },
+            },
+          });
+          
+          addExecutionNode(newId, {
+            type: nodeType, label, inputs: [], 
+            outputs: outputs.map(o => o.name),
+            portMap: {
+              inputs: {},
+              outputs: Object.fromEntries(outputs.map(o => [o.name, o])),
+            },
+            config: initialConfig, schema: upload.metadata?.schema, 
+            metadata: upload.metadata, pythonCode,
+          });
+
+          addToast(`Created ${label} from dropped files`, 'success');
+        }
+      } catch (err) {
+        addToast(`Failed to process dropped files: ${err.message}`, 'error');
+      }
+      return;
+    }
 
     const raw = e.dataTransfer.getData('application/proto-ml-node');
     if (!raw) return;
@@ -1787,6 +1881,7 @@ function InteractiveCanvas({ onCanvasChange, onPointerMove, onEditingNodeChange,
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onConnect={isFlowReadOnly ? undefined : onConnect}
+        isValidConnection={isFlowReadOnly ? undefined : isValidConnection}
         onConnectStart={isFlowReadOnly ? undefined : onConnectStart}
         onConnectEnd={isFlowReadOnly ? undefined : onConnectEnd}
         onNodeContextMenu={isFlowReadOnly ? undefined : onNodeContextMenu}
@@ -1895,7 +1990,8 @@ function LiveNodeEditors({ editors, nodes, viewportTransform }) {
 function ContextMenu({ menu, onClose, screenToFlowPosition }) {
   const {
     nodes, edges, removeNode, addNode, addToast,
-    duplicateNode, clearCanvas, updateEdgeStyle, toggleNodeCollapse, toggleNodeLock
+    duplicateNode, clearCanvas, updateEdgeStyle, toggleNodeCollapse, toggleNodeLock,
+    groupSelectedNodes
   } = useUIStore();
   const { removeExecutionNode } = useExecutionStore();
 
@@ -1949,6 +2045,9 @@ function ContextMenu({ menu, onClose, screenToFlowPosition }) {
           data: { label: 'New sticky note', color: '#faebd7' }
         });
         break;
+      case 'group-selected':
+        groupSelectedNodes();
+        break;
       case 'clear-canvas':
         if (confirm('Are you sure you want to clear the entire canvas?')) {
           clearCanvas();
@@ -1961,13 +2060,16 @@ function ContextMenu({ menu, onClose, screenToFlowPosition }) {
   const renderContent = () => {
     if (menu.type === 'node') {
       const isShape = menu.data?.type === 'shapeNode';
+      const isGroup = menu.data?.type === 'groupNode';
       const isText = isShape && menu.data?.data?.shapeType === 'text';
       const isLocked = menu.data?.draggable === false;
-      const typeLabel = isText ? 'Text' : isShape ? 'Shape' : 'Node';
+      const typeLabel = isText ? 'Text' : isShape ? 'Shape' : isGroup ? 'Group' : 'Node';
+      const selectedCount = nodes.filter(n => n.selected).length;
 
       return (
         <>
           <MenuHeader label={`${typeLabel} Actions`} />
+          {selectedCount > 1 && <MenuButton icon={Boxes} label={`Group ${selectedCount} Items`} onClick={() => handleAction('group-selected')} />}
           <MenuButton icon={Maximize} label="Duplicate" onClick={() => handleAction('duplicate-node')} />
           {!isShape && <MenuButton icon={Minimize2} label="Collapse/Expand" onClick={() => handleAction('collapse-node')} />}
           <MenuButton icon={isLocked ? Unlock : Lock} label={isLocked ? 'Unlock' : 'Lock'} onClick={() => handleAction('lock-node')} />
@@ -1988,9 +2090,11 @@ function ContextMenu({ menu, onClose, screenToFlowPosition }) {
         </>
       );
     }
+    const selectedCount = nodes.filter(n => n.selected).length;
     return (
       <>
         <MenuHeader label="Canvas Actions" />
+        {selectedCount > 1 && <MenuButton icon={Boxes} label={`Group ${selectedCount} Items`} onClick={() => handleAction('group-selected')} />}
         <MenuButton icon={Pencil} label="Add Note" onClick={() => handleAction('add-note')} />
         <MenuButton icon={Wand2} label="Tidy Layout" onClick={() => { useUIStore.getState().onLayout?.(); onClose(); }} disabled />
         <div className="h-px bg-foreground/10 my-1" />

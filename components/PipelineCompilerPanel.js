@@ -8,6 +8,7 @@ import {
 } from 'lucide-react'
 import gsap from 'gsap'
 import { useUIStore } from '@/store/useUIStore'
+import { useVariableStore } from '@/store/useVariableStore'
 import { compileExecutionGraph } from '@/lib/executor/pipelineCompiler'
 import { compilePipelineCells, compileBootstrapCell } from '@/lib/executor/nodeCellCompiler'
 import { BrowserJupyterClient, extractStructuredResult } from '@/lib/executor/browserJupyterClient'
@@ -464,6 +465,14 @@ const PipelineCompilerPanel = () => {
 
       const kernelId = await client.startKernel({ fresh: false })
       setJupyterSession({ kernelId })
+      
+      // Inject variables
+      const variables = useVariableStore.getState().getVariablesAsObject()
+      const varCode = Object.entries(variables)
+        .map(([name, value]) => `${name} = ${typeof value === 'number' || !isNaN(value) ? value : `'${value}'`}`)
+        .join('\n')
+      if (varCode) await client.executeCode(kernelId, varCode)
+
       logs.push({ type: 'system', text: `Executing compiled pipeline on kernel ${kernelId}...\n${'-'.repeat(40)}\n` })
       setExecutionLogs([...logs])
 
@@ -546,7 +555,8 @@ const PipelineCompilerPanel = () => {
 
     try {
       const client = new BrowserJupyterClient(jupyterUrl, jupyterToken)
-      const bootstrapCode = compileBootstrapCell()
+      const variables = useVariableStore.getState().getVariablesAsObject()
+      const bootstrapCode = compileBootstrapCell(variables)
       const bootstrap = await client.executeCode(kernelId, bootstrapCode, { username: 'proto-ml-bootstrap' })
       if (bootstrap.status !== 'ok') {
         const stderr = bootstrap.logs.filter(log => log.type === 'stderr').map(log => log.text).join('\n')

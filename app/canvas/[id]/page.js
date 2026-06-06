@@ -15,6 +15,7 @@ import CanvasSkeleton from '@/components/canvas/CanvasSkeleton';
 import VersionToolbar from '@/components/versioning/VersionToolbar';
 import CommitDialog from '@/components/versioning/CommitDialog';
 import HistoryPanel from '@/components/versioning/HistoryPanel';
+import VariablePanel from '@/components/VariablePanel';
 import { useVersionStore } from '@/store/useVersionStore';
 
 const hueToHex = (hue) => {
@@ -992,6 +993,7 @@ const SharedCanvasPage = () => {
           <VersionToolbar />
           <CommitDialog />
           <HistoryPanel />
+          <VariablePanel />
         </>
       ) : (
         <DashboardProfile activeCollaborators={collaborators} />

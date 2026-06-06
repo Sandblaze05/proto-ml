@@ -94,9 +94,33 @@ body {
 }
 .text-glow-cyan { text-shadow: 0 0 15px rgba(68, 216, 241, 0.4); }
 .bg-glow-purple { box-shadow: 0 0 40px rgba(207, 188, 255, 0.1); }
-@keyframes marquee {
-  0% { transform: translateX(0); }
-  100% { transform: translateX(-50%); }
+/* Edge Flow Animation */
+@keyframes edge-flow {
+  from {
+    stroke-dashoffset: 20;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+.react-flow__edge-path.animated {
+  stroke-dasharray: 5;
+  animation: edge-flow 0.5s linear infinite;
+}
+
+.react-flow__edge.executing .react-flow__edge-path {
+  stroke: #fbbf24 !important;
+  stroke-width: 3 !important;
+  stroke-dasharray: 5;
+  animation: edge-flow 0.3s linear infinite;
+  filter: drop-shadow(0 0 5px rgba(251, 191, 36, 0.5));
+}
+
+.react-flow__edge.completed .react-flow__edge-path {
+  stroke: #34d399 !important;
+  stroke-width: 2 !important;
+  transition: stroke 0.5s ease;
 }
 @keyframes marquee-reverse {
   0% { transform: translateX(-50%); }
@@ -145,14 +169,12 @@ body {
 
 /* React Flow Handle Glows */
 .react-flow__handle-connecting {
-  background-color: var(--color-foreground) !important;
   box-shadow: 0 0 5px 1px var(--color-foreground);
   scale: 1.05;
   transition: all 0.2s ease-out;
 }
 
 .react-flow__handle-valid {
-  background-color: var(--color-foreground) !important;
   box-shadow: 0 0 8px 2px var(--color-foreground);
   scale: 1.1;
   animation: pulse-glow 2s infinite alternate ease-in-out;
@@ -284,4 +306,4 @@ body {
   stroke-dasharray: 6 6 !important;
   opacity: 0.7 !important;
   filter: drop-shadow(0 0 6px rgba(239, 68, 68, 0.4));
-}
+}

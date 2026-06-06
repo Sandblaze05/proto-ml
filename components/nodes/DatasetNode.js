@@ -5,6 +5,8 @@ import { Handle, Position, useStore } from 'reactflow';
 import { FolderOpen, Eye, Code2, ChevronDown, ChevronUp, ImageIcon, Database, FileText, Braces, Globe, Table2, Upload, ShieldCheck, List, Search, Link2, Trash2, Lock } from 'lucide-react';
 import { useExecutionStore } from '../../store/useExecutionStore';
 import { useUIStore } from '../../store/useUIStore';
+import BaseHandle from './BaseHandle';
+import { portHex, portTw, inferPortDatatype, normalizePort } from '../../lib/portUtils';
 import { previewGraphClient } from '../../lib/executor/clientPreviewExecutor';
 import {
   createClientUpload,
@@ -21,71 +23,6 @@ import MonacoCodeEditor from './MonacoCodeEditor';
 import { getUploadInputMode } from './datasetUploadMode';
 
 const STRICT_CLIENT_ONLY_DATASETS = false;
-
-const PORT_TW = {
-  tensor: { dot: 'bg-purple-400', badge: 'text-purple-400 bg-purple-400/10 border-purple-400/30' },
-  dataloader: { dot: 'bg-emerald-400', badge: 'text-emerald-400 bg-emerald-400/10 border-emerald-400/30' },
-  sequence: { dot: 'bg-blue-400', badge: 'text-blue-400 bg-blue-400/10 border-blue-400/30' },
-  list: { dot: 'bg-amber-400', badge: 'text-amber-400 bg-amber-400/10 border-amber-400/30' },
-  dict: { dot: 'bg-red-400', badge: 'text-red-400 bg-red-400/10 border-red-400/30' },
-};
-const PORT_TW_DEFAULT = { dot: 'bg-[#faebd7]', badge: 'text-[#faebd7] bg-[#faebd7]/10 border-[#faebd7]/30' };
-
-const PORT_HEX = {
-  tensor: '#c084fc',
-  dataloader: '#34d399',
-  sequence: '#60a5fa',
-  list: '#fbbf24',
-  dict: '#f87171',
-  default: '#faebd7',
-};
-
-function portHex(dt) { return PORT_HEX[dt] ?? PORT_HEX.default; }
-function portTw(dt) { return PORT_TW[dt] ?? PORT_TW_DEFAULT; }
-
-function inferPortDatatype(name = '', fallback = 'default') {
-  const n = String(name || '').trim().toLowerCase();
-  if (!n) return fallback;
-
-  if (n === 'images' || n.includes('image') || n.includes('tensor') || n.includes('pixel')) return 'tensor';
-  if (n === 'labels' || n.includes('label') || n.includes('sequence') || n.includes('token')) return 'sequence';
-  if (n === 'classes' || n.includes('class') || n.includes('map') || n.includes('dict') || n.includes('meta')) return 'dict';
-  if (n.includes('loader') || n.includes('batch')) return 'dataloader';
-  if (n.includes('list') || n.includes('ids') || n.includes('index')) return 'list';
-
-  return fallback;
-}
-
-function normalizePort(port, idx, fallbackPrefix) {
-  if (typeof port === 'string') {
-    const trimmed = port.trim();
-    const name = trimmed || `${fallbackPrefix}_${idx + 1}`;
-    return {
-      name,
-      datatype: inferPortDatatype(name, 'default'),
-      shape: [],
-    };
-  }
-
-  if (port && typeof port === 'object') {
-    const name = typeof port.name === 'string' && port.name.trim().length > 0
-      ? port.name.trim()
-      : `${fallbackPrefix}_${idx + 1}`;
-
-    return {
-      ...port,
-      name,
-      datatype: inferPortDatatype(name, port.datatype || 'default'),
-      shape: Array.isArray(port.shape) ? port.shape : [],
-    };
-  }
-
-  return {
-    name: `${fallbackPrefix}_${idx + 1}`,
-    datatype: 'default',
-    shape: [],
-  };
-}
 
 const TYPE_ICONS = {
   'dataset.image': ImageIcon,
@@ -1522,7 +1459,7 @@ export default function DatasetNode({ data, id, selected }) {
 
   return (
     <div
-      className={`w-67 rounded-xl overflow-hidden font-mono transition-shadow duration-200 ${selected ? 'shadow-[0_0_0_2px_var(--accent-faint),0_8px_32px_rgba(0,0,0,0.7)]' : 'shadow-[0_4px_20px_rgba(0,0,0,0.55)]'}`}
+      className={`w-67 rounded-xl font-mono transition-shadow duration-200 ${selected ? 'shadow-[0_0_0_2px_var(--accent-faint),0_8px_32px_rgba(0,0,0,0.7)]' : 'shadow-[0_4px_20px_rgba(0,0,0,0.55)]'}`}
       style={{
         background: '#141414',
         border: `1px solid ${selected ? accent : '#faebd720'}`,
@@ -1530,17 +1467,19 @@ export default function DatasetNode({ data, id, selected }) {
       }}
     >
       {normalizedInputs.map((inp, idx) => (
-        <Handle
+        <BaseHandle
           key={`in-${inp.name || idx}`}
           type="target"
           position={Position.Left}
           id={inp.name}
-          style={{ top: 22 + idx * 16, background: portHex(inp.datatype), border: 'none', width: 8, height: 8 }}
-          title={`${inp.name}: ${inp.datatype}${inp.optional ? ' (optional)' : ''}`}
+          nodeId={id}
+          datatype={inp.datatype}
+          label={inp.name}
+          style={{ top: 22 + idx * 16, border: 'none', width: 8, height: 8 }}
         />
       ))}
 
-      <div className="flex items-center justify-between px-2.5 py-2 cursor-grab active:cursor-grabbing" style={{ background: `${accent}18`, borderBottom: `1px solid ${accent}30` }} onClick={() => toggleNodeCollapse(id)}>
+      <div className="flex items-center justify-between px-2.5 py-2 cursor-grab active:cursor-grabbing rounded-t-xl" style={{ background: `${accent}18`, borderBottom: `1px solid ${accent}30` }} onClick={() => toggleNodeCollapse(id)}>
         <div className="flex items-center gap-2">
           <div className="w-5.5 h-5.5 rounded-[5px] flex items-center justify-center shrink-0" style={{ background: `${accent}28` }}>
             <Icon size={12} color={accent} />
@@ -1652,22 +1591,22 @@ export default function DatasetNode({ data, id, selected }) {
       )}
 
       {normalizedOutputs.map((out, idx) => (
-        <Handle
+        <BaseHandle
           key={`out-${out.name || idx}`}
           type="source"
           position={Position.Right}
           id={out.name}
+          nodeId={id}
+          datatype={out.datatype}
+          label={out.name}
           style={{
             top: 'auto',
             bottom: 10 + ((normalizedOutputs.length - 1 - idx) * 18),
-            background: portHex(out.datatype),
             border: '2px solid #141414',
             width: 10,
             height: 10,
             borderRadius: '50%',
-            zIndex: 10,
           }}
-          title={`${out.name}: ${out.datatype}`}
         />
       ))}
     </div>

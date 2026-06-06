@@ -257,7 +257,7 @@ export default function AboutPage() {
             Founding Leadership
           </h2>
 
-          <div className="grid md:grid-cols-2 gap-24">
+          <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-24">
             {/* Tejas Chauhan */}
             <div className="group reveal-left mx-auto max-w-sm">
               <div className="relative mb-8 aspect-square overflow-hidden rounded-2xl grayscale hover:grayscale-0 transition-all duration-700 shadow-2xl">
@@ -315,6 +315,35 @@ export default function AboutPage() {
               <p style={{ color: `${FG}70` }} className="leading-relaxed text-base">
                 Leading the technological frontier. As CTO, Sarang architects the core compilation engine 
                 and infrastructure, ensuring proto-ML provides the most robust and scalable visual pipeline protocol in the industry.
+              </p>
+            </div>
+
+            {/* Janvi */}
+            <div className="group reveal-left mx-auto max-w-sm">
+              <div className="relative mb-8 aspect-square overflow-hidden rounded-2xl grayscale hover:grayscale-0 transition-all duration-700 shadow-2xl">
+                <Image
+                  src="/janvi.png"
+                  alt="Janvi"
+                  fill
+                  loading="eager"
+                  className="object-cover object-top group-hover:scale-105 transition-transform duration-700"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-[#171717] to-transparent opacity-60" />
+              </div>
+              <div className="flex justify-between items-end mb-4">
+                <div>
+                  <h3 className="text-2xl font-bold tracking-tight mb-1">Janvi Chauhan</h3>
+                  <p style={{ color: `${FG}60` }} className="uppercase tracking-[0.2em] text-xs font-bold">
+                    Director
+                  </p>
+                </div>
+                <div className="opacity-40 italic font-serif text-xl -rotate-6 select-none pb-4" style={{ color: FG }}>
+                  Janvi
+                </div>
+              </div>
+              <p style={{ color: `${FG}70` }} className="leading-relaxed text-base">
+                Driving cross-functional execution and team alignment. Janvi helps translate the product vision
+                into coordinated delivery, partnerships, and long-term operational direction for proto-ML.
               </p>
             </div>
           </div>

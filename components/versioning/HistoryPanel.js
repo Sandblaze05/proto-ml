@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useEffect, useRef } from 'react';
-import { X, GitCommit, RotateCcw, ArrowLeftRight, Check, Tag } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
+import { X, GitCommit, RotateCcw, ArrowLeftRight, Check, Tag, History } from 'lucide-react';
 import { useVersionStore } from '@/store/useVersionStore';
 import { useUIStore } from '@/store/useUIStore';
 import gsap from 'gsap';
@@ -24,6 +24,7 @@ export default function HistoryPanel() {
 
   const { nodes, edges, drawings, addToast } = useUIStore();
   const panelRef = useRef(null);
+  const [panelHover, setPanelHover] = useState(false);
 
   // Smooth slide-in transition using GSAP
   useEffect(() => {
@@ -31,13 +32,15 @@ export default function HistoryPanel() {
     if (historyPanelOpen) {
       gsap.to(panelRef.current, {
         x: 0,
+        opacity: 1,
         duration: 0.4,
         ease: 'power3.out',
         overwrite: 'auto'
       });
     } else {
       gsap.to(panelRef.current, {
-        x: '100%',
+        x: '120%',
+        opacity: 0,
         duration: 0.4,
         ease: 'power3.inOut',
         overwrite: 'auto'
@@ -95,28 +98,52 @@ export default function HistoryPanel() {
   };
 
   return (
-    <div
-      ref={panelRef}
-      style={{ transform: 'translateX(100%)' }}
-      className="fixed top-16 bottom-4 right-4 w-96 bg-background/95 border-2 border-foreground rounded-2xl shadow-2xl z-[150] flex flex-col overflow-hidden backdrop-blur-xl"
-    >
-      {/* Header */}
-      <div className="flex items-center justify-between p-4 border-b border-foreground/15">
-        <div className="flex flex-col">
-          <span className="text-[10px] font-black uppercase tracking-widest text-foreground/40">
-            Version History
-          </span>
-          <span className="text-xs font-bold font-mono text-cyan-400 mt-0.5">
-            branch: {activeBranch}
-          </span>
-        </div>
+    <>
+      {!historyPanelOpen && (
         <button
           onClick={toggleHistoryPanel}
-          className="p-1 rounded-full text-foreground/40 hover:text-foreground hover:bg-foreground/10 transition-all cursor-pointer"
+          className="group z-[150] fixed top-[128px] right-0 flex items-center h-10 bg-background/90 backdrop-blur-md border border-r-0 border-foreground rounded-l-lg shadow-lg cursor-pointer hover:bg-foreground/10 transition-all duration-300 overflow-hidden w-10 hover:w-28"
+          aria-label="Open History"
         >
-          <X size={18} />
+          <div className="flex items-center pl-3 w-28 whitespace-nowrap">
+            <History size={18} className="shrink-0 text-foreground" />
+            <span className="ml-2 font-semibold text-sm text-foreground opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+              History
+            </span>
+          </div>
         </button>
-      </div>
+      )}
+
+      <div
+        ref={panelRef}
+        onMouseEnter={() => setPanelHover(true)}
+        onMouseLeave={() => setPanelHover(false)}
+        style={{ transform: 'translateX(120%)', opacity: 0 }}
+        className={`z-[150] flex flex-col fixed right-3 top-16 bottom-6 w-[380px] rounded-2xl bg-background border border-foreground/20 overflow-hidden shadow-2xl ${historyPanelOpen ? 'pointer-events-auto' : 'pointer-events-none'}`}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between px-4 py-3 bg-foreground/5 border-b border-foreground/10">
+          <div className="flex items-center gap-2">
+            <History size={18} className="text-cyan-400" />
+            <h1 className="text-base font-bold text-foreground">History</h1>
+          </div>
+          <button
+            onClick={toggleHistoryPanel}
+            className="p-1.5 hover:bg-foreground/10 rounded-md transition-colors"
+          >
+            <X size={18} className="text-foreground/60" />
+          </button>
+        </div>
+
+        {/* Branch Info Bar */}
+        <div className="px-4 py-2 bg-foreground/[0.02] border-b border-foreground/5 flex items-center justify-between">
+          <span className="text-[10px] font-black uppercase tracking-widest text-foreground/40">
+            Current Branch
+          </span>
+          <span className="text-xs font-bold font-mono text-cyan-400">
+            {activeBranch}
+          </span>
+        </div>
 
       {/* Commits List */}
       <div className="flex-1 overflow-y-auto p-4 relative">
@@ -219,5 +246,6 @@ export default function HistoryPanel() {
         </div>
       )}
     </div>
-  );
+  </>
+);
 }

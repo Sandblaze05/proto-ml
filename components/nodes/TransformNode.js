@@ -5,6 +5,8 @@ import { Handle, Position, useStore } from 'reactflow';
 import { Wrench, Settings2, Code2, Eye, ChevronDown, ChevronUp, Lock } from 'lucide-react';
 import { useExecutionStore } from '../../store/useExecutionStore';
 import { useUIStore } from '../../store/useUIStore';
+import BaseHandle from './BaseHandle';
+import { inferPortDatatype, portTw } from '../../lib/portUtils';
 import { generateTransformPythonCode } from '../../lib/pythonTemplates/transformNodeTemplate';
 import { previewGraphClient } from '../../lib/executor/clientPreviewExecutor';
 import MonacoCodeEditor from './MonacoCodeEditor';
@@ -358,7 +360,7 @@ export default function TransformNode({ data, id, selected }) {
 
   return (
     <div
-      className={`w-67 rounded-xl overflow-hidden font-mono transition-shadow duration-200`}
+      className={`w-67 rounded-xl font-mono transition-shadow duration-200`}
       style={{
         background: '#141414',
         border: `1px solid ${selected ? selectedColor : '#faebd720'}`,
@@ -370,7 +372,7 @@ export default function TransformNode({ data, id, selected }) {
 
 
       <div
-        className="flex items-center justify-between px-2.5 py-2 cursor-grab active:cursor-grabbing"
+        className="flex items-center justify-between px-2.5 py-2 cursor-grab active:cursor-grabbing rounded-t-xl"
         style={{ background: kind === 'lifecycle' ? '#ffe06622' : '#67e8f922', borderBottom: kind === 'lifecycle' ? '1px solid #ffe06644' : '1px solid #67e8f944' }}
         onClick={() => toggleNodeCollapse(id)}
       >
@@ -392,31 +394,35 @@ export default function TransformNode({ data, id, selected }) {
 
       {inputs.length > 0 && (
         <div className="flex flex-col items-start gap-1 px-2.5 pt-1.5 pb-2.5 border-b border-[#faebd7]/5">
-          {inputs.map((inp, idx) => (
-            <div key={inp || idx} className="flex items-center gap-1.5 relative w-full">
-              <Handle
-                type="target"
-                position={Position.Left}
-                id={inp}
-                title={`Input port: ${inp || `in_${idx + 1}`}`}
-                style={{
-                  top: '50%',
-                  left: '-14px',
-                  transform: 'translateY(-50%)',
-                  background: '#fbbf24',
-                  border: '2px solid #141414',
-                  width: 10,
-                  height: 10,
-                  borderRadius: '50%',
-                  zIndex: 10,
-                }}
-              />
-              <div className="w-2 h-2 rounded-full shrink-0 bg-amber-400" />
-              <span className="text-[8px] font-mono px-1.5 py-px rounded border text-amber-300 bg-amber-400/10 border-amber-400/30">
-                {inp}
-              </span>
-            </div>
-          ))}
+          {inputs.map((inp, idx) => {
+            const dt = inferPortDatatype(inp);
+            const tw = portTw(dt);
+            return (
+              <div key={inp || idx} className="flex items-center gap-1.5 relative w-full">
+                <BaseHandle
+                  type="target"
+                  position={Position.Left}
+                  id={inp}
+                  nodeId={id}
+                  datatype={dt}
+                  label={inp}
+                  style={{
+                    top: '50%',
+                    left: '-14px',
+                    transform: 'translateY(-50%)',
+                    border: '2px solid #141414',
+                    width: 10,
+                    height: 10,
+                    borderRadius: '50%',
+                  }}
+                />
+                <div className={`w-2 h-2 rounded-full shrink-0 ${tw.dot}`} />
+                <span className={`text-[8px] font-mono px-1.5 py-px rounded border ${tw.badge}`}>
+                  {inp}
+                </span>
+              </div>
+            );
+          })}
         </div>
       )}
 
@@ -485,30 +491,34 @@ export default function TransformNode({ data, id, selected }) {
       )}
 
       <div className="flex flex-col items-end gap-1 px-2.5 pt-1.5 pb-2.5 border-t border-[#faebd7]/5">
-        {outputs.map((out, idx) => (
-          <div key={out || idx} className="flex items-center gap-1.5">
-            <span className="text-[8px] font-mono px-1.5 py-px rounded border text-cyan-300 bg-cyan-400/10 border-cyan-400/30">{out}</span>
-            <div className="w-2 h-2 rounded-full shrink-0 bg-cyan-300" />
-          </div>
-        ))}
+        {outputs.map((out, idx) => {
+          const dt = inferPortDatatype(out);
+          const tw = portTw(dt);
+          return (
+            <div key={out || idx} className="flex items-center gap-1.5">
+              <span className={`text-[8px] font-mono px-1.5 py-px rounded border ${tw.badge}`}>{out}</span>
+              <div className={`w-2 h-2 rounded-full shrink-0 ${tw.dot}`} />
+            </div>
+          );
+        })}
       </div>
 
       {outputs.map((out, idx) => (
-        <Handle
+        <BaseHandle
           key={`out-${out || idx}`}
           type="source"
           position={Position.Right}
           id={out}
-          title={`Output port: ${out || `out_${idx + 1}`}`}
+          nodeId={id}
+          datatype={inferPortDatatype(out)}
+          label={out}
           style={{
             top: 'auto',
             bottom: 10 + ((outputs.length - 1 - idx) * 18),
-            background: '#67e8f9',
             border: '2px solid #141414',
             width: 10,
             height: 10,
             borderRadius: '50%',
-            zIndex: 10,
           }}
         />
       ))}

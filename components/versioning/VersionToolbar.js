@@ -225,22 +225,6 @@ export default function VersionToolbar() {
           <GitCommit size={13} />
           <span>Commit</span>
         </button>
-
-        <div className="w-px h-6 bg-foreground/20 shrink-0" />
-
-        {/* History Toggle Button */}
-        <button
-          onClick={toggleHistoryPanel}
-          className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-black uppercase h-7 transition-all cursor-pointer ${
-            historyPanelOpen
-              ? 'bg-foreground text-background shadow-sm'
-              : 'text-foreground/80 hover:bg-foreground/5 hover:text-foreground'
-          }`}
-          title="Toggle version history panel"
-        >
-          <History size={13} />
-          <span>History</span>
-        </button>
       </div>
     </div>
   );
