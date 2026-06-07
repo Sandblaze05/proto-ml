@@ -1,7 +1,10 @@
 'use client'
 
 import React, { useEffect, useRef, useState } from 'react'
-import { SidebarClose, Menu, Share2, Copy, Check, Save, Edit2, Eye, Layout, Cloud, RefreshCcw, CloudOff, Download, Upload } from 'lucide-react'
+import { SidebarClose, Menu, Share2, Copy, Check, Save, Edit2, Eye, Layout, Cloud, RefreshCcw, CloudOff, Download, Upload, Workflow } from 'lucide-react'
+import { airflowExporter } from '@/lib/exporters/AirflowExporter'
+import { buildCompilerGraphFromUI } from '@/lib/exporters/buildCompilerGraphFromUI'
+import { sanitizeDagName } from '@/lib/executor/graphUtils'
 import CustomDropdown from './ui/CustomDropdown'
 import gsap from 'gsap'
 import NodePalette from './NodePalette'
@@ -280,6 +283,32 @@ const DashboardNav = () => {
     setTimeout(() => setCopied(false), 2000);
   };
 
+  // ── Export pipeline as Airflow DAG ───────────────────────────────────────────
+  const handleExportAirflow = () => {
+    try {
+      const graph = buildCompilerGraphFromUI(nodes, edges)
+      const dagName = sanitizeDagName(draftPipelineName || 'proto_ml_pipeline')
+      const result = airflowExporter.export(graph, { dagName })
+
+      if (!result.ok) {
+        addToast(result.errors?.[0] || 'Failed to export Airflow DAG', 'error')
+        return
+      }
+
+      const blob = new Blob([result.code], { type: 'text/x-python;charset=utf-8' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = result.filename
+      a.click()
+      URL.revokeObjectURL(url)
+      addToast(`Airflow DAG exported as ${result.filename}`, 'success')
+    } catch (err) {
+      console.error('Airflow export error:', err)
+      addToast('Failed to export Airflow DAG.', 'error')
+    }
+  }
+
   // ── Export pipeline as JSON ──────────────────────────────────────────────────
   const handleExport = () => {
     try {
@@ -401,7 +430,18 @@ const DashboardNav = () => {
             className="flex items-center gap-1.5 px-3 h-full text-foreground text-[10px] font-black uppercase hover:bg-foreground hover:text-background transition-all whitespace-nowrap"
           >
             <Download size={13} />
-            Export
+            JSON
+          </button>
+
+          <div className="w-px h-full bg-foreground/30 group-hover:bg-foreground/50 transition-colors" />
+
+          <button
+            onClick={handleExportAirflow}
+            title="Export pipeline as Apache Airflow DAG"
+            className="flex items-center gap-1.5 px-3 h-full text-foreground text-[10px] font-black uppercase hover:bg-foreground hover:text-background transition-all whitespace-nowrap"
+          >
+            <Workflow size={13} />
+            Airflow
           </button>
 
           <div className="w-px h-full bg-foreground/30 group-hover:bg-foreground/50 transition-colors" />

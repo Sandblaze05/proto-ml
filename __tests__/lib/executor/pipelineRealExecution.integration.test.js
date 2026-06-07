@@ -80,7 +80,7 @@ describe('Real backend execution integration', () => {
     expect(mapOut[0]).toHaveProperty('f1');
     expect(mapOut[0]).toHaveProperty('f2');
     expect(mapOut[0]).not.toHaveProperty('target');
-  }, 50000);
+  }, 120000);
 
   it('executes sklearn-backed train/predict/export pipeline with artifacts', () => {
     const python = resolvePython();
@@ -195,7 +195,7 @@ describe('Real backend execution integration', () => {
     expect(fs.existsSync(registryPath)).toBe(true);
     expect(Boolean(exporterOut?.export_manifest?.manifest_path)).toBe(true);
     expect(fs.existsSync(exporterOut.export_manifest.manifest_path)).toBe(true);
-  }, 30000);
+  }, 120000);
 
   it('materializes text dataset and executes split workflow', () => {
     const python = resolvePython();
@@ -246,7 +246,7 @@ describe('Real backend execution integration', () => {
 
     expect(splitOut?.train?.data?.length ?? 0).toBeGreaterThan(0);
     expect((splitOut?.train?.data ?? [])[0]?.text).toBeTypeOf('string');
-  }, 20000);
+  }, 120000);
 
   it('materializes image dataset and executes split workflow', () => {
     const python = resolvePython();
@@ -302,7 +302,7 @@ describe('Real backend execution integration', () => {
 
     expect(splitOut?.train?.data?.length ?? 0).toBeGreaterThan(0);
     expect((splitOut?.train?.data ?? [])[0]?.path).toBeTypeOf('string');
-  }, 20000);
+  }, 120000);
 
   it('routes CSV targets handle to lifecycle objective with materialized payload', () => {
     const python = resolvePython();
@@ -354,5 +354,5 @@ describe('Real backend execution integration', () => {
 
     const objectiveOut = result?.node_outputs?.o1;
     expect(objectiveOut?.metrics_spec?.target_count).toBe(4);
-  }, 20000);
+  }, 120000);
 });

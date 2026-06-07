@@ -1,86 +1,10 @@
 import { NextResponse } from 'next/server';
+import { jupyterRequest, normalizeBaseUrl, buildApiUrl } from '../../../../lib/executor/jupyterServerProxy.js';
 
 export const runtime = 'nodejs';
 
-function normalizeBaseUrl(input) {
-  if (!input || typeof input !== 'string') {
-    throw new Error('Missing jupyterUrl');
-  }
-  return input.replace(/\/+$/, '');
-}
-
 function normalizeEndpoint(endpoint) {
   return String(endpoint || '').replace(/^\/+/, '');
-}
-
-function buildApiUrl(baseUrl, endpoint, token) {
-  const url = new URL(normalizeEndpoint(endpoint), `${baseUrl}/`);
-  if (token) {
-    url.searchParams.set('token', token);
-  }
-  return url;
-}
-
-async function jupyterRequest(baseUrl, endpoint, { method = 'GET', token = '', body, allowInsecure = false } = {}) {
-  const headers = {
-    'Content-Type': 'application/json',
-  };
-
-  if (token) {
-    headers.Authorization = `Token ${token}`;
-  }
-
-  // If this is a mutating request and we are not using a token (or even if we are, for some configs),
-  // we might need an XSRF token.
-  if (method !== 'GET' && method !== 'HEAD') {
-    try {
-      // Small optimization: fetch XSRF token from /api/status if not provided
-      const statusRes = await fetch(buildApiUrl(baseUrl, '/api/status', token), {
-        method: 'GET',
-        cache: 'no-store',
-      });
-      const cookie = statusRes.headers.get('set-cookie');
-      if (cookie && cookie.includes('_xsrf=')) {
-        const xsrf = cookie.split('_xsrf=')[1].split(';')[0];
-        headers['X-XSRFToken'] = xsrf;
-        // Also need to pass the cookie back
-        headers['Cookie'] = `_xsrf=${xsrf}`;
-      }
-    } catch (e) {
-      console.warn('Failed to pre-fetch XSRF token:', e);
-    }
-  }
-
-  // Handle TLS for local/insecure environments
-  if (allowInsecure && baseUrl.startsWith('https')) {
-    process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
-  }
-
-  try {
-    const response = await fetch(buildApiUrl(baseUrl, endpoint, token), {
-      method,
-      headers,
-      body: body ? JSON.stringify(body) : undefined,
-      cache: 'no-store',
-    });
-
-    if (!response.ok) {
-      const text = await response.text();
-      throw new Error(`Jupyter API Error (${response.status}): ${text}`);
-    }
-
-    if (response.status === 204) {
-      return null;
-    }
-
-    return response.json();
-  } finally {
-    if (allowInsecure) {
-      // We don't want to leave this globally disabled if we can help it, 
-      // but in a multi-request async environment this is tricky. 
-      // For localhost dev, it's generally acceptable.
-    }
-  }
 }
 
 function createId() {

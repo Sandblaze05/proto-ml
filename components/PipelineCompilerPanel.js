@@ -4,7 +4,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react'
 import {
   SidebarClose, Code2, PlayCircle, AlertCircle, Terminal,
   Settings2, Play, Zap, CheckCircle2, XCircle, SkipForward,
-  RefreshCw, ChevronDown, ChevronRight, FlaskConical, X,
+  RefreshCw, ChevronDown, ChevronRight, FlaskConical, X, Workflow, Download,
 } from 'lucide-react'
 import gsap from 'gsap'
 import { useUIStore } from '@/store/useUIStore'
@@ -12,9 +12,10 @@ import { useVariableStore } from '@/store/useVariableStore'
 import { compileExecutionGraph } from '@/lib/executor/pipelineCompiler'
 import { compilePipelineCells, compileBootstrapCell } from '@/lib/executor/nodeCellCompiler'
 import { BrowserJupyterClient, extractStructuredResult } from '@/lib/executor/browserJupyterClient'
+import { airflowExporter } from '@/lib/exporters/AirflowExporter'
+import { buildCompilerGraphFromUI } from '@/lib/exporters/buildCompilerGraphFromUI'
+import { sanitizeDagName } from '@/lib/executor/graphUtils'
 import MonacoCodeEditor from './nodes/MonacoCodeEditor'
-
-const NON_COMPILABLE_TYPES = ['annotationNode', 'shapeNode']
 
 function NodeStatusIcon({ status, size = 10 }) {
   if (status === 'running') return (
@@ -126,6 +127,60 @@ const CellRunPanel = ({
             }
           </div>
         )}
+      </div>
+    </div>
+  )
+}
+
+const AirflowCodePanel = ({
+  airflowCode,
+  airflowErrors,
+  airflowFilename,
+  handleExportAirflow,
+  handleDownloadAirflow,
+}) => {
+  return (
+    <div className="flex flex-col h-full">
+      <div className="flex items-center gap-2 p-3 bg-orange-950/10 border-b border-orange-500/10">
+        <button
+          onClick={handleExportAirflow}
+          className="flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-orange-600 hover:bg-orange-500 text-white font-medium text-sm transition-colors"
+        >
+          <Workflow size={14} />
+          <span>Generate DAG</span>
+        </button>
+        <button
+          onClick={handleDownloadAirflow}
+          disabled={!airflowCode}
+          className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-foreground/10 hover:bg-foreground/20 disabled:opacity-40 disabled:cursor-not-allowed text-foreground font-medium text-sm transition-colors border border-foreground/20"
+          title="Download Airflow DAG"
+        >
+          <Download size={14} />
+        </button>
+      </div>
+
+      {airflowErrors.length > 0 && (
+        <div className="p-2.5 m-2 rounded-lg bg-red-950/20 border border-red-500/20">
+          <div className="flex items-center gap-1.5 mb-1.5 font-semibold text-xs text-red-400">
+            <AlertCircle size={12} />
+            <span>{airflowErrors.length} Error{airflowErrors.length > 1 ? 's' : ''}</span>
+          </div>
+          <div className="space-y-0.5">
+            {airflowErrors.map((err, i) => (
+              <div key={i} className="text-[10px] text-red-300/80 leading-tight">• {err}</div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="flex-1 overflow-hidden">
+        <MonacoCodeEditor
+          title={airflowFilename || 'Airflow DAG'}
+          language="python"
+          value={airflowCode || "# Click 'Generate DAG' to export as Apache Airflow"}
+          readOnly
+          height="100%"
+        />
       </div>
     </div>
   )
@@ -359,6 +414,10 @@ const PipelineCompilerPanel = () => {
   const [compileMeta, setCompileMeta] = useState(null)
   const [validationMode, setValidationMode] = useState('strict')
 
+  const [airflowCode, setAirflowCode] = useState('')
+  const [airflowErrors, setAirflowErrors] = useState([])
+  const [airflowFilename, setAirflowFilename] = useState('')
+
   const [activePanel, setActivePanel] = useState('cell')
 
   const jupyterSession = useUIStore(s => s.jupyterSession)
@@ -390,6 +449,8 @@ const PipelineCompilerPanel = () => {
 
   const uiNodes = useUIStore(s => s.nodes)
   const uiEdges = useUIStore(s => s.edges)
+  const draftPipelineName = useUIStore(s => s.draftPipelineName)
+  const addToast = useUIStore(s => s.addToast)
 
   useEffect(() => {
     if (!panelRef.current) return
@@ -414,40 +475,41 @@ const PipelineCompilerPanel = () => {
     return () => tween.kill()
   }, [panelHover, panelOpen])
 
-  const buildCompilerGraphFromUI = useCallback(() => {
-    const filteredNodes = (uiNodes || []).filter(n => !NON_COMPILABLE_TYPES.includes(n.type))
-    
-    const nodesById = filteredNodes.reduce((acc, node) => {
-      const model = node?.data?.nodeModel || {}
-      acc[node.id] = {
-        id: node.id,
-        type: model.type || node.type || 'unknown',
-        config: model.config || model.params || {},
-        pythonCode: model.pythonCode || model.execution_code || '',
-        label: model.label || model.type || node.type || node.id,
-      }
-      return acc
-    }, {})
-
-    const normalizedEdges = (uiEdges || []).map((edge) => ({
-      source: edge.source,
-      target: edge.target,
-      sourceHandle: edge.sourceHandle,
-      targetHandle: edge.targetHandle,
-    })).filter(e => nodesById[e.source] && nodesById[e.target])
-
-    return { nodes: nodesById, edges: normalizedEdges }
-  }, [uiNodes, uiEdges])
+  const getCompilerGraph = useCallback(
+    () => buildCompilerGraphFromUI(uiNodes, uiEdges),
+    [uiNodes, uiEdges],
+  )
 
   const handleCompile = useCallback(() => {
-    const uiGraph = buildCompilerGraphFromUI()
+    const uiGraph = getCompilerGraph()
     const result = compileExecutionGraph(uiGraph, { validationMode })
     setCompiledCode(result.code || '')
     setCompileErrors(result.errors || [])
     setCompileWarnings(result.warnings || [])
     setCompileMeta(result.metadata || null)
     setActivePanel('code')
-  }, [buildCompilerGraphFromUI, validationMode])
+  }, [getCompilerGraph, validationMode])
+
+  const handleExportAirflow = useCallback(() => {
+    const uiGraph = getCompilerGraph()
+    const dagName = sanitizeDagName(draftPipelineName || 'proto_ml_pipeline')
+    const result = airflowExporter.export(uiGraph, { dagName })
+
+    if (!result.ok) {
+      setAirflowCode('')
+      setAirflowFilename('')
+      setAirflowErrors(result.errors || ['Failed to generate Airflow DAG'])
+      setActivePanel('airflow')
+      addToast(result.errors?.[0] || 'Failed to generate Airflow DAG', 'error')
+      return
+    }
+
+    setAirflowCode(result.code)
+    setAirflowErrors([])
+    setAirflowFilename(result.filename)
+    setActivePanel('airflow')
+    addToast(`Airflow DAG generated (${result.filename})`, 'success')
+  }, [getCompilerGraph, draftPipelineName, addToast])
 
   const handleExecute = useCallback(async () => {
     if (!compiledCode) return
@@ -456,10 +518,10 @@ const PipelineCompilerPanel = () => {
     setExecutionResult(null)
 
     try {
-      const client = new BrowserJupyterClient(jupyterUrl, jupyterToken)
+      const client = new BrowserJupyterClient(jupyterUrl, jupyterToken, { allowInsecure })
       const logs = [
-        { type: 'system', text: `Connecting directly to Jupyter at ${jupyterUrl}...\n` },
-        { type: 'system', text: 'Starting browser-managed kernel...\n' },
+        { type: 'system', text: `Connecting to Jupyter at ${jupyterUrl}...\n` },
+        { type: 'system', text: 'Starting kernel via API proxy...\n' },
       ]
       setExecutionLogs(logs)
 
@@ -496,7 +558,7 @@ const PipelineCompilerPanel = () => {
     } finally {
       setIsExecuting(false)
     }
-  }, [compiledCode, jupyterUrl, jupyterToken, setJupyterSession])
+  }, [compiledCode, jupyterUrl, jupyterToken, allowInsecure, setJupyterSession])
 
   const handleCellRun = useCallback(async () => {
     if (isCellRunning) return
@@ -504,7 +566,7 @@ const PipelineCompilerPanel = () => {
     setCellRunStatus('running')
     clearNodeExecutionStates()
 
-    const graph = buildCompilerGraphFromUI()
+    const graph = getCompilerGraph()
     const { order, errors: cellErrors } = compilePipelineCells(graph)
 
     if (cellErrors.length > 0) {
@@ -536,7 +598,7 @@ const PipelineCompilerPanel = () => {
 
     let kernelId = null
     try {
-      const client = new BrowserJupyterClient(jupyterUrl, jupyterToken)
+      const client = new BrowserJupyterClient(jupyterUrl, jupyterToken, { allowInsecure })
       kernelId = await client.startKernel({ fresh: true })
       setJupyterSession({ kernelId })
     } catch (err) {
@@ -554,7 +616,7 @@ const PipelineCompilerPanel = () => {
     }
 
     try {
-      const client = new BrowserJupyterClient(jupyterUrl, jupyterToken)
+      const client = new BrowserJupyterClient(jupyterUrl, jupyterToken, { allowInsecure })
       const variables = useVariableStore.getState().getVariablesAsObject()
       const bootstrapCode = compileBootstrapCell(variables)
       const bootstrap = await client.executeCode(kernelId, bootstrapCode, { username: 'proto-ml-bootstrap' })
@@ -578,7 +640,7 @@ const PipelineCompilerPanel = () => {
 
     let overallOk = true
 
-    const client = new BrowserJupyterClient(jupyterUrl, jupyterToken)
+    const client = new BrowserJupyterClient(jupyterUrl, jupyterToken, { allowInsecure })
 
     for (let i = 0; i < order.length; i++) {
       const { nodeId, node, code } = order[i]
@@ -636,8 +698,8 @@ const PipelineCompilerPanel = () => {
     setCellRunStatus(overallOk ? 'success' : 'error')
     setIsCellRunning(false)
   }, [
-    isCellRunning, buildCompilerGraphFromUI, clearNodeExecutionStates,
-    setNodeExecutionState, jupyterUrl, jupyterToken, setJupyterSession,
+    isCellRunning, getCompilerGraph, clearNodeExecutionStates,
+    setNodeExecutionState, jupyterUrl, jupyterToken, allowInsecure, setJupyterSession,
   ])
 
   const triggerDownload = (filename, mimeType, content) => {
@@ -649,6 +711,12 @@ const PipelineCompilerPanel = () => {
     document.body.appendChild(a); a.click(); a.remove()
     URL.revokeObjectURL(url)
   }
+
+  const handleDownloadAirflow = useCallback(() => {
+    if (!airflowCode) return
+    triggerDownload(airflowFilename || 'proto_ml_pipeline_airflow_dag.py', 'text/x-python;charset=utf-8', airflowCode)
+    addToast(`Downloaded ${airflowFilename || 'Airflow DAG'}`, 'success')
+  }, [airflowCode, airflowFilename, addToast])
 
   const downloadResultJson = () => {
     if (!executionResult) return
@@ -692,6 +760,7 @@ const PipelineCompilerPanel = () => {
   const panels = [
     { id: 'cell', label: 'Cell Run', icon: Zap, color: 'violet' },
     { id: 'code', label: 'Python', icon: Code2, color: 'cyan' },
+    { id: 'airflow', label: 'Airflow', icon: Workflow, color: 'orange' },
     { id: 'logs', label: 'Logs', icon: Terminal, color: 'emerald' },
     { id: 'result', label: 'Result', icon: FlaskConical, color: 'amber' },
   ]
@@ -805,7 +874,7 @@ const PipelineCompilerPanel = () => {
               handleCellRun={handleCellRun}
               setNodeExecutionState={setNodeExecutionState}
               clearNodeExecutionStates={clearNodeExecutionStates}
-              buildCompilerGraphFromUI={buildCompilerGraphFromUI}
+              buildCompilerGraphFromUI={getCompilerGraph}
               jupyterUrl={jupyterUrl}
               jupyterToken={jupyterToken}
               setJupyterSession={setJupyterSession}
@@ -819,6 +888,15 @@ const PipelineCompilerPanel = () => {
               compileWarnings={compileWarnings}
               validationMode={validationMode}
               setValidationMode={setValidationMode}
+            />
+          )}
+          {activePanel === 'airflow' && (
+            <AirflowCodePanel
+              airflowCode={airflowCode}
+              airflowErrors={airflowErrors}
+              airflowFilename={airflowFilename}
+              handleExportAirflow={handleExportAirflow}
+              handleDownloadAirflow={handleDownloadAirflow}
             />
           )}
           {activePanel === 'logs' && (
