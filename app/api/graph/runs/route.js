@@ -99,20 +99,34 @@ export async function POST(request) {
       );
     }
 
-    const job = await runner.submitCode(compiled.code, {
-      provider,
-      kernel,
-      metadata: {
-        ...metadata,
-        targetNodeId,
-        executionMode: normalizedExecutionMode,
-        failurePolicy: normalizedFailurePolicy,
-        compileMetadata: compiled.metadata,
+    const LocalSubprocessRunner = require('../../../../lib/executor/localSubprocessRunner.js');
+    const localRunner = new LocalSubprocessRunner();
+    const subprocessResult = await localRunner.runCode(compiled.code);
+
+    const job = await runner.submitStructuredResult(
+      subprocessResult.output || {
+        ok: subprocessResult.ok,
+        error: subprocessResult.error,
+        stdout: subprocessResult.stdout,
+        stderr: subprocessResult.stderr,
       },
-    });
+      {
+        provider: 'local_python',
+        kernel: 'python3',
+        status: subprocessResult.ok ? 'succeeded' : 'failed',
+        metadata: {
+          ...metadata,
+          targetNodeId,
+          executionMode: normalizedExecutionMode,
+          failurePolicy: normalizedFailurePolicy,
+          compileMetadata: compiled.metadata,
+          exitCode: subprocessResult.exitCode,
+        },
+      },
+    );
 
     return NextResponse.json({
-      ok: true,
+      ok: subprocessResult.ok,
       run: {
         runId: job.jobId,
         status: job.status,
@@ -128,9 +142,13 @@ export async function POST(request) {
       execution: {
         mode: normalizedExecutionMode,
         failurePolicy: normalizedFailurePolicy,
+        output: subprocessResult.output,
+        stdout: subprocessResult.stdout,
+        stderr: subprocessResult.stderr,
+        error: subprocessResult.error,
       },
       nodeDiagnostics,
-    });
+    }, { status: subprocessResult.ok ? 200 : 400 });
   } catch (err) {
     return NextResponse.json({ error: String(err) }, { status: 500 });
   }

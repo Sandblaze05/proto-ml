@@ -44,6 +44,7 @@ __tests__/
 │   │   └── pipelineCompiler.test.js   # Python code generation
 │   ├── pythonTemplates/
 │   │   └── pythonTemplateUtils.test.js # Python value serialization
+│   ├── datasetClient.test.js            # Dataset API client
 │   └── clientUploadStore.test.js       # File upload utilities
 ├── nodes/
 │   └── transformRegistry.test.js       # Available transforms database
@@ -97,6 +98,15 @@ __tests__/
 - Config object conversion
 
 **Tests:** 15+ tests for config generation and escaping
+
+### 7. **DatasetClient** (`lib/datasetClient.js`)
+- Dataset path validation via API
+- Upload listing
+- CSV inspection
+- CSV join validation
+- Upload deletion
+
+**Tests:** 17 tests covering all API client methods and error handling
 
 ## Read Test Output
 

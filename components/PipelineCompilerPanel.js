@@ -15,6 +15,7 @@ import { BrowserJupyterClient, extractStructuredResult } from '@/lib/executor/br
 import { airflowExporter } from '@/lib/exporters/AirflowExporter'
 import { buildCompilerGraphFromUI } from '@/lib/exporters/buildCompilerGraphFromUI'
 import { sanitizeDagName } from '@/lib/executor/graphUtils'
+import { previewClientUpload } from '@/lib/clientUploadStore'
 import MonacoCodeEditor from './nodes/MonacoCodeEditor'
 
 function NodeStatusIcon({ status, size = 10 }) {
@@ -26,6 +27,38 @@ function NodeStatusIcon({ status, size = 10 }) {
   if (status === 'skipped') return <SkipForward size={size} className="text-foreground/30" />
   if (status === 'idle') return <span className="w-2 h-2 rounded-full bg-foreground/20" style={{ width: size, height: size }} />
   return null
+}
+
+async function buildClientDatasetVariables(graph) {
+  const nodes = Array.isArray(graph?.nodes) ? graph.nodes : Object.values(graph?.nodes || {})
+  const clientDatasets = {}
+
+  for (const node of nodes) {
+    if (node?.type !== 'dataset.csv') continue
+    const config = node.config || {}
+    const path = String(config.path || '')
+    const uploadId = config.client_upload_id || (path.startsWith('client://') ? path.replace('client://', '') : '')
+    if (!uploadId) continue
+
+    const preview = await previewClientUpload(uploadId, {
+      ...config,
+      n: Number(config.max_train_rows || config.sample_rows || 100000),
+    })
+    const rows = Array.isArray(preview?.rows) ? preview.rows : []
+    const metadata = preview?.metadata || {}
+    const payload = {
+      rows,
+      data: rows,
+      columns: Array.isArray(metadata.columnsList) ? metadata.columnsList : Object.keys(rows[0] || {}),
+      feature_columns: Array.isArray(metadata.features) ? metadata.features : [],
+      target_column: config.target_column || metadata.target || '',
+      source: 'client_upload',
+    }
+    clientDatasets[uploadId] = payload
+    clientDatasets[`client://${uploadId}`] = payload
+  }
+
+  return clientDatasets
 }
 
 function CellLogGroup({ nodeId, nodeLabel, nodeType, status, logs = [], error = null }) {
@@ -286,8 +319,9 @@ const ResultPanel = ({ executionResult, downloadResultJson, downloadResultCsv, h
     if (executionResult.metrics) return executionResult.metrics;
     if (executionResult.final_output?.metrics) return executionResult.final_output.metrics;
     if (executionResult.leaf_outputs) {
-      const firstId = Object.keys(executionResult.leaf_outputs)[0];
-      if (firstId && executionResult.leaf_outputs[firstId]?.metrics) return executionResult.leaf_outputs[firstId].metrics;
+      for (const nodeVal of Object.values(executionResult.leaf_outputs)) {
+        if (nodeVal?.metrics) return nodeVal.metrics;
+      }
     }
     return null;
   };
@@ -297,8 +331,9 @@ const ResultPanel = ({ executionResult, downloadResultJson, downloadResultCsv, h
     if (executionResult.trained_model) return executionResult.trained_model;
     if (executionResult.final_output?.trained_model) return executionResult.final_output.trained_model;
     if (executionResult.leaf_outputs) {
-      const firstId = Object.keys(executionResult.leaf_outputs)[0];
-      if (firstId && executionResult.leaf_outputs[firstId]?.trained_model) return executionResult.leaf_outputs[firstId].trained_model;
+      for (const nodeVal of Object.values(executionResult.leaf_outputs)) {
+        if (nodeVal?.trained_model) return nodeVal.trained_model;
+      }
     }
     return null;
   };
@@ -325,70 +360,140 @@ const ResultPanel = ({ executionResult, downloadResultJson, downloadResultCsv, h
               <button onClick={downloadResultCsv} disabled={!hasCsvRows} className="px-2.5 py-1.5 rounded-md bg-emerald-700/40 hover:bg-emerald-700/60 text-xs font-medium border border-emerald-500/30 disabled:opacity-40 disabled:cursor-not-allowed">CSV</button>
             </div>
             
-            {(!hasCsvRows && (metrics || model || logs || artifacts)) ? (
-              <div className="space-y-4">
-                {metrics && (
-                  <div className="p-3 bg-violet-950/10 border border-violet-500/20 rounded-lg">
-                    <h3 className="text-xs font-bold text-violet-300 font-mono mb-2 uppercase tracking-wide">Key Metrics</h3>
-                    <div className="grid grid-cols-2 gap-2">
-                      {Object.entries(metrics).map(([k, v]) => (
-                        <div key={k} className="p-2 bg-background/50 border border-foreground/5 rounded-md">
-                          <div className="text-[10px] text-foreground/40 font-mono capitalize truncate">{k.replace('_', ' ')}</div>
-                          <div className="text-sm font-bold text-violet-400 font-mono mt-0.5">{typeof v === 'number' ? v.toFixed(4) : String(v)}</div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
+             {(!hasCsvRows && (metrics || model || logs || artifacts)) ? (
+               <div className="space-y-4">
+                 {metrics && (
+                   <div className="p-3 bg-violet-950/10 border border-violet-500/20 rounded-lg">
+                     <h3 className="text-xs font-bold text-violet-300 font-mono mb-2 uppercase tracking-wide">Key Metrics</h3>
+                     {metrics.error ? (
+                       <div className="p-2 bg-red-950/20 border border-red-500/30 rounded-md text-red-300 text-xs font-mono whitespace-pre-wrap">
+                         <div>{metrics.error}</div>
+                         {metrics.traceback && <div className="mt-1.5 text-[10px] text-red-400/80 leading-tight">{metrics.traceback}</div>}
+                       </div>
+                     ) : (
+                       <div className="grid grid-cols-2 gap-2">
+                         {Object.entries(metrics).map(([k, v]) => (
+                           <div key={k} className="p-2 bg-background/50 border border-foreground/5 rounded-md">
+                             <div className="text-[10px] text-foreground/40 font-mono capitalize truncate">{k.replace('_', ' ')}</div>
+                             <div className="text-sm font-bold text-violet-400 font-mono mt-0.5">{typeof v === 'number' ? v.toFixed(4) : String(v)}</div>
+                           </div>
+                         ))}
+                       </div>
+                     )}
+                   </div>
+                 )}
 
-                {model && (
-                  <div className="p-3 bg-cyan-950/10 border border-cyan-500/20 rounded-lg">
-                    <h3 className="text-xs font-bold text-cyan-300 font-mono mb-2 uppercase tracking-wide">Trained Model</h3>
-                    <div className="space-y-1.5 font-mono text-[11px] text-foreground/80">
-                      <div><span className="text-foreground/40">Status:</span> <span className="text-emerald-400 font-bold uppercase">{model.trained ? 'Trained' : 'Initialized'}</span></div>
-                      {model.epochs_run !== undefined && <div><span className="text-foreground/40">Epochs:</span> {model.epochs_run}</div>}
-                      {model.seen_train_samples !== undefined && <div><span className="text-foreground/40">Seen Samples:</span> {model.seen_train_samples}</div>}
-                      {model.family && <div><span className="text-foreground/40">Algorithm:</span> <span className="text-cyan-400">{model.family}</span></div>}
-                      {model.target_column && <div><span className="text-foreground/40">Target Column:</span> <span className="text-amber-400">{model.target_column}</span></div>}
-                    </div>
-                  </div>
-                )}
+                 {model && (
+                   <div className="p-3 bg-cyan-950/10 border border-cyan-500/20 rounded-lg">
+                     <h3 className="text-xs font-bold text-cyan-300 font-mono mb-2 uppercase tracking-wide">Trained Model</h3>
+                     <div className="space-y-1.5 font-mono text-[11px] text-foreground/80">
+                       <div><span className="text-foreground/40">Status:</span> <span className={model.trained ? "text-emerald-400 font-bold uppercase" : "text-red-400 font-bold uppercase"}>{model.trained ? 'Trained' : (model.backend === 'failed' ? 'Training Failed' : 'Initialized')}</span></div>
+                       {model.epochs_run !== undefined && <div><span className="text-foreground/40">Epochs:</span> {model.epochs_run}</div>}
+                       {model.seen_train_samples !== undefined && <div><span className="text-foreground/40">Seen Samples:</span> {model.seen_train_samples}</div>}
+                       {model.family && <div><span className="text-foreground/40">Algorithm:</span> <span className="text-cyan-400">{model.family}</span></div>}
+                       {model.target_column && <div><span className="text-foreground/40">Target Column:</span> <span className="text-amber-400">{model.target_column}</span></div>}
+                       {model.model_path && <div><span className="text-foreground/40">Model File:</span> <span className="text-emerald-300">{model.model_path}</span></div>}
+                     </div>
+                   </div>
+                 )}
 
-                {(logs || artifacts) && (
-                  <div className="p-3 bg-emerald-950/10 border border-emerald-500/20 rounded-lg">
-                    <h3 className="text-xs font-bold text-emerald-300 font-mono mb-2 uppercase tracking-wide">Run Logs & Artifacts</h3>
-                    <div className="space-y-1 font-mono text-[10px] text-foreground/80 break-all">
-                      {logs?.run_dir && <div><span className="text-foreground/40">Run Directory:</span> <span className="text-emerald-400/80">{logs.run_dir}</span></div>}
-                      {artifacts?.artifact_dir && <div><span className="text-foreground/40">Artifact Dir:</span> <span className="text-emerald-400/80">{artifacts.artifact_dir}</span></div>}
-                      {logs?.learning_rate !== undefined && <div><span className="text-foreground/40">Learning Rate:</span> {logs.learning_rate}</div>}
-                      {logs?.optimizer && <div><span className="text-foreground/40">Optimizer:</span> <span className="text-cyan-300">{logs.optimizer}</span></div>}
-                    </div>
-                  </div>
-                )}
-                
-                <details className="mt-2 bg-foreground/5 rounded-md p-2">
-                  <summary className="text-[10px] text-foreground/40 cursor-pointer font-mono font-medium hover:text-foreground/60 select-none">View raw execution result (JSON)</summary>
-                  <pre className="text-[10px] text-foreground/80 whitespace-pre-wrap font-mono mt-2 pt-2 border-t border-foreground/5">{JSON.stringify(executionResult, null, 2)}</pre>
-                </details>
-              </div>
-            ) : hasCsvRows ? (
-              <div className="overflow-auto rounded-lg border border-foreground/10">
-                <table className="w-full text-xs border-collapse">
-                  <thead className="bg-foreground/5 sticky top-0">
-                    <tr>{tableHeaders.map(h => <th key={h} className="text-left px-2 py-1.5 border-b border-foreground/10 font-medium text-foreground/70">{h}</th>)}</tr>
-                  </thead>
-                  <tbody>
-                    {tableRows.map((row, ri) => (
-                      <tr key={ri} className="odd:bg-foreground/5/30">
-                        {tableHeaders.map(h => <td key={`${ri}-${h}`} className="px-2 py-1.5 border-b border-foreground/5 text-foreground/80">{row[h] == null ? '—' : String(row[h])}</td>)}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            ) : (
-              <pre className="text-xs text-foreground/80 whitespace-pre-wrap">{JSON.stringify(executionResult, null, 2)}</pre>
-            )}
+                 {(logs || artifacts) && (
+                   <div className="p-3 bg-emerald-950/10 border border-emerald-500/20 rounded-lg">
+                     <h3 className="text-xs font-bold text-emerald-300 font-mono mb-2 uppercase tracking-wide">Run Logs & Artifacts</h3>
+                     <div className="space-y-1 font-mono text-[10px] text-foreground/80 break-all">
+                       {logs?.run_dir && <div><span className="text-foreground/40">Run Directory:</span> <span className="text-emerald-400/80">{logs.run_dir}</span></div>}
+                       {artifacts?.artifact_dir && <div><span className="text-foreground/40">Artifact Dir:</span> <span className="text-emerald-400/80">{artifacts.artifact_dir}</span></div>}
+                       {logs?.learning_rate !== undefined && <div><span className="text-foreground/40">Learning Rate:</span> {logs.learning_rate}</div>}
+                       {logs?.optimizer && <div><span className="text-foreground/40">Optimizer:</span> <span className="text-cyan-300">{logs.optimizer}</span></div>}
+                     </div>
+                   </div>
+                 )}
+                 
+                 <details className="mt-2 bg-foreground/5 rounded-md p-2">
+                   <summary className="text-[10px] text-foreground/40 cursor-pointer font-mono font-medium hover:text-foreground/60 select-none">View raw execution result (JSON)</summary>
+                   <pre className="text-[10px] text-foreground/80 whitespace-pre-wrap font-mono mt-2 pt-2 border-t border-foreground/5">{JSON.stringify(executionResult, null, 2)}</pre>
+                 </details>
+               </div>
+             ) : (
+               <div className="space-y-4">
+                 {hasCsvRows && metrics && (
+                   <div className="p-3 bg-violet-950/10 border border-violet-500/20 rounded-lg">
+                     <h3 className="text-xs font-bold text-violet-300 font-mono mb-2 uppercase tracking-wide">Key Metrics</h3>
+                     {metrics.error ? (
+                       <div className="p-2 bg-red-950/20 border border-red-500/30 rounded-md text-red-300 text-xs font-mono whitespace-pre-wrap">
+                         <div>{metrics.error}</div>
+                         {metrics.traceback && <div className="mt-1.5 text-[10px] text-red-400/80 leading-tight">{metrics.traceback}</div>}
+                       </div>
+                     ) : (
+                       <div className="grid grid-cols-2 gap-2">
+                         {Object.entries(metrics).map(([k, v]) => (
+                           <div key={k} className="p-2 bg-background/50 border border-foreground/5 rounded-md">
+                             <div className="text-[10px] text-foreground/40 font-mono capitalize truncate">{k.replace('_', ' ')}</div>
+                             <div className="text-sm font-bold text-violet-400 font-mono mt-0.5">{typeof v === 'number' ? v.toFixed(4) : String(v)}</div>
+                           </div>
+                         ))}
+                       </div>
+                     )}
+                   </div>
+                 )}
+
+                 {hasCsvRows && (
+                   <div className="overflow-auto rounded-lg border border-foreground/10">
+                     <table className="w-full text-xs border-collapse">
+                       <thead className="bg-foreground/5 sticky top-0">
+                         <tr>{tableHeaders.map(h => <th key={h} className="text-left px-2 py-1.5 border-b border-foreground/10 font-medium text-foreground/70">{h}</th>)}</tr>
+                       </thead>
+                       <tbody>
+                         {tableRows.map((row, ri) => (
+                           <tr key={ri} className="odd:bg-foreground/5/30">
+                             {tableHeaders.map(h => <td key={`${ri}-${h}`} className="px-2 py-1.5 border-b border-foreground/5 text-foreground/80">{row[h] == null ? '—' : String(row[h])}</td>)}
+                           </tr>
+                         ))}
+                       </tbody>
+                     </table>
+                   </div>
+                 )}
+
+                 {!hasCsvRows && !metrics && !model && !logs && !artifacts && (
+                   <pre className="text-xs text-foreground/80 whitespace-pre-wrap">{JSON.stringify(executionResult, null, 2)}</pre>
+                 )}
+
+                 {!hasCsvRows && (model || logs || artifacts) && (
+                   <>
+                     {model && (
+                       <div className="p-3 bg-cyan-950/10 border border-cyan-500/20 rounded-lg">
+                         <h3 className="text-xs font-bold text-cyan-300 font-mono mb-2 uppercase tracking-wide">Trained Model</h3>
+                         <div className="space-y-1.5 font-mono text-[11px] text-foreground/80">
+                           <div><span className="text-foreground/40">Status:</span> <span className={model.trained ? "text-emerald-400 font-bold uppercase" : "text-red-400 font-bold uppercase"}>{model.trained ? 'Trained' : (model.backend === 'failed' ? 'Training Failed' : 'Initialized')}</span></div>
+                           {model.epochs_run !== undefined && <div><span className="text-foreground/40">Epochs:</span> {model.epochs_run}</div>}
+                           {model.seen_train_samples !== undefined && <div><span className="text-foreground/40">Seen Samples:</span> {model.seen_train_samples}</div>}
+                           {model.family && <div><span className="text-foreground/40">Algorithm:</span> <span className="text-cyan-400">{model.family}</span></div>}
+                           {model.target_column && <div><span className="text-foreground/40">Target Column:</span> <span className="text-amber-400">{model.target_column}</span></div>}
+                           {model.model_path && <div><span className="text-foreground/40">Model File:</span> <span className="text-emerald-300">{model.model_path}</span></div>}
+                         </div>
+                       </div>
+                     )}
+
+                     {(logs || artifacts) && (
+                       <div className="p-3 bg-emerald-950/10 border border-emerald-500/20 rounded-lg">
+                         <h3 className="text-xs font-bold text-emerald-300 font-mono mb-2 uppercase tracking-wide">Run Logs & Artifacts</h3>
+                         <div className="space-y-1 font-mono text-[10px] text-foreground/80 break-all">
+                           {logs?.run_dir && <div><span className="text-foreground/40">Run Directory:</span> <span className="text-emerald-400/80">{logs.run_dir}</span></div>}
+                           {artifacts?.artifact_dir && <div><span className="text-foreground/40">Artifact Dir:</span> <span className="text-emerald-400/80">{artifacts.artifact_dir}</span></div>}
+                           {logs?.learning_rate !== undefined && <div><span className="text-foreground/40">Learning Rate:</span> {logs.learning_rate}</div>}
+                           {logs?.optimizer && <div><span className="text-foreground/40">Optimizer:</span> <span className="text-cyan-300">{logs.optimizer}</span></div>}
+                         </div>
+                       </div>
+                     )}
+                   </>
+                 )}
+
+                 <details className="mt-2 bg-foreground/5 rounded-md p-2">
+                   <summary className="text-[10px] text-foreground/40 cursor-pointer font-mono font-medium hover:text-foreground/60 select-none">View raw execution result (JSON)</summary>
+                   <pre className="text-[10px] text-foreground/80 whitespace-pre-wrap font-mono mt-2 pt-2 border-t border-foreground/5">{JSON.stringify(executionResult, null, 2)}</pre>
+                 </details>
+               </div>
+             )}
           </>
         ) : (
           <div className="flex flex-col items-center justify-center h-full gap-3 text-foreground/30">
@@ -517,48 +622,95 @@ const PipelineCompilerPanel = () => {
     setExecutionLogs([])
     setExecutionResult(null)
 
+    const uiGraph = getCompilerGraph()
+    const targetNodeId = uiGraph.nodes?.[uiGraph.nodes.length - 1]?.id || 'target'
+
+    if (jupyterUrl && jupyterUrl.trim()) {
+      try {
+        const client = new BrowserJupyterClient(jupyterUrl, jupyterToken, { allowInsecure })
+        const logs = [
+          { type: 'system', text: `Connecting to Jupyter at ${jupyterUrl}...\n` },
+          { type: 'system', text: 'Starting kernel via API proxy...\n' },
+        ]
+        setExecutionLogs(logs)
+
+        const kernelId = await client.startKernel({ fresh: false })
+        setJupyterSession({ kernelId })
+        
+        const variables = useVariableStore.getState().getVariablesAsObject()
+        const varCode = Object.entries(variables)
+          .map(([name, value]) => `${name} = ${typeof value === 'number' || !isNaN(value) ? value : `'${value}'`}`)
+          .join('\n')
+        if (varCode) await client.executeCode(kernelId, varCode)
+
+        logs.push({ type: 'system', text: `Executing compiled pipeline on kernel ${kernelId}...\n${'-'.repeat(40)}\n` })
+        setExecutionLogs([...logs])
+
+        const execution = await client.executeCode(kernelId, compiledCode)
+        const allLogs = [
+          ...logs,
+          ...execution.logs,
+          {
+            type: execution.status === 'ok' ? 'system' : 'stderr',
+            text: `\n${'-'.repeat(40)}\nExecution finished with status: ${execution.status}`,
+          },
+        ]
+        setExecutionLogs(allLogs)
+        setExecutionResult(extractStructuredResult(allLogs))
+
+        if (execution.status !== 'ok') {
+          throw new Error(`Execution failed with status: ${execution.status}`)
+        }
+        setIsExecuting(false)
+        return
+      } catch (err) {
+        setExecutionLogs(prev => [...prev, { type: 'stderr', text: `[Jupyter connection failed]: ${String(err?.message || err)}. Executing via Local Python Process...\n` }])
+      }
+    }
+
     try {
-      const client = new BrowserJupyterClient(jupyterUrl, jupyterToken, { allowInsecure })
       const logs = [
-        { type: 'system', text: `Connecting to Jupyter at ${jupyterUrl}...\n` },
-        { type: 'system', text: 'Starting kernel via API proxy...\n' },
+        { type: 'system', text: 'Executing compiled pipeline via Local Python Process...\n' },
       ]
       setExecutionLogs(logs)
 
-      const kernelId = await client.startKernel({ fresh: false })
-      setJupyterSession({ kernelId })
-      
-      // Inject variables
-      const variables = useVariableStore.getState().getVariablesAsObject()
-      const varCode = Object.entries(variables)
-        .map(([name, value]) => `${name} = ${typeof value === 'number' || !isNaN(value) ? value : `'${value}'`}`)
-        .join('\n')
-      if (varCode) await client.executeCode(kernelId, varCode)
+      const res = await fetch('/api/graph/runs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          graph: uiGraph,
+          targetNodeId,
+          executionMode: 'one_off_compile',
+          validationMode,
+        }),
+      })
 
-      logs.push({ type: 'system', text: `Executing compiled pipeline on kernel ${kernelId}...\n${'-'.repeat(40)}\n` })
+      const data = await res.json()
+
+      if (data.execution?.stdout) {
+        logs.push({ type: 'stdout', text: data.execution.stdout })
+      }
+      if (data.execution?.stderr) {
+        logs.push({ type: 'stderr', text: data.execution.stderr })
+      }
+
+      logs.push({
+        type: data.ok ? 'system' : 'stderr',
+        text: `\n${'-'.repeat(40)}\nLocal Python execution finished. Status: ${data.ok ? 'succeeded' : 'failed'}`,
+      })
+
       setExecutionLogs([...logs])
-
-      const execution = await client.executeCode(kernelId, compiledCode)
-      const allLogs = [
-        ...logs,
-        ...execution.logs,
-        {
-          type: execution.status === 'ok' ? 'system' : 'stderr',
-          text: `\n${'-'.repeat(40)}\nExecution finished with status: ${execution.status}`,
-        },
-      ]
-      setExecutionLogs(allLogs)
-      setExecutionResult(extractStructuredResult(allLogs))
-
-      if (execution.status !== 'ok') {
-        throw new Error(`Execution failed with status: ${execution.status}`)
+      if (data.execution?.output) {
+        setExecutionResult(data.execution.output)
+      } else if (data.execution?.error) {
+        setExecutionResult({ metrics: { error: data.execution.error } })
       }
     } catch (err) {
       setExecutionLogs(prev => [...prev, { type: 'stderr', text: `\n[Fatal Error]: ${String(err?.message || err)}` }])
     } finally {
       setIsExecuting(false)
     }
-  }, [compiledCode, jupyterUrl, jupyterToken, allowInsecure, setJupyterSession])
+  }, [compiledCode, jupyterUrl, jupyterToken, allowInsecure, setJupyterSession, getCompilerGraph, validationMode])
 
   const handleCellRun = useCallback(async () => {
     if (isCellRunning) return
@@ -617,7 +769,10 @@ const PipelineCompilerPanel = () => {
 
     try {
       const client = new BrowserJupyterClient(jupyterUrl, jupyterToken, { allowInsecure })
-      const variables = useVariableStore.getState().getVariablesAsObject()
+      const variables = {
+        ...useVariableStore.getState().getVariablesAsObject(),
+        __pml_client_datasets: await buildClientDatasetVariables(graph),
+      }
       const bootstrapCode = compileBootstrapCell(variables)
       const bootstrap = await client.executeCode(kernelId, bootstrapCode, { username: 'proto-ml-bootstrap' })
       if (bootstrap.status !== 'ok') {
@@ -746,9 +901,23 @@ const PipelineCompilerPanel = () => {
     const candidate = executionResult
     if (!candidate) return null
     if (Array.isArray(candidate)) return candidate
-    if (Array.isArray(candidate.final_output)) return candidate.final_output
+    const fo = candidate.final_output
+    if (fo) {
+      if (Array.isArray(fo)) return fo
+      if (Array.isArray(fo.rows)) return fo.rows
+      if (Array.isArray(fo.data)) return fo.data
+      if (Array.isArray(fo.comparison_rows)) return fo.comparison_rows
+    }
     if (Array.isArray(candidate.rows)) return candidate.rows
     if (Array.isArray(candidate.data)) return candidate.data
+    const lo = candidate.leaf_outputs
+    if (lo && typeof lo === 'object') {
+      for (const v of Object.values(lo)) {
+        if (Array.isArray(v)) return v
+        if (v && typeof v === 'object' && Array.isArray(v.rows)) return v.rows
+        if (v && typeof v === 'object' && Array.isArray(v.comparison_rows)) return v.comparison_rows
+      }
+    }
     return null
   }
 

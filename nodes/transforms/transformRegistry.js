@@ -153,6 +153,38 @@ export const TRANSFORM_NODES = [
     },
   }),
   createTransformDef({
+    type: 'transform.tabular.imputer',
+    label: 'Imputer',
+    category: 'tabular',
+    defaultConfig: {
+      strategy: 'mean',
+      columns: [],
+      fill_value: 0,
+    },
+    uiSchema: {
+      strategy: { type: 'enum', options: ['mean', 'median', 'mode', 'constant', 'drop_rows'] },
+      columns: { type: 'array:string', label: 'Columns' },
+      fill_value: { type: 'number', label: 'Fill Value' },
+    },
+  }),
+  createTransformDef({
+    type: 'transform.tabular.feature_selector',
+    label: 'Feature Selector',
+    category: 'tabular',
+    defaultConfig: {
+      mode: 'include',
+      columns: [],
+      target_column: '',
+      keep_target: true,
+    },
+    uiSchema: {
+      mode: { type: 'enum', options: ['include', 'drop'] },
+      columns: { type: 'array:string', label: 'Columns' },
+      target_column: { type: 'string', label: 'Target Column' },
+      keep_target: { type: 'boolean', label: 'Keep Target' },
+    },
+  }),
+  createTransformDef({
     type: 'transform.tabular.standard_scaler',
     label: 'Standard Scaler',
     category: 'tabular',

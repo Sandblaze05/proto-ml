@@ -39,7 +39,7 @@ describe('nodeCellCompiler', () => {
       
       expect(outputVar).toBe('_pml_ds_1');
       expect(code).toContain('_pml_node_cfg = {\'path\': \'/data.csv\'}');
-      expect(code).toContain('_pml_ds_1 = {\'dataset_type\': \'dataset.csv\'');
+      expect(code).toContain('_pml_ds_1 = _materialize_dataset({\'dataset_type\': \'dataset.csv\'');
       expect(code).toContain('__pml_event\': \'node_ok\'');
       expect(code).toContain('\'nodeId\': \'ds-1\'');
     });

@@ -9,6 +9,7 @@ import BaseHandle from './BaseHandle';
 import { inferPortDatatype, portTw } from '../../lib/portUtils';
 import { generateTransformPythonCode } from '../../lib/pythonTemplates/transformNodeTemplate';
 import { previewGraphClient } from '../../lib/executor/clientPreviewExecutor';
+import { getNodeDef } from '../../nodes/nodeRegistry';
 import MonacoCodeEditor from './MonacoCodeEditor';
 
 const TABS = ['Config', 'Code', 'Preview'];
@@ -79,11 +80,11 @@ function ConfigField({ label, value, onChange, schema = {}, disabled = false }) 
       {(effectiveType === 'number' || valueType === 'number') && (
         <input
           type="number"
-          value={value}
+          value={value ?? ''}
           min={schema.min}
           max={schema.max}
           step={schema.step}
-          onChange={(e) => !disabled && onChange(Number(e.target.value))}
+          onChange={(e) => !disabled && onChange(e.target.value === '' ? null : Number(e.target.value))}
           disabled={disabled}
           className={`w-full bg-black/60 border border-[#faebd7]/10 rounded text-[#faebd7] text-[10px] font-mono px-1.5 py-1 ${disabled ? 'cursor-not-allowed opacity-40' : ''}`}
         />
@@ -148,13 +149,53 @@ function ConfigField({ label, value, onChange, schema = {}, disabled = false }) 
   );
 }
 
+function isConfigFieldVisible(schema = {}, config = {}) {
+  const rule = schema?.showWhen;
+  if (!rule) return true;
+
+  const actual = config?.[rule.field];
+  if (Object.prototype.hasOwnProperty.call(rule, 'equals')) {
+    return actual === rule.equals;
+  }
+  if (Array.isArray(rule.in)) {
+    return rule.in.includes(actual);
+  }
+  if (Array.isArray(rule.notIn)) {
+    return !rule.notIn.includes(actual);
+  }
+  return true;
+}
+
 function PreviewTab({ previewing, onRunPreview, previewResult, disabled = false }) {
   const analysis = useMemo(() => {
     if (!previewResult || previewResult.error) return null;
 
-    const rows = Array.isArray(previewResult)
-      ? previewResult
-      : (Array.isArray(previewResult?.rows) ? previewResult.rows : []);
+    const extractRows = (value) => {
+      if (Array.isArray(value)) return value;
+      if (!value || typeof value !== 'object') return [];
+      const candidates = [
+        value.rows,
+        value.comparison_rows,
+        value.features,
+        value.data,
+        value.train,
+        value.val,
+        value.test,
+        value.batches,
+        value.true,
+        value.false,
+        value.predictions?.rows,
+        value.predictions?.comparison_rows,
+      ];
+      for (const candidate of candidates) {
+        if (Array.isArray(candidate) && candidate.length > 0) return candidate;
+      }
+      const firstArray = Object.values(value).find((v) => Array.isArray(v) && v.length > 0);
+      if (firstArray) return firstArray;
+      return [];
+    };
+
+    const rows = extractRows(previewResult);
 
     if (!Array.isArray(rows) || rows.length === 0) {
       return {
@@ -237,10 +278,15 @@ export default function TransformNode({ data, id, selected }) {
     inputs = ['in'],
     outputs = ['out'],
     config = {},
-    uiSchema = {},
+    uiSchema: storedUiSchema = {},
     kind = 'transform',
     pythonCode: initialPythonCode,
   } = nodeModel;
+  const registryDef = getNodeDef(type);
+  const uiSchema = useMemo(() => ({
+    ...(storedUiSchema || {}),
+    ...(registryDef?.uiSchema || {}),
+  }), [storedUiSchema, registryDef]);
 
   const [activeTab, setActiveTab] = useState('Config');
   const toggleNodeCollapse = useUIStore((s) => s.toggleNodeCollapse);
@@ -353,7 +399,7 @@ export default function TransformNode({ data, id, selected }) {
 
   const configKeys = useMemo(() => {
     const keys = new Set([...(Object.keys(uiSchema || {})), ...(Object.keys(localConfig || {}))]);
-    return Array.from(keys);
+    return Array.from(keys).filter((key) => isConfigFieldVisible(uiSchema?.[key], localConfig));
   }, [uiSchema, localConfig]);
 
   const selectedColor = kind === 'lifecycle' ? '#ffe066' : '#67e8f9';
