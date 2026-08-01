@@ -4,10 +4,11 @@
  */
 export const CSVDatasetDef = {
   type: 'dataset.csv',
+  kind: 'dataset',
   category: 'dataset',
   label: 'CSV Dataset',
   icon: 'TableIcon',
-  color: '#34d399', // emerald
+  color: '#34d399',
 
   inputs: [],
 
@@ -18,33 +19,51 @@ export const CSVDatasetDef = {
     { name: 'columns',      datatype: 'list',        shape: ['num_columns'] },
   ],
 
-  schema: {
-    dtype: 'float32',
-    task: 'tabular',
-    input_format: 'csv',
+  ports: {
+    inputs: [],
+    outputs: [
+      { name: 'out', datatype: 'any', shape: [], role: 'data' },
+      { name: 'features', datatype: 'tensor', shape: ['B', 'num_features'], role: 'data' },
+      { name: 'targets', datatype: 'tensor', shape: ['B'], role: 'labels' },
+      { name: 'columns', datatype: 'list', shape: ['num_columns'], role: 'data' },
+    ],
   },
 
-  defaultConfig: {
-    // Source
-    source: 'local',
-    source_mode: 'folder',
-    path: '',
-    files: [],
-    primary: '',
-    relations: [],
-    delimiter: ',',
-    header: true,
-    target_column: '',
-    feature_columns: [],    // [] = all except target
-    features: [],
-    column_types: {},
-    skip_rows: 0,
-    encoding: 'utf-8',
+  config: {
+    defaults: {
+      source: 'local',
+      source_mode: 'folder',
+      path: '',
+      files: [],
+      primary: '',
+      relations: [],
+      delimiter: ',',
+      header: true,
+      target_column: '',
+      feature_columns: [],
+      features: [],
+      column_types: {},
+      skip_rows: 0,
+      encoding: 'utf-8',
+      normalize: 'none',
+      handle_missing: 'drop',
+      missing: { strategy: 'drop' },
+      preprocessing: {},
+    },
+    schema: {
+      dtype: 'float32',
+      task: 'tabular',
+      input_format: 'csv',
+    },
+  },
 
-    normalize: 'none',
-    handle_missing: 'drop',
-    missing: { strategy: 'drop' },
-    preprocessing: {},
+  preview: 'dataset.csv',
+  backend: 'dataset.csv',
+
+  cache: {
+    version: '1.0.0',
+    seed: 42,
+    deterministic: true,
   },
 
   metadata: {

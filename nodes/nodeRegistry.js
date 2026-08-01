@@ -2,6 +2,9 @@
  * Node Registry — central source of truth for all node types.
  * Maps type string → node definition object.
  * Used by NodePalette (to build node models) and useExecutionStore (for typed validation).
+ *
+ * Supports both the legacy shape (inputs/outputs/defaultConfig/schema) and
+ * the canonical NodeSpec shape (ports/config/preview/backend/cache).
  */
 import { ImageFolderDatasetDef } from './datasets/ImageFolderDataset.js';
 import { CSVDatasetDef }         from './datasets/CSVDataset.js';
@@ -11,6 +14,7 @@ import { DatabaseDatasetDef }    from './datasets/DatabaseDataset.js';
 import { APIDatasetDef }         from './datasets/APIDataset.js';
 import { TRANSFORM_NODES }       from './transforms/transformRegistry.js';
 import { LIFECYCLE_NODES }       from './lifecycle/lifecycleRegistry.js';
+import { validateNodeSpec, getPortContract, getConfigSchema, getCacheMetadata } from '../lib/runtimeSpec/nodeSpec.js';
 
 // --- Dataset Nodes ---
 export const DATASET_NODES = [
@@ -45,6 +49,10 @@ function assertValidNodeDef(def) {
  */
 export function registerNodeDef(def, options = {}) {
   assertValidNodeDef(def);
+  const validation = validateNodeSpec(def);
+  if (!validation.valid) {
+    throw new Error(`Invalid node definition for type ${def.type}: ${validation.errors.join(' ')}`);
+  }
   const { overwrite = false } = options;
   const type = def.type;
   const exists = Boolean(NODE_REGISTRY[type]);
@@ -120,22 +128,92 @@ export function getNodeDef(type) {
 }
 
 /**
+ * Get the input ports for a node definition.
+ * Supports both canonical (ports.inputs) and legacy (inputs) shapes.
+ */
+export function getInputPorts(nodeType) {
+  const def = NODE_REGISTRY[nodeType];
+  if (!def) return [];
+  if (def.ports && Array.isArray(def.ports.inputs)) return def.ports.inputs;
+  return def.inputs || [];
+}
+
+/**
+ * Get the output ports for a node definition.
+ * Supports both canonical (ports.outputs) and legacy (outputs) shapes.
+ */
+export function getOutputPorts(nodeType) {
+  const def = NODE_REGISTRY[nodeType];
+  if (!def) return [];
+  if (def.ports && Array.isArray(def.ports.outputs)) return def.ports.outputs;
+  return def.outputs || [];
+}
+
+/**
  * Get the output port descriptor for a given node type + port name.
  * Returns undefined if the port or node doesn't exist.
  */
 export function getOutputPort(nodeType, portName) {
-  const def = NODE_REGISTRY[nodeType];
-  if (!def) return undefined;
-  return def.outputs.find(o => o.name === portName);
+  const ports = getOutputPorts(nodeType);
+  return ports.find(o => o.name === portName);
 }
 
 /**
  * Get the input port descriptor for a given node type + port name.
  */
 export function getInputPort(nodeType, portName) {
+  const ports = getInputPorts(nodeType);
+  return ports.find(i => i.name === portName);
+}
+
+/**
+ * Get the config defaults for a node definition.
+ * Supports both canonical (config.defaults) and legacy (defaultConfig) shapes.
+ */
+export function getNodeConfigDefaults(nodeType) {
   const def = NODE_REGISTRY[nodeType];
-  if (!def) return undefined;
-  return def.inputs.find(i => i.name === portName);
+  if (!def) return {};
+  if (def.config && def.config.defaults) return def.config.defaults;
+  return def.defaultConfig || {};
+}
+
+/**
+ * Get the config schema for a node definition.
+ * Supports both canonical (config.schema) and legacy (schema) shapes.
+ */
+export function getNodeConfigSchema(nodeType) {
+  const def = NODE_REGISTRY[nodeType];
+  if (!def) return null;
+  if (def.config && def.config.schema) return def.config.schema;
+  return def.schema || null;
+}
+
+/**
+ * Validate a node definition against the canonical NodeSpec schema.
+ * Returns { valid, errors }.
+ */
+export function validateNodeDef(type) {
+  const def = NODE_REGISTRY[type];
+  if (!def) return { valid: false, errors: [`Node type not found: ${type}`] };
+  return validateNodeSpec(def);
+}
+
+/**
+ * Get the port contract for a node definition.
+ */
+export function getPortContractForNode(nodeType) {
+  const def = NODE_REGISTRY[nodeType];
+  if (!def) return null;
+  return getPortContract(def);
+}
+
+/**
+ * Get the cache metadata for a node definition.
+ */
+export function getNodeCacheMetadata(nodeType) {
+  const def = NODE_REGISTRY[nodeType];
+  if (!def) return null;
+  return getCacheMetadata(def);
 }
 
 const PORT_ROLE_NAME_MAP = {

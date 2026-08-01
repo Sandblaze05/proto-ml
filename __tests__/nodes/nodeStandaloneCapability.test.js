@@ -1,12 +1,12 @@
 import { describe, it, expect } from 'vitest';
 import { createRequire } from 'module';
-import { listNodeDefs } from '../../nodes/nodeRegistry.js';
+import { listNodeDefs, getInputPorts } from '../../nodes/nodeRegistry.js';
 
 const require = createRequire(import.meta.url);
 const runtimeFactories = require('../../lib/runtimeFactories');
 
 function evaluateStandalone(def) {
-  const requiredInputs = (def.inputs || []).filter((input) => input && input.optional === false);
+  const requiredInputs = getInputPorts(def.type).filter((input) => input && input.optional === false);
   const hasRuntimeFactory = Boolean(runtimeFactories.get(def.type));
   const requiresUpstreamInput = requiredInputs.length > 0;
 

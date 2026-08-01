@@ -16,6 +16,7 @@ import { airflowExporter } from '@/lib/exporters/AirflowExporter'
 import { buildCompilerGraphFromUI } from '@/lib/exporters/buildCompilerGraphFromUI'
 import { sanitizeDagName } from '@/lib/executor/graphUtils'
 import { previewClientUpload } from '@/lib/clientUploadStore'
+import { RUN } from '@/lib/executor/executionContract'
 import MonacoCodeEditor from './nodes/MonacoCodeEditor'
 
 function NodeStatusIcon({ status, size = 10 }) {
@@ -680,7 +681,7 @@ const PipelineCompilerPanel = () => {
         body: JSON.stringify({
           graph: uiGraph,
           targetNodeId,
-          executionMode: 'one_off_compile',
+          mode: RUN,
           validationMode,
         }),
       })

@@ -4,10 +4,11 @@
  */
 export const APIDatasetDef = {
   type: 'dataset.api',
+  kind: 'dataset',
   category: 'dataset',
   label: 'API Dataset',
   icon: 'GlobeIcon',
-  color: '#a78bfa', // violet
+  color: '#a78bfa',
 
   inputs: [],
 
@@ -18,37 +19,48 @@ export const APIDatasetDef = {
     { name: 'raw',          datatype: 'dict',        shape: [] },
   ],
 
-  schema: {
-    dtype: 'float32',
-    task: 'general',
-    input_format: 'api',
+  ports: {
+    inputs: [],
+    outputs: [
+      { name: 'out', datatype: 'any', shape: [], role: 'data' },
+      { name: 'data', datatype: 'tensor', shape: ['B', 'feature_dim'], role: 'data' },
+      { name: 'labels', datatype: 'tensor', shape: ['B'], role: 'labels' },
+      { name: 'raw', datatype: 'dict', shape: [], role: 'data' },
+    ],
   },
 
-  defaultConfig: {
-    // Endpoint
-    url: '',
-    method: 'GET',               // 'GET' | 'POST'
-    api_type: 'rest',            // 'rest' | 'graphql'
+  config: {
+    defaults: {
+      url: '',
+      method: 'GET',
+      api_type: 'rest',
+      auth_type: 'none',
+      auth_token: '',
+      headers: {},
+      data_path: 'data',
+      label_key: 'label',
+      feature_keys: [],
+      pagination: true,
+      page_param: 'page',
+      page_size: 100,
+      max_pages: 10,
+      retry_attempts: 3,
+      timeout_seconds: 30,
+    },
+    schema: {
+      dtype: 'float32',
+      task: 'general',
+      input_format: 'api',
+    },
+  },
 
-    // Auth
-    auth_type: 'none',           // 'none' | 'bearer' | 'api_key' | 'basic'
-    auth_token: '',
-    headers: {},
+  preview: 'dataset.api',
+  backend: 'dataset.api',
 
-    // Data extraction
-    data_path: 'data',           // JSONPath to the records array
-    label_key: 'label',
-    feature_keys: [],
-
-    // Pagination
-    pagination: true,
-    page_param: 'page',
-    page_size: 100,
-    max_pages: 10,
-
-    // Advanced
-    retry_attempts: 3,
-    timeout_seconds: 30,
+  cache: {
+    version: '1.0.0',
+    seed: 42,
+    deterministic: true,
   },
 
   metadata: {

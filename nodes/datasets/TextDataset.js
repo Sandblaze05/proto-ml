@@ -4,10 +4,11 @@
  */
 export const TextDatasetDef = {
   type: 'dataset.text',
+  kind: 'dataset',
   category: 'dataset',
   label: 'Text Dataset',
   icon: 'FileTextIcon',
-  color: '#60a5fa', // blue
+  color: '#60a5fa',
 
   inputs: [],
 
@@ -19,26 +20,43 @@ export const TextDatasetDef = {
     { name: 'vocab',         datatype: 'list',        shape: ['vocab_size'] },
   ],
 
-  schema: {
-    dtype: 'int64',
-    task: 'nlp',
-    input_format: 'text',
+  ports: {
+    inputs: [],
+    outputs: [
+      { name: 'out', datatype: 'any', shape: [], role: 'data' },
+      { name: 'input_ids', datatype: 'sequence', shape: ['B', 'max_length'], role: 'data' },
+      { name: 'attention_mask', datatype: 'sequence', shape: ['B', 'max_length'], role: 'data' },
+      { name: 'labels', datatype: 'tensor', shape: ['B'], role: 'labels' },
+      { name: 'vocab', datatype: 'list', shape: ['vocab_size'], role: 'data' },
+    ],
   },
 
-  defaultConfig: {
-    // Source
-    path: '',
-    file_format: 'txt',           // 'txt' | 'csv' | 'jsonl'
-    text_column: 'text',
-    label_column: 'label',
+  config: {
+    defaults: {
+      path: '',
+      file_format: 'txt',
+      text_column: 'text',
+      label_column: 'label',
+      tokenizer: 'whitespace',
+      vocab_size: 30000,
+      max_length: 512,
+      padding: 'max_length',
+      truncation: true,
+    },
+    schema: {
+      dtype: 'int64',
+      task: 'nlp',
+      input_format: 'text',
+    },
+  },
 
-    // Tokenization
-    tokenizer: 'whitespace',      // 'whitespace' | 'bpe' | 'wordpiece' | 'custom'
-    vocab_size: 30000,
-    max_length: 512,
-    padding: 'max_length',
-    truncation: true,
+  preview: 'dataset.text',
+  backend: 'dataset.text',
 
+  cache: {
+    version: '1.0.0',
+    seed: 42,
+    deterministic: true,
   },
 
   metadata: {

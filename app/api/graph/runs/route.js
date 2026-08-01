@@ -3,88 +3,53 @@ import { bootstrapPluginsFromRepo } from '../../../../lib/plugins/pluginBootstra
 import { compileExecutionGraph } from '../../../../lib/executor/pipelineCompiler.js';
 import RemoteJupyterRunner from '../../../../lib/executor/remoteJupyterRunner.js';
 import { buildNodeDiagnostics } from '../../../../lib/executor/nodeDiagnostics.js';
+import { PREVIEW, RUN } from '../../../../lib/executor/executionContract.js';
 
 const runner = new RemoteJupyterRunner();
 
+// "Run pipeline" is the sole implementation of the RUN (one_off_compile)
+// contract: compile to Python and execute via the Jupyter/local subprocess
+// runner, then persist the result as a durable run.
+//
+// The synthetic PREVIEW path (getSample-based runtimes) MUST NOT reach this
+// endpoint. Preview is served by /api/graph/preview and is never persisted as
+// a run result.
 export async function POST(request) {
   const body = await request.json();
   const {
     graph,
     targetNodeId,
     validationMode = 'strict',
-    provider = 'colab',
-    kernel = 'python3',
     metadata = {},
-    executionMode = 'pipeline_topological',
+    mode: requestedMode,
+    executionMode: legacyMode,
     failurePolicy = 'fail-fast',
   } = body || {};
+
+  const requestedRunMode = requestedMode || legacyMode;
+  if (requestedRunMode === PREVIEW) {
+    return NextResponse.json(
+      {
+        error: 'Preview is a separate contract. Use /api/graph/preview to sample a node. Run pipeline only supports one_off_compile / Jupyter execution.',
+        details: {
+          requestedMode: requestedRunMode,
+          supportedModes: ['one_off_compile'],
+        },
+      },
+      { status: 400 },
+    );
+  }
 
   if (!graph || !targetNodeId) {
     return NextResponse.json({ error: 'Missing graph or targetNodeId in request body' }, { status: 400 });
   }
 
   const normalizedMode = validationMode === 'relax' ? 'relax' : 'strict';
-  const normalizedExecutionMode = executionMode === 'one_off_compile' ? 'one_off_compile' : 'pipeline_topological';
   const normalizedFailurePolicy = failurePolicy === 'fail-fast' ? 'fail-fast' : 'fail-fast';
 
   try {
     await bootstrapPluginsFromRepo();
     const nodeDiagnostics = buildNodeDiagnostics(graph);
-
-    if (normalizedExecutionMode === 'pipeline_topological') {
-      const mod = await import('../../../../lib/executor/createExecutor.js');
-      const createDefaultExecutor = mod.createDefaultExecutor || (mod.default && mod.default.createDefaultExecutor) || mod.default;
-      if (typeof createDefaultExecutor !== 'function') {
-        throw new Error('createDefaultExecutor not found in executor module');
-      }
-
-      const executor = createDefaultExecutor();
-      const execution = await executor.executeTopological(graph, {
-        targetNodeId,
-        failurePolicy: normalizedFailurePolicy,
-      });
-
-      const job = await runner.submitStructuredResult(
-        {
-          summary: execution.ok
-            ? 'Topological pipeline run completed successfully.'
-            : `Topological pipeline failed at node: ${execution.failedNodeId}`,
-          execution,
-          artifacts: [],
-          metrics: {},
-        },
-        {
-          provider,
-          kernel: 'topological',
-          status: execution.ok ? 'succeeded' : 'failed',
-          metadata: {
-            ...metadata,
-            targetNodeId,
-            executionMode: normalizedExecutionMode,
-            failurePolicy: normalizedFailurePolicy,
-          },
-        },
-      );
-
-      return NextResponse.json({
-        ok: execution.ok,
-        run: {
-          runId: job.jobId,
-          status: job.status,
-          provider: job.provider,
-          kernel: job.kernel,
-          createdAt: job.createdAt,
-          updatedAt: job.updatedAt,
-        },
-        execution: {
-          mode: normalizedExecutionMode,
-          failurePolicy: normalizedFailurePolicy,
-          order: execution.order,
-          failedNodeId: execution.failedNodeId,
-        },
-        nodeDiagnostics,
-      }, { status: execution.ok ? 200 : 400 });
-    }
 
     const compiled = compileExecutionGraph(graph, { validationMode: normalizedMode });
     if (!compiled.ok) {
@@ -117,7 +82,7 @@ export async function POST(request) {
         metadata: {
           ...metadata,
           targetNodeId,
-          executionMode: normalizedExecutionMode,
+          mode: RUN,
           failurePolicy: normalizedFailurePolicy,
           compileMetadata: compiled.metadata,
           exitCode: subprocessResult.exitCode,
@@ -140,7 +105,7 @@ export async function POST(request) {
         warnings: compiled.warnings || [],
       },
       execution: {
-        mode: normalizedExecutionMode,
+        mode: RUN,
         failurePolicy: normalizedFailurePolicy,
         output: subprocessResult.output,
         stdout: subprocessResult.stdout,

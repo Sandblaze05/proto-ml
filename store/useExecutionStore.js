@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { getOutputPort, getInputPort, arePortsCompatible, inferPortRole, getNodeDef } from '../nodes/nodeRegistry';
+import { RUN, VALID_RUN_MODES } from '../lib/executor/executionContract';
 
 function connectionResult(ok, code, message, details = {}) {
   return { ok, code, message, details };
@@ -45,8 +46,10 @@ export const useExecutionStore = create((set, get) => ({
   // List of edges { source, target, sourceHandle, targetHandle }
   edges: [],
   // Runtime execution contract defaults.
+  // "Run pipeline" is solely one_off_compile / Jupyter execution. The synthetic
+  // PREVIEW path is served separately via /api/graph/preview and is never a run.
   executionRuntime: {
-    mode: 'pipeline_topological',
+    mode: RUN,
     failurePolicy: 'fail-fast',
   },
   executionLock: {
@@ -73,7 +76,7 @@ export const useExecutionStore = create((set, get) => ({
   configureExecutionRuntime: ({ mode, failurePolicy } = {}) => {
     set((state) => ({
       executionRuntime: {
-        mode: mode === 'one_off_compile' ? 'one_off_compile' : (mode === 'pipeline_topological' ? 'pipeline_topological' : state.executionRuntime.mode),
+        mode: VALID_RUN_MODES.includes(mode) ? mode : state.executionRuntime.mode,
         failurePolicy: failurePolicy === 'fail-fast' ? 'fail-fast' : state.executionRuntime.failurePolicy,
       },
     }));

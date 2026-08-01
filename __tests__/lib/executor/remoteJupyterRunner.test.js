@@ -37,24 +37,24 @@ describe('RemoteJupyterRunner', () => {
     expect(status.status).toBe('cancelled');
   });
 
-  it('stores structured topological run result as final status', async () => {
+  it('stores structured one_off_compile run result as final status', async () => {
     const runner = new RemoteJupyterRunner();
     const structured = await runner.submitStructuredResult(
       {
-        summary: 'Topological pipeline run completed successfully.',
+        summary: 'one_off_compile pipeline run completed successfully.',
         execution: {
           ok: true,
+          mode: 'one_off_compile',
           order: ['d1', 't1'],
-          nodeStatuses: {
-            d1: { status: 'succeeded' },
-            t1: { status: 'succeeded' },
-          },
+          stdout: '',
+          stderr: '',
         },
       },
       {
-        provider: 'local',
-        kernel: 'topological',
+        provider: 'local_python',
+        kernel: 'python3',
         status: 'succeeded',
+        metadata: { mode: 'one_off_compile' },
       },
     );
 
@@ -64,6 +64,7 @@ describe('RemoteJupyterRunner', () => {
 
     const result = await runner.fetchResult(structured.jobId);
     expect(result.status).toBe('succeeded');
+    expect(result.output.execution.mode).toBe('one_off_compile');
     expect(result.output.execution.order).toEqual(['d1', 't1']);
   });
 });

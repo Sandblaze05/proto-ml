@@ -8,7 +8,7 @@ import {
 import { v4 as uuidv4 } from 'uuid';
 import { useUIStore } from '@/store/useUIStore';
 import { useExecutionStore } from '@/store/useExecutionStore';
-import { listNodeDefs } from '@/nodes/nodeRegistry';
+import { listNodeDefs, getInputPorts, getOutputPorts, getNodeConfigDefaults, getNodeConfigSchema, getNodeCacheMetadata } from '@/nodes/nodeRegistry';
 import { generateDatasetPythonCode } from '@/lib/pythonTemplates/datasetNodeTemplate';
 import { generateTransformPythonCode } from '@/lib/pythonTemplates/transformNodeTemplate';
 import { generateLifecyclePythonCode } from '@/lib/pythonTemplates/lifecycleNodeTemplate';
@@ -143,7 +143,7 @@ function PaletteItem({ node, isInUse }) {
 
     if (isDataset && node.def) {
       const def = node.def;
-      const initialConfig = { ...def.defaultConfig };
+      const initialConfig = { ...getNodeConfigDefaults(def.type) };
       const pythonCode = generateDatasetPythonCode(def.type, initialConfig);
 
       addNode({
@@ -155,10 +155,10 @@ function PaletteItem({ node, isInUse }) {
           nodeModel: {
             type: def.type,
             label: def.label,
-            inputs: def.inputs.map(p => p.name),
-            outputs: def.outputs.map(p => p.name),
+            inputs: getInputPorts(def.type).map(p => p.name),
+            outputs: getOutputPorts(def.type).map(p => p.name),
             config: initialConfig,
-            schema: { ...def.schema },
+            schema: { ...getNodeConfigSchema(def.type) },
             metadata: { ...def.metadata },
             kind: 'dataset',
             pythonCode,
@@ -169,27 +169,27 @@ function PaletteItem({ node, isInUse }) {
       addExecutionNode(newId, {
         type: def.type,
         label: def.label,
-        inputs: def.inputs.map(p => p.name),
-        outputs: def.outputs.map(p => p.name),
+        inputs: getInputPorts(def.type).map(p => p.name),
+        outputs: getOutputPorts(def.type).map(p => p.name),
         portMap: {
-          inputs: Object.fromEntries(def.inputs.map(p => [p.name, p])),
-          outputs: Object.fromEntries(def.outputs.map(p => [p.name, p])),
+          inputs: Object.fromEntries(getInputPorts(def.type).map(p => [p.name, p])),
+          outputs: Object.fromEntries(getOutputPorts(def.type).map(p => [p.name, p])),
         },
         config: initialConfig,
-        schema: { ...def.schema },
+        schema: { ...getNodeConfigSchema(def.type) },
         metadata: { ...def.metadata },
         pythonCode,
       });
 
     } else if ((isTransform || isLifecycle) && node.def) {
       const def = node.def;
-      const initialConfig = { ...(def.defaultConfig || {}) };
+      const initialConfig = { ...(getNodeConfigDefaults(def.type) || {}) };
       const pythonCode = isLifecycle
         ? generateLifecyclePythonCode(def.type, initialConfig)
         : generateTransformPythonCode(def.type, initialConfig);
 
-      const inputs = (def.inputs || []).map(p => p.name);
-      const outputs = (def.outputs || []).map(p => p.name);
+      const inputs = getInputPorts(def.type).map(p => p.name);
+      const outputs = getOutputPorts(def.type).map(p => p.name);
 
       const newNodeModel = {
         type: def.type,
@@ -198,7 +198,7 @@ function PaletteItem({ node, isInUse }) {
         outputs,
         params: initialConfig,
         config: initialConfig,
-        uiSchema: { ...(def.uiSchema || {}) },
+        uiSchema: { ...(getNodeConfigSchema(def.type) || {}) },
         accepts: def.accepts || [],
         produces: def.produces || [],
         kind: isLifecycle ? 'lifecycle' : 'transform',
@@ -221,7 +221,7 @@ function PaletteItem({ node, isInUse }) {
         inputs,
         outputs,
         config: initialConfig,
-        uiSchema: { ...(def.uiSchema || {}) },
+        uiSchema: { ...(getNodeConfigSchema(def.type) || {}) },
         accepts: def.accepts || [],
         produces: def.produces || [],
         kind: isLifecycle ? 'lifecycle' : 'transform',

@@ -4,10 +4,11 @@
  */
 export const JSONDatasetDef = {
   type: 'dataset.json',
+  kind: 'dataset',
   category: 'dataset',
   label: 'JSON Dataset',
   icon: 'BracesIcon',
-  color: '#fbbf24', // amber
+  color: '#fbbf24',
 
   inputs: [],
 
@@ -18,24 +19,41 @@ export const JSONDatasetDef = {
     { name: 'schema',       datatype: 'dict',        shape: [] },
   ],
 
-  schema: {
-    dtype: 'float32',
-    task: 'general',
-    input_format: 'json',
+  ports: {
+    inputs: [],
+    outputs: [
+      { name: 'out', datatype: 'any', shape: [], role: 'data' },
+      { name: 'data', datatype: 'tensor', shape: ['B', 'feature_dim'], role: 'data' },
+      { name: 'labels', datatype: 'tensor', shape: ['B'], role: 'labels' },
+      { name: 'schema', datatype: 'dict', shape: [], role: 'data' },
+    ],
   },
 
-  defaultConfig: {
-    // Source
-    path: '',
-    file_format: 'json',    // 'json' | 'jsonl'
-    data_key: '',           // JSONPath to data array, e.g. "data.records"
-    label_key: 'label',
-    feature_keys: [],       // [] = infer all numeric keys
+  config: {
+    defaults: {
+      path: '',
+      file_format: 'json',
+      data_key: '',
+      label_key: 'label',
+      feature_keys: [],
+      flatten: true,
+      normalize: 'none',
+      handle_missing: 'drop',
+    },
+    schema: {
+      dtype: 'float32',
+      task: 'general',
+      input_format: 'json',
+    },
+  },
 
-    // Lightweight source normalization only
-    flatten: true,
-    normalize: 'none',
-    handle_missing: 'drop',
+  preview: 'dataset.json',
+  backend: 'dataset.json',
+
+  cache: {
+    version: '1.0.0',
+    seed: 42,
+    deterministic: true,
   },
 
   metadata: {
