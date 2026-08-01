@@ -6,12 +6,13 @@ import { Suspense } from "react"
 import Image from "next/image"
 import Link from "next/link"
 import RegisterForm from "@/components/RegisterForm"
-import { ShaderAnimation } from "@/components/ShaderAnimation"
 import { Features } from "@/components/Features"
 import { ProjectTimelineDemo } from "@/components/ProjectTimelineDemo"
-import MiniPlayground from "@/components/MiniPlayground"
+import { AnimatedBeamDemo } from "@/components/Animatebeamdemo"
 import LandingFooter from "@/components/LandingFooter"
 import { LogoCloud } from "@/components/ui/logo-cloud"
+import { ShaderAnimation } from "@/components/ShaderAnimation"
+import HowItWorks from "@/components/HowItWorks"
 
 
 const FAQ_ITEMS = [
@@ -75,7 +76,7 @@ function HomeContent() {
   }, [])
 
   useEffect(() => {
-    const sections = ["features-section", "pipeline", "faqs"]
+    const sections = ["features-section", "how-it-works", "faqs"]
       .map((id) => document.getElementById(id))
       .filter(Boolean)
 
@@ -177,12 +178,12 @@ function HomeContent() {
               <span className={`absolute -bottom-1 left-0 h-0.5 bg-current transition-all duration-300 ${activeSection === "features-section" ? "w-full" : "w-0 group-hover:w-full"}`}></span>
             </button>
             <button
-              onClick={() => handleNavScroll("pipeline")}
-              className={`hover:opacity-80 transition-all relative group ${activeSection === "pipeline" ? "opacity-100" : "opacity-60"}`}
+              onClick={() => handleNavScroll("how-it-works")}
+              className={`hover:opacity-80 transition-all relative group ${activeSection === "how-it-works" ? "opacity-100" : "opacity-60"}`}
               style={{ color: FG }}
             >
-              Pipeline
-              <span className={`absolute -bottom-1 left-0 h-0.5 bg-current transition-all duration-300 ${activeSection === "pipeline" ? "w-full" : "w-0 group-hover:w-full"}`}></span>
+              How It Works
+              <span className={`absolute -bottom-1 left-0 h-0.5 bg-current transition-all duration-300 ${activeSection === "how-it-works" ? "w-full" : "w-0 group-hover:w-full"}`}></span>
             </button>
             <button
               onClick={() => handleNavScroll("faqs")}
@@ -236,7 +237,7 @@ function HomeContent() {
               className="border rounded-2xl flex flex-col p-4 gap-1"
             >
               <button onClick={() => handleNavScroll("features-section")} className="text-lg font-semibold py-3 px-4 w-full text-left rounded-xl hover:bg-white/10 transition" style={{ color: FG }}>Features</button>
-              <button onClick={() => handleNavScroll("pipeline")} className="text-lg font-semibold py-3 px-4 w-full text-left rounded-xl hover:bg-white/10 transition" style={{ color: FG }}>Pipeline</button>
+              <button onClick={() => handleNavScroll("how-it-works")} className="text-lg font-semibold py-3 px-4 w-full text-left rounded-xl hover:bg-white/10 transition" style={{ color: FG }}>How It Works</button>
               <button onClick={() => handleNavScroll("faqs")} className="text-lg font-semibold py-3 px-4 w-full text-left rounded-xl hover:bg-white/10 transition" style={{ color: FG }}>FAQs</button>
               <Link href="/about" className="text-lg font-semibold py-3 px-4 w-full text-left rounded-xl hover:bg-white/10 transition" style={{ color: FG }} onClick={() => setMobileNavOpen(false)}>About</Link>
               <div className="h-px w-full my-2" style={{ backgroundColor: `${FG}10` }} />
@@ -269,7 +270,15 @@ function HomeContent() {
       <main className="">
         {/* ── Hero ── */}
         <section className="relative h-screen flex flex-col md:flex-row items-center justify-center px-6 overflow-hidden pt-32 md:pt-12">
-          <ShaderAnimation />
+          <video
+            className="absolute inset-0 w-full h-full object-cover z-0 pointer-events-none"
+            autoPlay
+            loop
+            muted
+            playsInline
+          >
+            <source src="/hero.mp4" type="video/mp4" />
+          </video>
           <div className="relative z-10 flex flex-col md:flex-row items-center justify-between w-full max-w-6xl mx-auto gap-8 md:gap-0">
             <div className="flex-1 text-center md:text-left">
               <h1
@@ -326,55 +335,26 @@ function HomeContent() {
         <section className="pt-6 px-8 max-w-7xl mx-auto">
           <div className="text-center mb-10">
             <h2 style={{ color: FG }} className="font-headline text-3xl md:text-4xl font-bold mb-3 tracking-tight">
-              Try the Canvas
+              Data Flow Visualized
             </h2>
             <p style={{ color: `${FG}70` }} className="max-w-xl mx-auto">
-              Drag nodes to preview how data flows through a visual pipeline.
+              Watch data stream from any source into the central model — then export through APIs and deploy anywhere.
             </p>
           </div>
-          <MiniPlayground />
+          <AnimatedBeamDemo />
         </section>
 
-        {/* ── Pipeline Protocol ── */}
-        <section id="pipeline" className="py-32 px-8 max-w-7xl mx-auto">
+        {/* ── How It Works ── */}
+        <section id="how-it-works" className="py-32 px-8 max-w-7xl mx-auto">
           <div className="text-center mb-24">
             <h2 style={{ color: FG }} className="font-headline text-4xl md:text-5xl font-bold mb-4 tracking-tight">
-              The Pipeline Protocol
+              How It Works
             </h2>
             <p style={{ color: `${FG}70` }} className="max-w-xl mx-auto">
-              Architecture simplified. Orchestrate neural networks through a spatial canvas
-              designed for speed.
+              From raw data to deployed model — follow the five-step flow that makes proto-ML the fastest path from idea to production.
             </p>
           </div>
-          <div className="grid md:grid-cols-3 gap-12">
-            {[
-              { num: "01", icon: "token", title: "Initialize Data", body: "Connect your dataset clusters. Our spatial engine auto-detects schemas and prepares the tensor flow." },
-              { num: "02", icon: "layers", title: "Draft Architecture", body: "Drag and connect visual nodes to build sophisticated model architectures without touching a single line of boilerplate." },
-              { num: "03", icon: "rocket_launch", title: "Deploy & Scale", body: "Compile your pipeline to highly optimized Python code or deploy directly to our serverless inference edge." },
-            ].map(({ num, icon, title, body }) => (
-              <div key={num} className="group relative">
-                <div
-                  style={{ color: `${FG}06` }}
-                  className="absolute -top-12 -left-4 text-8xl font-bold font-headline select-none"
-                >
-                  {num}
-                </div>
-                <div
-                  style={{ backgroundColor: `${FG}06`, borderColor: `${FG}15` }}
-                  className="border p-10 rounded-xl hover:bg-opacity-10 transition-colors duration-500 relative z-10 min-h-80 flex flex-col justify-end"
-                >
-                  <div
-                    style={{ backgroundColor: `${FG}12`, color: FG }}
-                    className="mb-8 w-14 h-14 rounded-full flex items-center justify-center"
-                  >
-                    <span className="material-symbols-outlined text-3xl">{icon}</span>
-                  </div>
-                  <h3 style={{ color: FG }} className="font-headline text-2xl font-bold mb-4">{title}</h3>
-                  <p style={{ color: `${FG}70` }} className="text-sm leading-relaxed">{body}</p>
-                </div>
-              </div>
-            ))}
-          </div>
+          <HowItWorks />
         </section>
 
         {/* ── Testimonials ── */}
@@ -394,16 +374,23 @@ function HomeContent() {
 
           <div className="flex flex-col gap-8">
             {/* Single Row: Left scroll */}
-            <div className="overflow-hidden flex">
+            <div className="overflow-hidden">
               <div 
-                className="animate-marquee hover:[animation-play-state:paused] flex gap-8 items-center py-4"
-                style={{ animationDuration: '60s' }}
+                className="hover:pause-animation flex gap-8 items-center py-4"
+                style={{ 
+                  display: 'flex',
+                  width: 'max-content',
+                  animationName: 'marquee',
+                  animationDuration: '15s',
+                  animationTimingFunction: 'linear',
+                  animationIterationCount: 'infinite'
+                }}
               >
                 {[...TESTIMONIALS, ...TESTIMONIALS].map((item, idx) => (
                   <div
                     key={`${item.name}-${idx}`}
                     style={{ backgroundColor: `${FG}06`, borderColor: `${FG}15` }}
-                    className="border p-8 rounded-2xl w-100 shrink-0 relative group"
+                    className="border p-8 rounded-2xl min-w-[300px] shrink-0 relative group"
                   >
                     <span style={{ color: FG, opacity: 0.1 }} className="material-symbols-outlined absolute top-4 right-4 text-3xl">format_quote</span>
                     <p style={{ color: FG }} className="text-md font-medium leading-relaxed mb-6 italic opacity-90">&ldquo;{item.quote}&rdquo;</p>
@@ -477,6 +464,7 @@ function HomeContent() {
 
         {/* ── CTA ── */}
         <section className="py-32 px-8 text-center relative overflow-hidden">
+          <ShaderAnimation />
           <div
             style={{ background: `radial-gradient(ellipse at center, ${FG}08 0%, transparent 70%)` }}
             className="absolute inset-0"

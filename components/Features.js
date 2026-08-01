@@ -205,6 +205,12 @@ export function Features() {
                                             </div>
                                             <span className="block h-fit rounded border px-3 py-1.5 text-sm shadow-sm">Sarang</span>
                                         </div>
+                                        <div className="relative flex w-[calc(50%+1.75rem)] items-center justify-end gap-3">
+                                            <span className="block h-fit rounded border px-3 py-1.5 text-sm shadow-sm">Janvi</span>
+                                            <div className="ring-background size-10 ring-4">
+                                                <img className="size-full rounded-full" src="/janvi.png" alt="Janvi" />
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
                             </CardContent>
