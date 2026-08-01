@@ -31,6 +31,7 @@ import AnnotationNode from './nodes/AnnotationNode';
 import ShapeNode from './nodes/ShapeNode';
 import GroupNode from './nodes/GroupNode';
 import { getPaletteCategories } from './NodePalette';
+import { getInputPorts, getOutputPorts, getNodeConfigDefaults, getNodeConfigSchema } from '@/nodes/nodeRegistry';
 import { ANNOTATION_SHAPES, RectIcon } from './AnnotationsPanel';
 import { v4 as uuidv4 } from 'uuid';
 import {
@@ -530,7 +531,7 @@ function Spotlight({ isOpen, onClose }) {
 
     if (isDataset && node.def) {
       const def = node.def;
-      const initialConfig = { ...def.defaultConfig };
+      const initialConfig = { ...getNodeConfigDefaults(def.type) };
       const pythonCode = generateDatasetPythonCode(def.type, initialConfig);
 
       addNode({
@@ -540,19 +541,19 @@ function Spotlight({ isOpen, onClose }) {
         zIndex: 100,
         data: {
           nodeModel: {
-            type: def.type, label: def.label, inputs: def.inputs, outputs: def.outputs,
-            config: initialConfig, schema: { ...def.schema }, metadata: { ...def.metadata }, pythonCode,
+            type: def.type, label: def.label, inputs: getInputPorts(def.type), outputs: getOutputPorts(def.type),
+            config: initialConfig, schema: { ...getNodeConfigSchema(def.type) }, metadata: { ...def.metadata }, pythonCode,
           },
         },
       });
       addExecutionNode(newId, {
-        type: def.type, label: def.label, inputs: def.inputs.map(p => p.name),
-        outputs: def.outputs.map(p => p.name), config: initialConfig,
-        schema: { ...def.schema }, metadata: { ...def.metadata }, pythonCode,
+        type: def.type, label: def.label, inputs: getInputPorts(def.type).map(p => p.name),
+        outputs: getOutputPorts(def.type).map(p => p.name), config: initialConfig,
+        schema: { ...getNodeConfigSchema(def.type) }, metadata: { ...def.metadata }, pythonCode,
       });
     } else if (node.def) {
       const def = node.def;
-      const initialConfig = { ...(def.defaultConfig || {}) };
+      const initialConfig = { ...(getNodeConfigDefaults(def.type) || {}) };
       const pythonCode = isLifecycle
         ? generateLifecyclePythonCode(def.type, initialConfig)
         : generateTransformPythonCode(def.type, initialConfig);
@@ -564,15 +565,15 @@ function Spotlight({ isOpen, onClose }) {
         zIndex: 100,
         data: {
           nodeModel: {
-            type: def.type, label: def.label, inputs: (def.inputs || []).map(p => p.name),
-            outputs: (def.outputs || []).map(p => p.name), params: initialConfig,
+            type: def.type, label: def.label, inputs: getInputPorts(def.type),
+            outputs: getOutputPorts(def.type), params: initialConfig,
             config: initialConfig, kind: isLifecycle ? 'lifecycle' : 'transform', pythonCode,
           },
         },
       });
       addExecutionNode(newId, {
-        type: def.type, label: def.label, inputs: (def.inputs || []).map(p => p.name),
-        outputs: (def.outputs || []).map(p => p.name), config: initialConfig,
+        type: def.type, label: def.label, inputs: getInputPorts(def.type).map(p => p.name),
+        outputs: getOutputPorts(def.type).map(p => p.name), config: initialConfig,
         kind: isLifecycle ? 'lifecycle' : 'transform', pythonCode,
       });
     }
@@ -1742,7 +1743,7 @@ function InteractiveCanvas({ onCanvasChange, onPointerMove, onEditingNodeChange,
 
     if (isDataset && node.def) {
       const def = node.def;
-      const initialConfig = { ...def.defaultConfig };
+      const initialConfig = { ...getNodeConfigDefaults(def.type) };
       const pythonCode = generateDatasetPythonCode(def.type, initialConfig);
 
       addNode({
@@ -1752,28 +1753,28 @@ function InteractiveCanvas({ onCanvasChange, onPointerMove, onEditingNodeChange,
         zIndex: 100,
         data: {
           nodeModel: {
-            type: def.type, label: def.label, inputs: def.inputs, outputs: def.outputs,
-            config: initialConfig, schema: { ...def.schema }, metadata: { ...def.metadata }, pythonCode,
+            type: def.type, label: def.label, inputs: getInputPorts(def.type), outputs: getOutputPorts(def.type),
+            config: initialConfig, schema: { ...getNodeConfigSchema(def.type) }, metadata: { ...def.metadata }, pythonCode,
           },
         },
       });
       addExecutionNode(newId, {
-        type: def.type, label: def.label, inputs: def.inputs.map(p => p.name),
-        outputs: def.outputs.map(p => p.name),
+        type: def.type, label: def.label, inputs: getInputPorts(def.type).map(p => p.name),
+        outputs: getOutputPorts(def.type).map(p => p.name),
         portMap: {
-          inputs: Object.fromEntries(def.inputs.map(p => [p.name, p])),
-          outputs: Object.fromEntries(def.outputs.map(p => [p.name, p])),
+          inputs: Object.fromEntries(getInputPorts(def.type).map(p => [p.name, p])),
+          outputs: Object.fromEntries(getOutputPorts(def.type).map(p => [p.name, p])),
         },
-        config: initialConfig, schema: { ...def.schema }, metadata: { ...def.metadata }, pythonCode,
+        config: initialConfig, schema: { ...getNodeConfigSchema(def.type) }, metadata: { ...def.metadata }, pythonCode,
       });
     } else if ((isTransform || isLifecycle) && node.def) {
       const def = node.def;
-      const initialConfig = { ...(def.defaultConfig || {}) };
+      const initialConfig = { ...(getNodeConfigDefaults(def.type) || {}) };
       const pythonCode = isLifecycle
         ? generateLifecyclePythonCode(def.type, initialConfig)
         : generateTransformPythonCode(def.type, initialConfig);
-      const inputs = (def.inputs || []).map(p => p.name);
-      const outputs = (def.outputs || []).map(p => p.name);
+      const inputs = getInputPorts(def.type).map(p => p.name);
+      const outputs = getOutputPorts(def.type).map(p => p.name);
 
       addNode({
         id: newId,
@@ -1784,7 +1785,7 @@ function InteractiveCanvas({ onCanvasChange, onPointerMove, onEditingNodeChange,
           nodeModel: {
             type: def.type, label: def.label, inputs, outputs,
             params: initialConfig, config: initialConfig,
-            uiSchema: { ...(def.uiSchema || {}) }, accepts: def.accepts || [],
+            uiSchema: { ...(getNodeConfigSchema(def.type) || {}) }, accepts: def.accepts || [],
             produces: def.produces || [], kind: isLifecycle ? 'lifecycle' : 'transform',
             category: def.category, pythonCode,
           },
@@ -1792,7 +1793,7 @@ function InteractiveCanvas({ onCanvasChange, onPointerMove, onEditingNodeChange,
       });
       addExecutionNode(newId, {
         type: def.type, label: def.label, inputs, outputs,
-        config: initialConfig, uiSchema: { ...(def.uiSchema || {}) },
+        config: initialConfig, uiSchema: { ...(getNodeConfigSchema(def.type) || {}) },
         accepts: def.accepts || [], produces: def.produces || [],
         kind: isLifecycle ? 'lifecycle' : 'transform', category: def.category, pythonCode,
       });

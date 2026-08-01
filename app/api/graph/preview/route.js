@@ -2,7 +2,11 @@ import { NextResponse } from 'next/server';
 import { bootstrapPluginsFromRepo } from '../../../../lib/plugins/pluginBootstrap.js';
 import { compileExecutionGraph } from '../../../../lib/executor/pipelineCompiler.js';
 import { buildNodeDiagnostics } from '../../../../lib/executor/nodeDiagnostics.js';
+import { PREVIEW, RUN } from '../../../../lib/executor/executionContract.js';
 
+// Preview is the synthetic, in-process sampling path (getSample-based
+// runtimes). It is NEVER a "Run pipeline" implementation and its outputs are
+// NEVER persisted as run results — only an ephemeral sample returned to the UI.
 export async function POST(request) {
   const body = await request.json();
   const {
@@ -11,18 +15,29 @@ export async function POST(request) {
     n = 5,
     validationMode = 'strict',
     seed,
-    executionMode = 'one_off_compile',
-    writeBack = false,
-    failurePolicy = 'fail-fast',
+    mode: requestedMode,
+    executionMode: legacyMode,
   } = body || {};
+
+  const requestedPreviewMode = requestedMode || legacyMode;
+  if (requestedPreviewMode === RUN) {
+    return NextResponse.json(
+      {
+        error: 'one_off_compile is the Run-pipeline contract. Use /api/graph/runs to execute a pipeline. This endpoint only performs a synthetic Preview.',
+        details: {
+          requestedMode: requestedPreviewMode,
+          supportedModes: ['preview'],
+        },
+      },
+      { status: 400 },
+    );
+  }
+
   if (!graph || !targetNodeId) {
     return NextResponse.json({ error: 'Missing graph or targetNodeId in request body' }, { status: 400 });
   }
 
   const normalizedMode = validationMode === 'relax' ? 'relax' : 'strict';
-  const normalizedExecutionMode = executionMode === 'pipeline_topological' ? 'pipeline_topological' : 'one_off_compile';
-  const normalizedFailurePolicy = failurePolicy === 'fail-fast' ? 'fail-fast' : 'fail-fast';
-  const requestedWriteBack = writeBack === true;
 
   try {
     await bootstrapPluginsFromRepo();
@@ -42,7 +57,6 @@ export async function POST(request) {
     }
 
     try {
-      // Dynamically import the executor helper (supports CommonJS or ESM exports)
       const mod = await import('../../../../lib/executor/createExecutor.js');
       const createDefaultExecutor = mod.createDefaultExecutor || (mod.default && mod.default.createDefaultExecutor) || mod.default;
       if (typeof createDefaultExecutor !== 'function') {
@@ -51,16 +65,6 @@ export async function POST(request) {
 
       const executor = createDefaultExecutor();
       const sample = await executor.preview(graph, targetNodeId, n);
-      const writeBackPayload = requestedWriteBack
-        ? {
-            nodeId: targetNodeId,
-            output: sample,
-            provenance: {
-              source: 'one_off',
-              mode: normalizedExecutionMode,
-            },
-          }
-        : null;
 
       return NextResponse.json({
         ok: true,
@@ -69,14 +73,10 @@ export async function POST(request) {
         metadata: validation.metadata,
         nodeDiagnostics,
         execution: {
-          mode: normalizedExecutionMode,
-          failurePolicy: normalizedFailurePolicy,
-          writeBackRequested: requestedWriteBack,
+          mode: PREVIEW,
         },
-        writeBackPayload,
       });
     } catch (previewErr) {
-      // Preview execution can fail in backend-unavailable scenarios; still return workable compiled code.
       const compiled = compileExecutionGraph(graph, { validationMode: normalizedMode, seed });
       if (!compiled.ok) {
         return NextResponse.json(
@@ -100,9 +100,7 @@ export async function POST(request) {
         warnings: [...(validation.warnings || []), ...(compiled.warnings || [])],
         nodeDiagnostics,
         execution: {
-          mode: normalizedExecutionMode,
-          failurePolicy: normalizedFailurePolicy,
-          writeBackRequested: requestedWriteBack,
+          mode: PREVIEW,
         },
         metadata: {
           ...validation.metadata,
@@ -111,7 +109,6 @@ export async function POST(request) {
       });
     }
   } catch (err) {
-    // Propagate validation errors as 400 with structured details
     if (err && err.type === 'ValidationError') {
       return NextResponse.json({ error: err.message, details: err.details }, { status: 400 });
     }

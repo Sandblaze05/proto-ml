@@ -4,17 +4,20 @@ function createTransformDef({
   category,
   accepts = ['*'],
   produces = ['*'],
-  inputs = [{ name: 'in', datatype: 'any', shape: [], optional: false }],
-  outputs = [{ name: 'out', datatype: 'any', shape: [] }],
+  inputs = [{ name: 'in', datatype: 'any', shape: [], optional: false, role: 'data' }],
+  outputs = [{ name: 'out', datatype: 'any', shape: [], role: 'data' }],
   defaultConfig = {},
   uiSchema = {},
+  preview = null,
+  backend = null,
+  cache = { version: '1.0.0', seed: 42, deterministic: true },
 }) {
   const normalizedOutputs = Array.isArray(outputs) ? outputs : [];
   const hasOutPort = normalizedOutputs.some((port) => port && port.name === 'out');
   return {
     type,
-    domain: 'core',
     kind: 'transform',
+    domain: 'core',
     category,
     level: 1,
     label,
@@ -24,9 +27,21 @@ function createTransformDef({
     inputs,
     outputs: hasOutPort
       ? normalizedOutputs
-      : [{ name: 'out', datatype: 'any', shape: [] }, ...normalizedOutputs],
-    defaultConfig,
+      : [{ name: 'out', datatype: 'any', shape: [], role: 'data' }, ...normalizedOutputs],
+    ports: {
+      inputs,
+      outputs: hasOutPort
+        ? normalizedOutputs
+        : [{ name: 'out', datatype: 'any', shape: [], role: 'data' }, ...normalizedOutputs],
+    },
+    config: {
+      defaults: defaultConfig,
+      schema: uiSchema,
+    },
     uiSchema,
+    preview: preview || type,
+    backend: backend || type,
+    cache,
     metadata: { domain: 'core' },
   };
 }

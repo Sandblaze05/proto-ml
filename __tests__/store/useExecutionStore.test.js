@@ -6,7 +6,7 @@ function resetExecutionStore() {
     nodes: {},
     edges: [],
     executionRuntime: {
-      mode: 'pipeline_topological',
+      mode: 'one_off_compile',
       failurePolicy: 'fail-fast',
     },
     executionLock: {
@@ -208,7 +208,7 @@ describe('useExecutionStore', () => {
       resetExecutionStore();
       const state = useExecutionStore.getState();
 
-      state.beginRun({ runId: 'run-1', mode: 'pipeline_topological', failurePolicy: 'fail-fast' });
+      state.beginRun({ runId: 'run-1', mode: 'one_off_compile', failurePolicy: 'fail-fast' });
       state.markNodeStatus({ runId: 'run-1', nodeId: 'd1', status: 'running' });
       state.markNodeStatus({ runId: 'run-1', nodeId: 'd1', status: 'succeeded' });
       state.markNodeStatus({ runId: 'run-1', nodeId: 't1', status: 'failed', error: 'boom' });
@@ -220,6 +220,28 @@ describe('useExecutionStore', () => {
       expect(next.runs['run-1'].failedNodeId).toBe('t1');
       expect(next.nodeStatuses['run-1'].d1.status).toBe('succeeded');
       expect(next.nodeStatuses['run-1'].t1.status).toBe('failed');
+    });
+
+    it('enforces the explicit run/preview execution contract', () => {
+      resetExecutionStore();
+      const state = useExecutionStore.getState();
+
+      // "Run pipeline" defaults to the sole run implementation: one_off_compile.
+      expect(state.executionRuntime.mode).toBe('one_off_compile');
+
+      // Configuring with the synthetic Preview mode is not a valid run mode;
+      // it must fall back to the configured run mode, never become a run.
+      state.configureExecutionRuntime({ mode: 'preview' });
+      expect(useExecutionStore.getState().executionRuntime.mode).toBe('one_off_compile');
+
+      // The legacy topological mode is no longer a run mode (it was the synthetic
+      // preview path); it also falls back to the run mode.
+      state.configureExecutionRuntime({ mode: 'pipeline_topological' });
+      expect(useExecutionStore.getState().executionRuntime.mode).toBe('one_off_compile');
+
+      // An explicit run mode is accepted.
+      state.configureExecutionRuntime({ mode: 'one_off_compile' });
+      expect(useExecutionStore.getState().executionRuntime.mode).toBe('one_off_compile');
     });
 
     it('enforces execution lock and supports one-off write-back', () => {

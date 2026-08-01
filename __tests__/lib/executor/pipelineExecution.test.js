@@ -298,7 +298,7 @@ class MockPythonRuntime {
       // For simplicity, we'll just pass data that should flow here
     });
 
-    if (nodeType.startsWith('dataset.')) {
+    if (['dataset.csv', 'dataset.text', 'dataset.image', 'dataset.json', 'dataset.database', 'dataset.api'].includes(nodeType)) {
       return { data: this.createDataset(nodeType, config), type: 'dataset' };
     }
 

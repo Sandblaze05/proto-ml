@@ -8,6 +8,9 @@ function createLifecycleDef({
   outputs = [],
   defaultConfig = {},
   uiSchema = {},
+  preview = null,
+  backend = null,
+  cache = { version: '1.0.0', seed: 42, deterministic: true },
 }) {
   const normalizedOutputs = Array.isArray(outputs) ? outputs : [];
   const hasOutPort = normalizedOutputs.some((port) => port && port.name === 'out');
@@ -22,9 +25,21 @@ function createLifecycleDef({
     inputs,
     outputs: hasOutPort
       ? normalizedOutputs
-      : [{ name: 'out', datatype: 'any', shape: [] }, ...normalizedOutputs],
-    defaultConfig,
+      : [{ name: 'out', datatype: 'any', shape: [], role: 'data' }, ...normalizedOutputs],
+    ports: {
+      inputs,
+      outputs: hasOutPort
+        ? normalizedOutputs
+        : [{ name: 'out', datatype: 'any', shape: [], role: 'data' }, ...normalizedOutputs],
+    },
+    config: {
+      defaults: defaultConfig,
+      schema: uiSchema,
+    },
     uiSchema,
+    preview: preview || type,
+    backend: backend || type,
+    cache,
     metadata: { stage: category },
   };
 }

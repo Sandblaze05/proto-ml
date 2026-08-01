@@ -65,8 +65,17 @@ describe('nodeRegistry', () => {
       kind: 'transform',
       label: 'Runtime Added Transform',
       category: 'test',
-      inputs: [{ name: 'in', datatype: 'any', shape: [], optional: false }],
-      outputs: [{ name: 'out', datatype: 'any', shape: [] }],
+      ports: {
+        inputs: [{ name: 'in', datatype: 'any', shape: [], optional: false }],
+        outputs: [{ name: 'out', datatype: 'any', shape: [] }],
+      },
+      config: {
+        defaults: {},
+        schema: null,
+      },
+      preview: type,
+      backend: type,
+      cache: { version: '1.0.0', seed: 42, deterministic: true },
     };
 
     const registration = registerNodeDef(def);

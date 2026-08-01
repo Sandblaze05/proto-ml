@@ -398,7 +398,7 @@ describe('Pipeline Compiler & Template Generation', () => {
     });
 
     it('handles datasets with various types (json, csv, image, text)', () => {
-      const datasetTypes = ['dataset.csv', 'dataset.json', 'dataset.image_folder', 'dataset.text'];
+      const datasetTypes = ['dataset.csv', 'dataset.json', 'dataset.image', 'dataset.text'];
 
       datasetTypes.forEach((dsType) => {
         const result = compileExecutionGraph({
@@ -500,8 +500,17 @@ describe('Pipeline Compiler & Template Generation', () => {
         label: 'Strict Ports Plugin Node',
         accepts: ['*'],
         produces: ['*'],
-        inputs: [{ name: 'plugin_in', datatype: 'any', shape: [], optional: false }],
-        outputs: [{ name: 'plugin_out', datatype: 'any', shape: [] }],
+        ports: {
+          inputs: [{ name: 'plugin_in', datatype: 'any', shape: [], optional: false }],
+          outputs: [{ name: 'plugin_out', datatype: 'any', shape: [] }],
+        },
+        config: {
+          defaults: {},
+          schema: null,
+        },
+        preview: 'transform.plugin.strict_ports',
+        backend: 'transform.plugin.strict_ports',
+        cache: { version: '1.0.0', seed: 42, deterministic: true },
       }, { overwrite: true });
 
       try {

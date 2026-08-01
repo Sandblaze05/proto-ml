@@ -5,14 +5,14 @@
  */
 export const ImageFolderDatasetDef = {
   type: 'dataset.image',
+  kind: 'dataset',
   category: 'dataset',
   label: 'Image Folder',
   icon: 'ImageIcon',
-  color: '#c084fc', // purple
+  color: '#c084fc',
 
   inputs: [],
 
-  // Typed output ports — downstream nodes validate against these
   outputs: [
     { name: 'out',         datatype: 'any',        shape: [] },
     { name: 'images',      datatype: 'tensor',     shape: ['B', 'C', 'H', 'W'] },
@@ -20,23 +20,41 @@ export const ImageFolderDatasetDef = {
     { name: 'classes',     datatype: 'list',        shape: ['num_classes'] },
   ],
 
-  schema: {
-    dtype: 'float32',
-    task: 'classification',
-    input_format: 'image',
+  ports: {
+    inputs: [],
+    outputs: [
+      { name: 'out', datatype: 'any', shape: [], role: 'data' },
+      { name: 'images', datatype: 'tensor', shape: ['B', 'C', 'H', 'W'], role: 'data' },
+      { name: 'labels', datatype: 'tensor', shape: ['B'], role: 'labels' },
+      { name: 'classes', datatype: 'list', shape: ['num_classes'], role: 'data' },
+    ],
   },
 
-  defaultConfig: {
-    // Source
-    path: '',
-    format: 'jpg',
-    recursive: true,
-    label_strategy: 'folder_name', // 'folder_name' | 'csv_mapping' | 'json_mapping' | 'none'
-    label_file: '',
+  config: {
+    defaults: {
+      path: '',
+      format: 'jpg',
+      recursive: true,
+      label_strategy: 'folder_name',
+      label_file: '',
+      resize: [224, 224],
+      normalize: 'imagenet',
+      color_mode: 'RGB',
+    },
+    schema: {
+      dtype: 'float32',
+      task: 'classification',
+      input_format: 'image',
+    },
+  },
 
-    resize: [224, 224],
-    normalize: 'imagenet',       // Source-level defaults for previews
-    color_mode: 'RGB',
+  preview: 'dataset.image',
+  backend: 'dataset.image',
+
+  cache: {
+    version: '1.0.0',
+    seed: 42,
+    deterministic: true,
   },
 
   metadata: {

@@ -4,10 +4,11 @@
  */
 export const DatabaseDatasetDef = {
   type: 'dataset.database',
+  kind: 'dataset',
   category: 'dataset',
   label: 'Database Dataset',
   icon: 'DatabaseIcon',
-  color: '#f87171', // red
+  color: '#f87171',
 
   inputs: [],
 
@@ -18,30 +19,46 @@ export const DatabaseDatasetDef = {
     { name: 'columns',      datatype: 'list',        shape: ['num_columns'] },
   ],
 
-  schema: {
-    dtype: 'float32',
-    task: 'tabular',
-    input_format: 'database',
+  ports: {
+    inputs: [],
+    outputs: [
+      { name: 'out', datatype: 'any', shape: [], role: 'data' },
+      { name: 'features', datatype: 'tensor', shape: ['B', 'num_features'], role: 'data' },
+      { name: 'targets', datatype: 'tensor', shape: ['B'], role: 'labels' },
+      { name: 'columns', datatype: 'list', shape: ['num_columns'], role: 'data' },
+    ],
   },
 
-  defaultConfig: {
-    // Connection
-    db_type: 'postgresql',        // 'postgresql' | 'mysql' | 'sqlite' | 'mongodb'
-    host: 'localhost',
-    port: 5432,
-    database: '',
-    username: '',
-    password: '',
+  config: {
+    defaults: {
+      db_type: 'postgresql',
+      host: 'localhost',
+      port: 5432,
+      database: '',
+      username: '',
+      password: '',
+      table: '',
+      query: '',
+      target_column: '',
+      feature_columns: [],
+      chunk_size: 10000,
+      normalize: 'standard',
+      handle_missing: 'drop',
+    },
+    schema: {
+      dtype: 'float32',
+      task: 'tabular',
+      input_format: 'database',
+    },
+  },
 
-    // Query
-    table: '',
-    query: '',                    // Custom SQL query (overrides table)
-    target_column: '',
-    feature_columns: [],
+  preview: 'dataset.database',
+  backend: 'dataset.database',
 
-    chunk_size: 10000,
-    normalize: 'standard',
-    handle_missing: 'drop',
+  cache: {
+    version: '1.0.0',
+    seed: 42,
+    deterministic: true,
   },
 
   metadata: {
