@@ -25,12 +25,12 @@ function createLifecycleDef({
     inputs,
     outputs: hasOutPort
       ? normalizedOutputs
-      : [{ name: 'out', datatype: 'any', shape: [], role: 'data' }, ...normalizedOutputs],
+      : [{ name: 'out', datatype: 'tabular', shape: [], role: 'data' }, ...normalizedOutputs],
     ports: {
       inputs,
       outputs: hasOutPort
         ? normalizedOutputs
-        : [{ name: 'out', datatype: 'any', shape: [], role: 'data' }, ...normalizedOutputs],
+        : [{ name: 'out', datatype: 'tabular', shape: [], role: 'data' }, ...normalizedOutputs],
     },
     config: {
       defaults: defaultConfig,
@@ -49,11 +49,11 @@ export const LIFECYCLE_NODES = [
     type: 'lifecycle.split',
     label: 'Split',
     category: 'core-workflow',
-    inputs: [{ name: 'dataset', datatype: 'any', shape: [], optional: false }],
+    inputs: [{ name: 'dataset', datatype: 'tabular', shape: [], optional: false }],
     outputs: [
-      { name: 'train', datatype: 'any', shape: [] },
-      { name: 'val', datatype: 'any', shape: [] },
-      { name: 'test', datatype: 'any', shape: [] },
+      { name: 'train', datatype: 'tabular', shape: [] },
+      { name: 'val', datatype: 'tabular', shape: [] },
+      { name: 'test', datatype: 'tabular', shape: [] },
     ],
     defaultConfig: {
       train_pct: 70,
@@ -72,7 +72,7 @@ export const LIFECYCLE_NODES = [
     type: 'lifecycle.batch_loader',
     label: 'Batch Loader',
     category: 'core-workflow',
-    inputs: [{ name: 'dataset', datatype: 'any', shape: [], optional: false }],
+    inputs: [{ name: 'dataset', datatype: 'tabular', shape: [], optional: false }],
     outputs: [{ name: 'batches', datatype: 'dataloader', shape: [] }],
     defaultConfig: {
       batch_size: 32,
@@ -88,7 +88,7 @@ export const LIFECYCLE_NODES = [
     label: 'Model Builder',
     category: 'core-workflow',
     inputs: [
-      { name: 'train_data', datatype: 'any', shape: [], optional: true },
+      { name: 'train_data', datatype: 'tabular', shape: [], optional: true },
       { name: 'config', datatype: 'dict', shape: [], optional: true },
     ],
     outputs: [{ name: 'model', datatype: 'model', shape: [] }],
@@ -127,7 +127,7 @@ export const LIFECYCLE_NODES = [
     category: 'core-workflow',
     inputs: [
       { name: 'model', datatype: 'model', shape: [], optional: true },
-      { name: 'targets', datatype: 'any', shape: [], optional: true },
+      { name: 'targets', datatype: 'tabular', shape: [], optional: true },
       { name: 'config', datatype: 'dict', shape: [], optional: true },
     ],
     outputs: [
@@ -152,8 +152,8 @@ export const LIFECYCLE_NODES = [
     produces: ['model', 'metrics', 'logs', 'artifacts'],
     inputs: [
       { name: 'model', datatype: 'model', shape: [], optional: false },
-      { name: 'train_data', datatype: 'any', shape: [], optional: true },
-      { name: 'val_data', datatype: 'any', shape: [], optional: true },
+      { name: 'train_data', datatype: 'tabular', shape: [], optional: true },
+      { name: 'val_data', datatype: 'tabular', shape: [], optional: true },
       { name: 'objective', datatype: 'loss', shape: [], optional: true },
     ],
     outputs: [
@@ -180,10 +180,10 @@ export const LIFECYCLE_NODES = [
     produces: ['metrics', 'predictions', 'reports'],
     inputs: [
       { name: 'model', datatype: 'model', shape: [], optional: false },
-      { name: 'eval_data', datatype: 'any', shape: [], optional: true },
-      { name: 'test_data', datatype: 'any', shape: [], optional: true },
+      { name: 'eval_data', datatype: 'tabular', shape: [], optional: true },
+      { name: 'test_data', datatype: 'tabular', shape: [], optional: true },
       { name: 'objective', datatype: 'loss', shape: [], optional: true },
-      { name: 'targets', datatype: 'any', shape: [], optional: true },
+      { name: 'targets', datatype: 'tabular', shape: [], optional: true },
     ],
     outputs: [
       { name: 'metrics', datatype: 'dict', shape: [] },
@@ -206,8 +206,8 @@ export const LIFECYCLE_NODES = [
     produces: ['predictions', 'confidence_scores'],
     inputs: [
       { name: 'model', datatype: 'model', shape: [], optional: false },
-      { name: 'inference_data', datatype: 'any', shape: [], optional: true },
-      { name: 'test_data', datatype: 'any', shape: [], optional: true },
+      { name: 'inference_data', datatype: 'tabular', shape: [], optional: true },
+      { name: 'test_data', datatype: 'tabular', shape: [], optional: true },
     ],
     outputs: [
       { name: 'predictions', datatype: 'dict', shape: [] },
@@ -230,7 +230,7 @@ export const LIFECYCLE_NODES = [
     category: 'core-workflow',
     inputs: [
       { name: 'model', datatype: 'model', shape: [], optional: true },
-      { name: 'train_data', datatype: 'any', shape: [], optional: true },
+      { name: 'train_data', datatype: 'tabular', shape: [], optional: true },
       { name: 'objective', datatype: 'loss', shape: [], optional: true },
     ],
     outputs: [
@@ -276,11 +276,11 @@ export const LIFECYCLE_NODES = [
     label: 'Feature Engineer',
     category: 'core-workflow',
     inputs: [
-      { name: 'dataset', datatype: 'any', shape: [], optional: false },
+      { name: 'dataset', datatype: 'tabular', shape: [], optional: false },
       { name: 'config', datatype: 'dict', shape: [], optional: true },
     ],
     outputs: [
-      { name: 'features', datatype: 'any', shape: [] },
+      { name: 'features', datatype: 'tabular', shape: [] },
       { name: 'feature_meta', datatype: 'dict', shape: [] },
     ],
     defaultConfig: {
@@ -299,8 +299,8 @@ export const LIFECYCLE_NODES = [
     label: 'Ensemble',
     category: 'core-workflow',
     inputs: [
-      { name: 'models', datatype: 'any', shape: [], optional: false },
-      { name: 'validation_data', datatype: 'any', shape: [], optional: true },
+      { name: 'models', datatype: 'model', shape: [], optional: false },
+      { name: 'validation_data', datatype: 'tabular', shape: [], optional: true },
     ],
     outputs: [
       { name: 'ensemble_model', datatype: 'model', shape: [] },

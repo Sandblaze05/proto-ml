@@ -13,7 +13,7 @@ export const JSONDatasetDef = {
   inputs: [],
 
   outputs: [
-    { name: 'out',          datatype: 'any',        shape: [] },
+    { name: 'out',          datatype: 'tabular',   shape: [] },
     { name: 'data',         datatype: 'tensor',     shape: ['B', 'feature_dim'] },
     { name: 'labels',       datatype: 'tensor',     shape: ['B'] },
     { name: 'schema',       datatype: 'dict',        shape: [] },
@@ -22,7 +22,7 @@ export const JSONDatasetDef = {
   ports: {
     inputs: [],
     outputs: [
-      { name: 'out', datatype: 'any', shape: [], role: 'data' },
+      { name: 'out', datatype: 'tabular', shape: [], role: 'data' },
       { name: 'data', datatype: 'tensor', shape: ['B', 'feature_dim'], role: 'data' },
       { name: 'labels', datatype: 'tensor', shape: ['B'], role: 'labels' },
       { name: 'schema', datatype: 'dict', shape: [], role: 'data' },

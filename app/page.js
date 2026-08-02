@@ -277,10 +277,10 @@ function HomeContent() {
             muted
             playsInline
           >
-            <source src="/hero.mp4" type="video/mp4" />
+            <source src="/sunset-lake-pixel-moewalls-com.mp4" type="video/mp4" />
           </video>
           <div className="relative z-10 flex flex-col md:flex-row items-center justify-between w-full max-w-6xl mx-auto gap-8 md:gap-0">
-            <div className="flex-1 text-center md:text-left">
+            <div className="flex-1 text-center md:text-left [text-shadow:0px_0px_90px_black]">
               <h1
                 style={{ color: FG }}
                 className="font-headline text-5xl sm:text-6xl md:text-8xl font-extrabold tracking-tighter mb-8 leading-[0.95]"
@@ -390,7 +390,7 @@ function HomeContent() {
                   <div
                     key={`${item.name}-${idx}`}
                     style={{ backgroundColor: `${FG}06`, borderColor: `${FG}15` }}
-                    className="border p-8 rounded-2xl min-w-[300px] shrink-0 relative group"
+                    className="border p-8 rounded-2xl min-w-75 shrink-0 relative group"
                   >
                     <span style={{ color: FG, opacity: 0.1 }} className="material-symbols-outlined absolute top-4 right-4 text-3xl">format_quote</span>
                     <p style={{ color: FG }} className="text-md font-medium leading-relaxed mb-6 italic opacity-90">&ldquo;{item.quote}&rdquo;</p>

@@ -20,15 +20,16 @@ describe('nodeRegistry', () => {
     expect(NODE_REGISTRY['transform.core.route']).toBeDefined();
   });
 
-  it('supports wildcard datatype compatibility for core nodes', () => {
-    expect(arePortsCompatible({ datatype: 'any' }, { datatype: 'tensor' })).toBe(true);
-    expect(arePortsCompatible({ datatype: 'dict' }, { datatype: 'any' })).toBe(true);
+  it('rejects wildcard datatype compatibility for core nodes', () => {
+    expect(arePortsCompatible({ datatype: 'any' }, { datatype: 'tensor' })).toBe(false);
+    expect(arePortsCompatible({ datatype: 'dict' }, { datatype: 'any' })).toBe(false);
+    expect(arePortsCompatible({ datatype: 'any' }, { datatype: 'any' })).toBe(true);
   });
 
   it('infers semantic port roles from names and datatypes', () => {
     expect(inferPortRole({ name: 'train_data', datatype: 'any' })).toBe('data');
     expect(inferPortRole({ name: 'loss', datatype: 'loss' })).toBe('objective');
-    expect(inferPortRole({ name: 'custom_output', datatype: 'any' })).toBe('any');
+    expect(inferPortRole({ name: 'custom_output', datatype: 'any' })).toBe('unknown');
     expect(inferPortRole({ name: 'foo', datatype: 'tensor' })).toBe('unknown');
   });
 

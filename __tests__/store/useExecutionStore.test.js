@@ -134,16 +134,16 @@ describe('useExecutionStore', () => {
 
       state.addExecutionNode('src', {
         type: 'dataset.csv',
-        outputs: [{ name: 'features', datatype: 'tensor' }],
+        outputs: [{ name: 'out', datatype: 'tabular' }],
       });
       state.addExecutionNode('tgt', {
         type: 'lifecycle.batch_loader',
-        inputs: [{ name: 'dataset', datatype: 'any' }],
+        inputs: [{ name: 'dataset', datatype: 'tabular' }],
       });
 
-      const result = state.validateConnection('src', 'tgt', 'features', 'dataset');
+      const result = state.validateConnection('src', 'tgt', 'out', 'dataset');
       expect(result.ok).toBe(true);
-      expect(state.canConnect('src', 'tgt', 'features', 'dataset')).toBe(true);
+      expect(state.canConnect('src', 'tgt', 'out', 'dataset')).toBe(true);
     });
 
     it('returns capability mismatch diagnostics', () => {
@@ -173,16 +173,16 @@ describe('useExecutionStore', () => {
 
       state.addExecutionNode('src', {
         type: 'dataset.csv',
-        outputs: [{ name: 'features', datatype: 'tensor' }],
+        outputs: [{ name: 'out', datatype: 'tabular' }],
       });
       state.addExecutionNode('tgt', {
         type: 'transform.core.map',
-        inputs: [{ name: 'in', datatype: 'any' }],
+        inputs: [{ name: 'in', datatype: 'tabular' }],
       });
 
-      const result = state.validateConnection('src', 'tgt', 'features', 'in');
+      const result = state.validateConnection('src', 'tgt', 'out', 'in');
       expect(result.ok).toBe(true);
-      expect(state.canConnect('src', 'tgt', 'features', 'in')).toBe(true);
+      expect(state.canConnect('src', 'tgt', 'out', 'in')).toBe(true);
     });
 
     it('canConnect is side-effect free for rejected connections', () => {

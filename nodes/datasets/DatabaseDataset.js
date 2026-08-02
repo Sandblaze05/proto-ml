@@ -13,7 +13,7 @@ export const DatabaseDatasetDef = {
   inputs: [],
 
   outputs: [
-    { name: 'out',          datatype: 'any',        shape: [] },
+    { name: 'out',          datatype: 'tabular',   shape: [] },
     { name: 'features',     datatype: 'tensor',     shape: ['B', 'num_features'] },
     { name: 'targets',      datatype: 'tensor',     shape: ['B'] },
     { name: 'columns',      datatype: 'list',        shape: ['num_columns'] },
@@ -22,7 +22,7 @@ export const DatabaseDatasetDef = {
   ports: {
     inputs: [],
     outputs: [
-      { name: 'out', datatype: 'any', shape: [], role: 'data' },
+      { name: 'out', datatype: 'tabular', shape: [], role: 'data' },
       { name: 'features', datatype: 'tensor', shape: ['B', 'num_features'], role: 'data' },
       { name: 'targets', datatype: 'tensor', shape: ['B'], role: 'labels' },
       { name: 'columns', datatype: 'list', shape: ['num_columns'], role: 'data' },

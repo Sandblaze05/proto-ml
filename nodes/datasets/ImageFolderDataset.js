@@ -14,7 +14,7 @@ export const ImageFolderDatasetDef = {
   inputs: [],
 
   outputs: [
-    { name: 'out',         datatype: 'any',        shape: [] },
+    { name: 'out',         datatype: 'tensor',     shape: [] },
     { name: 'images',      datatype: 'tensor',     shape: ['B', 'C', 'H', 'W'] },
     { name: 'labels',      datatype: 'tensor',     shape: ['B'] },
     { name: 'classes',     datatype: 'list',        shape: ['num_classes'] },
@@ -23,7 +23,7 @@ export const ImageFolderDatasetDef = {
   ports: {
     inputs: [],
     outputs: [
-      { name: 'out', datatype: 'any', shape: [], role: 'data' },
+      { name: 'out', datatype: 'tensor', shape: [], role: 'data' },
       { name: 'images', datatype: 'tensor', shape: ['B', 'C', 'H', 'W'], role: 'data' },
       { name: 'labels', datatype: 'tensor', shape: ['B'], role: 'labels' },
       { name: 'classes', datatype: 'list', shape: ['num_classes'], role: 'data' },

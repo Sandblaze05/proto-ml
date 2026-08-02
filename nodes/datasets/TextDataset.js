@@ -13,7 +13,7 @@ export const TextDatasetDef = {
   inputs: [],
 
   outputs: [
-    { name: 'out',          datatype: 'any',        shape: [] },
+    { name: 'out',          datatype: 'sequence',  shape: [] },
     { name: 'input_ids',     datatype: 'sequence',   shape: ['B', 'max_length'] },
     { name: 'attention_mask', datatype: 'sequence',  shape: ['B', 'max_length'] },
     { name: 'labels',        datatype: 'tensor',     shape: ['B'] },
@@ -23,7 +23,7 @@ export const TextDatasetDef = {
   ports: {
     inputs: [],
     outputs: [
-      { name: 'out', datatype: 'any', shape: [], role: 'data' },
+      { name: 'out', datatype: 'sequence', shape: [], role: 'data' },
       { name: 'input_ids', datatype: 'sequence', shape: ['B', 'max_length'], role: 'data' },
       { name: 'attention_mask', datatype: 'sequence', shape: ['B', 'max_length'], role: 'data' },
       { name: 'labels', datatype: 'tensor', shape: ['B'], role: 'labels' },

@@ -270,7 +270,6 @@ export function inferPortRole(port) {
   const datatype = String(port.datatype || '').trim().toLowerCase();
   if (datatype && PORT_ROLE_DATATYPE_MAP[datatype]) return PORT_ROLE_DATATYPE_MAP[datatype];
 
-  if (datatype === 'any') return 'any';
   return 'unknown';
 }
 
@@ -278,7 +277,6 @@ export function arePortRolesCompatible(sourcePort, targetPort) {
   const sourceRole = inferPortRole(sourcePort);
   const targetRole = inferPortRole(targetPort);
 
-  if (sourceRole === 'any' || targetRole === 'any') return true;
   if (sourceRole === 'unknown' || targetRole === 'unknown') return true;
   if (sourceRole === targetRole) return true;
 
@@ -303,11 +301,17 @@ export function arePortRolesCompatible(sourcePort, targetPort) {
 export function arePortsCompatible(sourcePort, targetPort) {
   if (!sourcePort || !targetPort) return false;
 
-  // Wildcard datatype can connect to/from any typed port.
-  if (sourcePort.datatype === 'any' || targetPort.datatype === 'any') return true;
+  const sourceDt = String(sourcePort.datatype || '').trim().toLowerCase();
+  const targetDt = String(targetPort.datatype || '').trim().toLowerCase();
+
+  // Both untyped — compatible but flagged for explicit typing.
+  if (sourceDt === 'any' && targetDt === 'any') return true;
+
+  // One untyped and one typed — NOT compatible. Forces explicit typing.
+  if (sourceDt === 'any' || targetDt === 'any') return false;
 
   // Exact match always works
-  if (sourcePort.datatype === targetPort.datatype) {
+  if (sourceDt === targetDt) {
     return arePortRolesCompatible(sourcePort, targetPort);
   }
 

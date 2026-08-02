@@ -4,8 +4,9 @@ function createTransformDef({
   category,
   accepts = ['*'],
   produces = ['*'],
-  inputs = [{ name: 'in', datatype: 'any', shape: [], optional: false, role: 'data' }],
-  outputs = [{ name: 'out', datatype: 'any', shape: [], role: 'data' }],
+  datatype = 'tabular',
+  inputs = [{ name: 'in', datatype, shape: [], optional: false, role: 'data' }],
+  outputs = [{ name: 'out', datatype, shape: [], role: 'data' }],
   defaultConfig = {},
   uiSchema = {},
   preview = null,
@@ -27,12 +28,12 @@ function createTransformDef({
     inputs,
     outputs: hasOutPort
       ? normalizedOutputs
-      : [{ name: 'out', datatype: 'any', shape: [], role: 'data' }, ...normalizedOutputs],
+      : [{ name: 'out', datatype, shape: [], role: 'data' }, ...normalizedOutputs],
     ports: {
       inputs,
       outputs: hasOutPort
         ? normalizedOutputs
-        : [{ name: 'out', datatype: 'any', shape: [], role: 'data' }, ...normalizedOutputs],
+        : [{ name: 'out', datatype, shape: [], role: 'data' }, ...normalizedOutputs],
     },
     config: {
       defaults: defaultConfig,
@@ -51,8 +52,8 @@ export const TRANSFORM_NODES = [
     type: 'transform.core.map',
     label: 'Map',
     category: 'core',
-    inputs: [{ name: 'in', datatype: 'any', shape: [], optional: false }],
-    outputs: [{ name: 'out', datatype: 'any', shape: [] }],
+    inputs: [{ name: 'in', datatype: 'tabular', shape: [], optional: false }],
+    outputs: [{ name: 'out', datatype: 'tabular', shape: [] }],
     defaultConfig: {
       operation: 'identity',
       expression: '',
@@ -69,11 +70,11 @@ export const TRANSFORM_NODES = [
     label: 'Join',
     category: 'core',
     inputs: [
-      { name: 'left', datatype: 'any', shape: [], optional: false },
-      { name: 'right', datatype: 'any', shape: [], optional: false },
-      { name: 'aux', datatype: 'any', shape: [], optional: true },
+      { name: 'left', datatype: 'tabular', shape: [], optional: false },
+      { name: 'right', datatype: 'tabular', shape: [], optional: false },
+      { name: 'aux', datatype: 'tabular', shape: [], optional: true },
     ],
-    outputs: [{ name: 'merged', datatype: 'any', shape: [] }],
+    outputs: [{ name: 'merged', datatype: 'tabular', shape: [] }],
     defaultConfig: {
       strategy: 'concat',
       key: '',
@@ -89,10 +90,10 @@ export const TRANSFORM_NODES = [
     type: 'transform.core.route',
     label: 'Route',
     category: 'core',
-    inputs: [{ name: 'in', datatype: 'any', shape: [], optional: false }],
+    inputs: [{ name: 'in', datatype: 'tabular', shape: [], optional: false }],
     outputs: [
-      { name: 'true', datatype: 'any', shape: [] },
-      { name: 'false', datatype: 'any', shape: [] },
+      { name: 'true', datatype: 'tabular', shape: [] },
+      { name: 'false', datatype: 'tabular', shape: [] },
     ],
     defaultConfig: {
       condition: 'True',
@@ -107,10 +108,10 @@ export const TRANSFORM_NODES = [
     type: 'transform.program.if_else',
     label: 'If / Else',
     category: 'programming',
-    inputs: [{ name: 'in', datatype: 'any', shape: [], optional: false }],
+    inputs: [{ name: 'in', datatype: 'tabular', shape: [], optional: false }],
     outputs: [
-      { name: 'true', datatype: 'any', shape: [] },
-      { name: 'false', datatype: 'any', shape: [] },
+      { name: 'true', datatype: 'tabular', shape: [] },
+      { name: 'false', datatype: 'tabular', shape: [] },
     ],
     defaultConfig: {
       condition: 'True',
@@ -125,12 +126,12 @@ export const TRANSFORM_NODES = [
     type: 'transform.program.type_switch',
     label: 'Type Switch',
     category: 'programming',
-    inputs: [{ name: 'in', datatype: 'any', shape: [], optional: false }],
+    inputs: [{ name: 'in', datatype: 'tabular', shape: [], optional: false }],
     outputs: [
-      { name: 'tensor', datatype: 'any', shape: [] },
-      { name: 'sequence', datatype: 'any', shape: [] },
-      { name: 'dict', datatype: 'any', shape: [] },
-      { name: 'fallback', datatype: 'any', shape: [] },
+      { name: 'tensor', datatype: 'tensor', shape: [] },
+      { name: 'sequence', datatype: 'sequence', shape: [] },
+      { name: 'dict', datatype: 'dict', shape: [] },
+      { name: 'fallback', datatype: 'tabular', shape: [] },
     ],
     defaultConfig: {
       type_field: '',
@@ -251,6 +252,7 @@ export const TRANSFORM_NODES = [
     type: 'transform.image.resize',
     label: 'Resize',
     category: 'image',
+    datatype: 'tensor',
     defaultConfig: {
       size: [224, 224],
     },
@@ -262,6 +264,7 @@ export const TRANSFORM_NODES = [
     type: 'transform.image.normalize',
     label: 'Normalize',
     category: 'image',
+    datatype: 'tensor',
     defaultConfig: {
       mean: [0.485, 0.456, 0.406],
       std: [0.229, 0.224, 0.225],
@@ -275,6 +278,7 @@ export const TRANSFORM_NODES = [
     type: 'transform.image.grayscale',
     label: 'Grayscale',
     category: 'image',
+    datatype: 'tensor',
     defaultConfig: {
       num_output_channels: 1,
     },
@@ -286,6 +290,7 @@ export const TRANSFORM_NODES = [
     type: 'transform.image.center_crop',
     label: 'Center Crop',
     category: 'image',
+    datatype: 'tensor',
     defaultConfig: {
       size: [224, 224],
     },
@@ -297,6 +302,7 @@ export const TRANSFORM_NODES = [
     type: 'transform.image.random_flip',
     label: 'Random Flip',
     category: 'image',
+    datatype: 'tensor',
     defaultConfig: {
       direction: 'horizontal',
       p: 0.5,
@@ -310,6 +316,7 @@ export const TRANSFORM_NODES = [
     type: 'transform.image.color_jitter',
     label: 'Color Jitter',
     category: 'image',
+    datatype: 'tensor',
     defaultConfig: {
       brightness: 0.2,
       contrast: 0.2,
@@ -327,6 +334,7 @@ export const TRANSFORM_NODES = [
     type: 'transform.image.gaussian_blur',
     label: 'Gaussian Blur',
     category: 'image',
+    datatype: 'tensor',
     defaultConfig: {
       kernel_size: 3,
       sigma: [0.1, 2.0],
@@ -340,6 +348,7 @@ export const TRANSFORM_NODES = [
     type: 'transform.image.random_rotation',
     label: 'Random Rotation',
     category: 'image',
+    datatype: 'tensor',
     defaultConfig: {
       degrees: 30,
       p: 1,
@@ -353,6 +362,7 @@ export const TRANSFORM_NODES = [
     type: 'transform.text.lowercase',
     label: 'Lowercase',
     category: 'text',
+    datatype: 'sequence',
     defaultConfig: {},
     uiSchema: {},
   }),
@@ -360,6 +370,7 @@ export const TRANSFORM_NODES = [
     type: 'transform.text.remove_punctuation',
     label: 'Remove Punctuation',
     category: 'text',
+    datatype: 'sequence',
     defaultConfig: {},
     uiSchema: {},
   }),
@@ -367,6 +378,7 @@ export const TRANSFORM_NODES = [
     type: 'transform.text.tokenize',
     label: 'Tokenize',
     category: 'text',
+    datatype: 'sequence',
     defaultConfig: {
       separator: ' ',
     },
@@ -378,6 +390,7 @@ export const TRANSFORM_NODES = [
     type: 'transform.text.stopword_removal',
     label: 'Stopword Removal',
     category: 'text',
+    datatype: 'sequence',
     defaultConfig: {
       stopwords: [],
     },
@@ -389,6 +402,7 @@ export const TRANSFORM_NODES = [
     type: 'transform.text.truncation',
     label: 'Truncation',
     category: 'text',
+    datatype: 'sequence',
     defaultConfig: {
       max_length: 512,
     },
