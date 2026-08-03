@@ -264,7 +264,8 @@ function HomeContent() {
 
       <main className="">
         {/* ── Hero ── */}
-        <section className="relative h-screen flex flex-col md:flex-row items-center justify-center px-6 overflow-hidden pt-32 md:pt-12">
+        <section className="relative h-screen flex flex-col justify-end px-8 pb-16 overflow-hidden">
+          {/* Video Background */}
           <video
             className="absolute inset-0 w-full h-full object-cover z-0 pointer-events-none"
             autoPlay
@@ -274,36 +275,52 @@ function HomeContent() {
           >
             <source src="/hero.mp4" type="video/mp4" />
           </video>
-          <div className="relative z-10 flex flex-col md:flex-row items-center justify-between w-full max-w-6xl mx-auto gap-8 md:gap-0">
-            <div className="flex-1 text-center md:text-left [text-shadow:0px_0px_90px_black]">
+
+          {/* Bottom-to-Top Gradient Overlay for readability at the bottom */}
+          <div className="absolute inset-0 bg-linear-to-t from-black/80 via-black/30 to-transparent z-0 pointer-events-none"></div>
+
+          {/* Content Container */}
+          <div className="relative z-10 flex flex-col md:flex-row items-end justify-between w-full max-w-7xl mx-auto gap-12 md:gap-8">
+
+            {/* Bottom Left: 3-Line Headline */}
+            <div className="w-full md:w-1/2 drop-shadow-md">
               <h1
                 style={{ color: FG }}
-                className="font-headline text-5xl sm:text-6xl md:text-8xl font-extrabold tracking-tighter mb-8 leading-[0.95]"
+                className="font-headline text-5xl sm:text-6xl md:text-9xl text-nowrap font-extrabold tracking-tighter leading-[0.95]"
               >
-                Create ML pipelines <br />
-                <span style={{ color: FG, opacity: 0.6 }}>on the go</span>
+                Create <br />
+                ML pipelines <br />
+                <span style={{ color: FG, opacity: 0.7 }}>on the go</span>
               </h1>
-              <div className="flex flex-col md:flex-row gap-6 justify-center md:justify-start">
+            </div>
+
+            {/* Bottom Right: Subtitle & CTAs */}
+            <div className="w-full md:w-1/2 flex flex-col items-start md:items-end text-left md:text-right drop-shadow-md">
+              <p
+                style={{ color: FG }}
+                className="max-w-md mb-8 text-lg opacity-80"
+              >
+                Build, train, and deploy machine learning models effortlessly from anywhere. No complex setup required.
+              </p>
+
+              <div className="flex flex-col sm:flex-row gap-4 w-full sm:w-auto justify-end">
                 <button
                   onClick={handleOpenForm}
                   style={{ backgroundColor: FG, color: BG }}
-                  className="px-10 py-4 font-bold rounded-full shadow-xl hover:-translate-y-1 transition-all duration-300 cursor-pointer"
+                  className="px-8 py-4 font-bold rounded-full shadow-lg hover:scale-105 transition-transform duration-300 cursor-pointer text-center"
                 >
                   Get Started
                 </button>
                 <a
                   href="#"
-                  style={{ color: FG, borderColor: `${FG}30`, backgroundColor: `${FG}08` }}
-                  className="px-10 py-4 border font-medium rounded-full hover:opacity-80 transition-all text-center"
+                  style={{ color: FG, borderColor: `${FG}40` }}
+                  className="px-8 py-4 border font-medium rounded-full hover:bg-white/10 backdrop-blur-sm transition-all duration-300 text-center"
                 >
                   View Documentation
                 </a>
               </div>
             </div>
-            <div className="flex-1 flex justify-center items-center w-full md:w-auto">
-              {/* Radial Orbital Timeline in hero */}
-              <ProjectTimelineDemo />
-            </div>
+
           </div>
         </section>
 
@@ -416,9 +433,9 @@ function HomeContent() {
           <div className="flex flex-col gap-8">
             {/* Single Row: Left scroll */}
             <div className="overflow-hidden">
-              <div 
+              <div
                 className="hover:pause-animation flex gap-8 items-center py-4"
-                style={{ 
+                style={{
                   display: 'flex',
                   width: 'max-content',
                   animationName: 'marquee',
