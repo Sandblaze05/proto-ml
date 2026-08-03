@@ -120,9 +120,9 @@ export default function LandingFooter() {
         </div>
       </div>
 
-      <div className="w-full h-48 md:h-64 relative mt-10 z-0">
+      <div className="w-full h-48 md:h-64 relative mt-4 z-0">
         <div className="absolute inset-0 bg-gradient-to-t from-transparent to-[#171717] z-10 from-40%" />
-        <div className="absolute inset-0 mx-6">
+        <div className="absolute inset-0">
           <FlickeringGrid
             text={tablet ? "proto-ML" : "proto-ML"}
             fontSize={tablet ? 70 : 150}
@@ -136,11 +136,6 @@ export default function LandingFooter() {
         </div>
       </div>
 
-      <div className="relative z-10 w-full py-4 text-center border-t border-white/10">
-        <span className="text-[10px] uppercase tracking-[0.5em]" style={{ color: "#faebd733" }}>
-          Architecture Defined by Code — Design Defined by Light
-        </span>
-      </div>
     </footer>
   )
 }

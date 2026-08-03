@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useCallback, useEffect, useRef, useState } from 'react'
+import { usePathname } from 'next/navigation'
 import {
   SidebarClose, Code2, PlayCircle, AlertCircle, Terminal,
   Settings2, Play, Zap, CheckCircle2, XCircle, SkipForward,
@@ -18,6 +19,69 @@ import { sanitizeDagName } from '@/lib/executor/graphUtils'
 import { previewClientUpload } from '@/lib/clientUploadStore'
 import { RUN } from '@/lib/executor/executionContract'
 import MonacoCodeEditor from './nodes/MonacoCodeEditor'
+
+const WEIGHTS_SESSION_PREFIX = 'protoMlSessionWeights'
+
+function getWeightsSessionKey(pathname) {
+  return `${WEIGHTS_SESSION_PREFIX}:${pathname || 'canvas'}`
+}
+
+function extractWeightsArtifact(executionResult) {
+  if (!executionResult || typeof executionResult !== 'object') return null
+
+  const candidates = []
+  const pushCandidate = (value, source) => {
+    if (value && typeof value === 'object') candidates.push({ value, source })
+  }
+
+  pushCandidate(executionResult, 'run')
+  pushCandidate(executionResult.final_output, 'final_output')
+  pushCandidate(executionResult.trained_model, 'trained_model')
+  pushCandidate(executionResult.final_output?.trained_model, 'final_output.trained_model')
+  pushCandidate(executionResult.model, 'model')
+  pushCandidate(executionResult.final_output?.model, 'final_output.model')
+  pushCandidate(executionResult.artifacts, 'artifacts')
+  pushCandidate(executionResult.final_output?.artifacts, 'final_output.artifacts')
+
+  if (executionResult.leaf_outputs && typeof executionResult.leaf_outputs === 'object') {
+    Object.entries(executionResult.leaf_outputs).forEach(([nodeId, nodeVal]) => {
+      if (nodeVal && typeof nodeVal === 'object') {
+        pushCandidate(nodeVal, `leaf:${nodeId}`)
+      }
+    })
+  }
+
+  for (const candidate of candidates) {
+    const value = candidate.value || {}
+    const modelPath = String(value.model_path || value.modelPath || '').trim()
+    if (!modelPath) continue
+    return {
+      id: modelPath,
+      label: 'Weights file',
+      fileName: 'model.joblib',
+      modelPath,
+      source: candidate.source,
+      createdAt: new Date().toISOString(),
+    }
+  }
+
+  return null
+}
+
+function extractTrainedModel(executionResult) {
+  if (!executionResult || typeof executionResult !== 'object') return null
+  if (executionResult.trained_model) return executionResult.trained_model
+  if (executionResult.final_output?.trained_model) return executionResult.final_output.trained_model
+  if (executionResult.model) return executionResult.model
+  if (executionResult.final_output?.model) return executionResult.final_output.model
+  if (executionResult.leaf_outputs) {
+    for (const nodeVal of Object.values(executionResult.leaf_outputs)) {
+      if (nodeVal?.trained_model) return nodeVal.trained_model
+      if (nodeVal?.model) return nodeVal.model
+    }
+  }
+  return null
+}
 
 function NodeStatusIcon({ status, size = 10 }) {
   if (status === 'running') return (
@@ -314,7 +378,17 @@ const LogsPanel = ({ isExecuting, executionLogs, handleExecute, compiledCode, co
   )
 }
 
-const ResultPanel = ({ executionResult, downloadResultJson, downloadResultCsv, hasCsvRows, resultRows, tableHeaders, tableRows }) => {
+const ResultPanel = ({
+  executionResult,
+  downloadResultJson,
+  downloadResultCsv,
+  hasCsvRows,
+  resultRows,
+  tableHeaders,
+  tableRows,
+  weightsArtifact,
+  downloadWeights,
+}) => {
   const getMetrics = () => {
     if (!executionResult) return null;
     if (executionResult.metrics) return executionResult.metrics;
@@ -356,10 +430,17 @@ const ResultPanel = ({ executionResult, downloadResultJson, downloadResultCsv, h
       <div className="flex-1 overflow-y-auto p-3">
         {executionResult ? (
           <>
-            <div className="flex gap-2 mb-3">
-              <button onClick={downloadResultJson} className="px-2.5 py-1.5 rounded-md bg-cyan-700/40 hover:bg-cyan-700/60 text-xs font-medium border border-cyan-500/30">JSON</button>
-              <button onClick={downloadResultCsv} disabled={!hasCsvRows} className="px-2.5 py-1.5 rounded-md bg-emerald-700/40 hover:bg-emerald-700/60 text-xs font-medium border border-emerald-500/30 disabled:opacity-40 disabled:cursor-not-allowed">CSV</button>
-            </div>
+          <div className="flex gap-2 mb-3">
+            <button onClick={downloadResultJson} className="px-2.5 py-1.5 rounded-md bg-cyan-700/40 hover:bg-cyan-700/60 text-xs font-medium border border-cyan-500/30">JSON</button>
+            <button onClick={downloadResultCsv} disabled={!hasCsvRows} className="px-2.5 py-1.5 rounded-md bg-emerald-700/40 hover:bg-emerald-700/60 text-xs font-medium border border-emerald-500/30 disabled:opacity-40 disabled:cursor-not-allowed">CSV</button>
+            <button
+              onClick={downloadWeights}
+              disabled={!weightsArtifact}
+              className="px-2.5 py-1.5 rounded-md bg-amber-700/40 hover:bg-amber-700/60 text-xs font-medium border border-amber-500/30 disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              Weights
+            </button>
+          </div>
             
              {(!hasCsvRows && (metrics || model || logs || artifacts)) ? (
                <div className="space-y-4">
@@ -394,6 +475,32 @@ const ResultPanel = ({ executionResult, downloadResultJson, downloadResultCsv, h
                        {model.family && <div><span className="text-foreground/40">Algorithm:</span> <span className="text-cyan-400">{model.family}</span></div>}
                        {model.target_column && <div><span className="text-foreground/40">Target Column:</span> <span className="text-amber-400">{model.target_column}</span></div>}
                        {model.model_path && <div><span className="text-foreground/40">Model File:</span> <span className="text-emerald-300">{model.model_path}</span></div>}
+                     </div>
+                   </div>
+                 )}
+
+                 {weightsArtifact && (
+                   <div className="p-3 bg-amber-950/10 border border-amber-500/20 rounded-lg">
+                     <h3 className="text-xs font-bold text-amber-300 font-mono mb-2 uppercase tracking-wide">Weights File</h3>
+                     <div className="space-y-1.5 font-mono text-[11px] text-foreground/80">
+                       <div><span className="text-foreground/40">File:</span> <span className="text-amber-300">model.joblib</span></div>
+                       {weightsArtifact.modelPath && <div><span className="text-foreground/40">Path:</span> <span className="text-emerald-300">{weightsArtifact.modelPath}</span></div>}
+                       <div className="pt-1">
+                         <button
+                           onClick={downloadWeights}
+                           disabled={!weightsArtifact}
+                           className="px-2.5 py-1.5 rounded-md bg-amber-700/40 hover:bg-amber-700/60 text-xs font-medium border border-amber-500/30 disabled:opacity-40 disabled:cursor-not-allowed"
+                         >
+                           Download Weights
+                         </button>
+                         <button
+                           onClick={clearWeights}
+                           disabled={!weightsArtifact}
+                           className="ml-2 px-2.5 py-1.5 rounded-md bg-foreground/10 hover:bg-foreground/20 text-xs font-medium border border-foreground/20 disabled:opacity-40 disabled:cursor-not-allowed"
+                         >
+                           Clear
+                         </button>
+                       </div>
                      </div>
                    </div>
                  )}
@@ -471,12 +578,38 @@ const ResultPanel = ({ executionResult, downloadResultJson, downloadResultCsv, h
                            {model.family && <div><span className="text-foreground/40">Algorithm:</span> <span className="text-cyan-400">{model.family}</span></div>}
                            {model.target_column && <div><span className="text-foreground/40">Target Column:</span> <span className="text-amber-400">{model.target_column}</span></div>}
                            {model.model_path && <div><span className="text-foreground/40">Model File:</span> <span className="text-emerald-300">{model.model_path}</span></div>}
-                         </div>
-                       </div>
-                     )}
+                     </div>
+                   </div>
+                 )}
 
-                     {(logs || artifacts) && (
-                       <div className="p-3 bg-emerald-950/10 border border-emerald-500/20 rounded-lg">
+                 {weightsArtifact && (
+                   <div className="p-3 bg-amber-950/10 border border-amber-500/20 rounded-lg">
+                     <h3 className="text-xs font-bold text-amber-300 font-mono mb-2 uppercase tracking-wide">Weights File</h3>
+                     <div className="space-y-1.5 font-mono text-[11px] text-foreground/80">
+                       <div><span className="text-foreground/40">File:</span> <span className="text-amber-300">model.joblib</span></div>
+                       {weightsArtifact.modelPath && <div><span className="text-foreground/40">Path:</span> <span className="text-emerald-300">{weightsArtifact.modelPath}</span></div>}
+                       <div className="pt-1">
+                         <button
+                           onClick={downloadWeights}
+                           disabled={!weightsArtifact}
+                           className="px-2.5 py-1.5 rounded-md bg-amber-700/40 hover:bg-amber-700/60 text-xs font-medium border border-amber-500/30 disabled:opacity-40 disabled:cursor-not-allowed"
+                         >
+                           Download Weights
+                         </button>
+                         <button
+                           onClick={clearWeights}
+                           disabled={!weightsArtifact}
+                           className="ml-2 px-2.5 py-1.5 rounded-md bg-foreground/10 hover:bg-foreground/20 text-xs font-medium border border-foreground/20 disabled:opacity-40 disabled:cursor-not-allowed"
+                         >
+                           Clear
+                         </button>
+                       </div>
+                     </div>
+                   </div>
+                 )}
+
+                 {(logs || artifacts) && (
+                   <div className="p-3 bg-emerald-950/10 border border-emerald-500/20 rounded-lg">
                          <h3 className="text-xs font-bold text-emerald-300 font-mono mb-2 uppercase tracking-wide">Run Logs & Artifacts</h3>
                          <div className="space-y-1 font-mono text-[10px] text-foreground/80 break-all">
                            {logs?.run_dir && <div><span className="text-foreground/40">Run Directory:</span> <span className="text-emerald-400/80">{logs.run_dir}</span></div>}
@@ -507,9 +640,126 @@ const ResultPanel = ({ executionResult, downloadResultJson, downloadResultCsv, h
   )
 }
 
+const ArtifactSidebar = ({
+  panelOpen,
+  setPanelOpen,
+  artifacts = [],
+  onDownloadArtifact,
+  onDownloadAll,
+  onClearArtifacts,
+}) => {
+  return (
+    <>
+      {!panelOpen && (
+        <button
+          onClick={() => setPanelOpen(true)}
+          className="group z-[160] fixed top-[126px] right-0 flex items-center h-10 bg-background/90 backdrop-blur-md border border-r-0 border-foreground/20 rounded-l-lg shadow-lg cursor-pointer hover:bg-foreground/10 transition-all duration-300 overflow-hidden w-10 hover:w-32"
+          aria-label="Open Artifacts"
+        >
+          <div className="flex items-center pl-3 w-32 whitespace-nowrap">
+            <Download size={18} className="shrink-0 text-foreground/80" />
+            <span className="ml-2 font-semibold text-sm text-foreground opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+              Artifacts
+            </span>
+          </div>
+        </button>
+      )}
+
+      {panelOpen && (
+        <div className="z-[160] flex flex-col fixed right-0 top-16 bottom-6 w-[320px] rounded-2xl bg-background border border-foreground/20 overflow-hidden shadow-2xl">
+          <div className="flex items-center justify-between px-4 py-3 bg-foreground/5 border-b border-foreground/10">
+            <div className="flex items-center gap-2">
+              <Download size={18} className="text-amber-400" />
+              <h1 className="text-base font-bold text-foreground">Artifacts</h1>
+            </div>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={onDownloadAll}
+                disabled={artifacts.length === 0}
+                className="px-2.5 py-1.5 rounded-md bg-amber-700/30 hover:bg-amber-700/50 text-xs font-medium border border-amber-500/30 disabled:opacity-40 disabled:cursor-not-allowed"
+                title="Download artifact manifest"
+              >
+                Manifest
+              </button>
+              <button
+                onClick={onClearArtifacts}
+                disabled={artifacts.length === 0}
+                className="px-2.5 py-1.5 rounded-md bg-foreground/10 hover:bg-foreground/20 text-xs font-medium border border-foreground/20 disabled:opacity-40 disabled:cursor-not-allowed"
+                title="Clear session artifacts"
+              >
+                Clear
+              </button>
+              <button
+                onClick={() => setPanelOpen(false)}
+                className="p-1.5 hover:bg-foreground/10 rounded-md transition-colors"
+              >
+                <SidebarClose size={18} className="text-foreground/60" />
+              </button>
+            </div>
+          </div>
+
+          <div className="flex-1 overflow-y-auto p-3 space-y-2">
+            {artifacts.length === 0 ? (
+              <div className="h-full flex flex-col items-center justify-center gap-3 text-foreground/30 text-center px-8">
+                <Download size={32} className="opacity-20" />
+                <div className="text-sm leading-relaxed">
+                  Run a pipeline to collect session artifacts here.
+                </div>
+              </div>
+            ) : (
+              artifacts.map((artifact) => (
+                <div key={artifact.id} className="rounded-xl border border-foreground/10 bg-foreground/[0.02] p-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="text-sm font-semibold text-foreground truncate">{artifact.label}</div>
+                      <div className="text-[10px] font-mono uppercase tracking-wide text-foreground/40 mt-1">
+                        {artifact.kind}
+                        {artifact.sourceNodeId ? ` · ${artifact.sourceNodeId}` : ''}
+                      </div>
+                    </div>
+                    <span className="shrink-0 rounded-full border border-foreground/10 bg-foreground/5 px-2 py-0.5 text-[10px] font-mono text-foreground/50">
+                      session
+                    </span>
+                  </div>
+
+                  <div className="mt-3 flex gap-2">
+                    <button
+                      onClick={() => onDownloadArtifact(artifact, 'json')}
+                      className="px-2.5 py-1.5 rounded-md bg-cyan-700/30 hover:bg-cyan-700/50 text-xs font-medium border border-cyan-500/30"
+                    >
+                      JSON
+                    </button>
+                    {artifact.kind === 'rows' && (
+                      <button
+                        onClick={() => onDownloadArtifact(artifact, 'csv')}
+                        className="px-2.5 py-1.5 rounded-md bg-emerald-700/30 hover:bg-emerald-700/50 text-xs font-medium border border-emerald-500/30"
+                      >
+                        CSV
+                      </button>
+                    )}
+                    {artifact.kind === 'text' && (
+                      <button
+                        onClick={() => onDownloadArtifact(artifact, 'txt')}
+                        className="px-2.5 py-1.5 rounded-md bg-violet-700/30 hover:bg-violet-700/50 text-xs font-medium border border-violet-500/30"
+                      >
+                        TXT
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+    </>
+  )
+}
+
 const PipelineCompilerPanel = () => {
   const panelRef = useRef(null)
   const logsEndRef = useRef(null)
+  const pathname = usePathname()
   const [panelOpen, setPanelOpen] = useState(false)
   const [panelHover, setPanelHover] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
@@ -525,6 +775,11 @@ const PipelineCompilerPanel = () => {
   const [airflowFilename, setAirflowFilename] = useState('')
 
   const [activePanel, setActivePanel] = useState('cell')
+  const [isExecuting, setIsExecuting] = useState(false)
+  const [executionLogs, setExecutionLogs] = useState([])
+  const [executionResult, setExecutionResult] = useState(null)
+  const [weightsArtifact, setWeightsArtifact] = useState(null)
+  const weightsSessionKey = getWeightsSessionKey(pathname)
 
   const jupyterSession = useUIStore(s => s.jupyterSession)
   const setJupyterSession = useUIStore(s => s.setJupyterSession)
@@ -537,16 +792,49 @@ const PipelineCompilerPanel = () => {
     hydrateUI()
   }, [hydrateUI])
 
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    try {
+      const raw = window.sessionStorage.getItem(weightsSessionKey)
+      if (!raw) return
+      const parsed = JSON.parse(raw)
+      if (parsed?.weightsArtifact?.modelPath) {
+        setWeightsArtifact(parsed.weightsArtifact)
+      }
+    } catch {
+      // Ignore malformed session data.
+    }
+  }, [weightsSessionKey])
+
+  useEffect(() => {
+    if (executionResult === null || executionResult === undefined) return
+    const model = extractTrainedModel(executionResult)
+    const weights = model?.model_path ? extractWeightsArtifact({ ...executionResult, trained_model: model }) : null
+    setWeightsArtifact(weights)
+  }, [executionResult])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    try {
+      if (weightsArtifact) {
+        window.sessionStorage.setItem(weightsSessionKey, JSON.stringify({
+          updatedAt: new Date().toISOString(),
+          weightsArtifact,
+        }))
+      } else {
+        window.sessionStorage.removeItem(weightsSessionKey)
+      }
+    } catch {
+      // Session storage may be unavailable or full.
+    }
+  }, [weightsArtifact, weightsSessionKey])
+
   const jupyterUrl = jupyterSession.url
   const jupyterToken = jupyterSession.token
   const allowInsecure = jupyterSession.allowInsecure
   const setJupyterUrl = (url) => setJupyterSession({ url })
   const setJupyterToken = (token) => setJupyterSession({ token })
   const setAllowInsecure = (val) => setJupyterSession({ allowInsecure: val })
-
-  const [isExecuting, setIsExecuting] = useState(false)
-  const [executionLogs, setExecutionLogs] = useState([])
-  const [executionResult, setExecutionResult] = useState(null)
 
   const [isCellRunning, setIsCellRunning] = useState(false)
   const [cellRunLog, setCellRunLog] = useState([])
@@ -898,6 +1186,39 @@ const PipelineCompilerPanel = () => {
     if (csv) triggerDownload('pipeline-result.csv', 'text/csv;charset=utf-8', csv)
   }
 
+  const downloadWeights = useCallback(async () => {
+    if (!weightsArtifact?.modelPath) return
+    try {
+      const res = await fetch(`/api/artifacts/download?path=${encodeURIComponent(weightsArtifact.modelPath)}`)
+      if (!res.ok) {
+        throw new Error(await res.text())
+      }
+      const blob = await res.blob()
+      const objectUrl = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = objectUrl
+      a.download = weightsArtifact.fileName || 'model.joblib'
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      URL.revokeObjectURL(objectUrl)
+      addToast('Downloaded model weights', 'success')
+    } catch (err) {
+      addToast(`Failed to download weights: ${String(err?.message || err)}`, 'error')
+    }
+  }, [weightsArtifact, addToast])
+
+  const clearWeights = useCallback(() => {
+    setWeightsArtifact(null)
+    if (typeof window !== 'undefined') {
+      try {
+        window.sessionStorage.removeItem(weightsSessionKey)
+      } catch {
+        // Ignore storage errors.
+      }
+    }
+  }, [weightsSessionKey])
+
   const getResultRows = () => {
     const candidate = executionResult
     if (!candidate) return null
@@ -1087,6 +1408,8 @@ const PipelineCompilerPanel = () => {
               resultRows={resultRows}
               tableHeaders={tableHeaders}
               tableRows={tableRows}
+              weightsArtifact={weightsArtifact}
+              downloadWeights={downloadWeights}
             />
           )}
         </div>

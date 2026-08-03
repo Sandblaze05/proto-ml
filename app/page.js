@@ -76,30 +76,25 @@ function HomeContent() {
   }, [])
 
   useEffect(() => {
-    const sections = ["features-section", "how-it-works", "faqs"]
-      .map((id) => document.getElementById(id))
-      .filter(Boolean)
+    const sectionIds = ["quote-section", "features-section", "how-it-works", "faqs"]
 
-    if (!sections.length) return
+    const handleScroll = () => {
+      const scrollPos = window.scrollY + window.innerHeight * 0.3
 
-    const observer = new IntersectionObserver(
-      (entries) => {
-        const visible = entries
-          .filter((entry) => entry.isIntersecting)
-          .sort((a, b) => b.intersectionRatio - a.intersectionRatio)
-
-        if (visible[0]?.target?.id) {
-          setActiveSection(visible[0].target.id)
+      let current = sectionIds[0]
+      for (const id of sectionIds) {
+        const el = document.getElementById(id)
+        if (!el) continue
+        if (scrollPos >= el.offsetTop) {
+          current = id
         }
-      },
-      {
-        rootMargin: "-30% 0px -55% 0px",
-        threshold: [0.1, 0.25, 0.5],
-      },
-    )
+      }
+      setActiveSection(current)
+    }
 
-    sections.forEach((section) => observer.observe(section))
-    return () => observer.disconnect()
+    window.addEventListener("scroll", handleScroll, { passive: true })
+    handleScroll()
+    return () => window.removeEventListener("scroll", handleScroll)
   }, [])
 
   useEffect(() => {
@@ -277,7 +272,7 @@ function HomeContent() {
             muted
             playsInline
           >
-            <source src="/sunset-lake-pixel-moewalls-com.mp4" type="video/mp4" />
+            <source src="/hero.mp4" type="video/mp4" />
           </video>
           <div className="relative z-10 flex flex-col md:flex-row items-center justify-between w-full max-w-6xl mx-auto gap-8 md:gap-0">
             <div className="flex-1 text-center md:text-left [text-shadow:0px_0px_90px_black]">
@@ -316,6 +311,52 @@ function HomeContent() {
         <section className="w-full py-2 md:py-4 relative overflow-hidden">
           <div className="relative w-full px-0">
             <LogoCloud />
+          </div>
+        </section>
+
+        {/* ── Quote ── */}
+        <section id="quote-section" className="px-8 py-10 md:py-14">
+          <div
+            style={{
+              borderColor: `${FG}12`,
+            }}
+            className="relative mx-auto max-w-7xl overflow-hidden border"
+          >
+            <div
+              className="pointer-events-none absolute inset-0"
+              style={{
+                backgroundImage:
+                  "radial-gradient(circle at 1px 1px, rgba(250, 235, 215, 0.12) 1px, transparent 0)",
+                backgroundSize: "5px 5px",
+                opacity: 0.35,
+              }}
+            />
+            <div className="absolute -left-1.5 -top-1.5 h-3 w-3" style={{ backgroundColor: FG }} />
+            <div className="absolute -bottom-1.5 -left-1.5 h-3 w-3" style={{ backgroundColor: FG }} />
+            <div className="absolute -right-1.5 -top-1.5 h-3 w-3" style={{ backgroundColor: FG }} />
+            <div className="absolute -bottom-1.5 -right-1.5 h-3 w-3" style={{ backgroundColor: FG }} />
+
+            <div className="relative z-10 mx-auto max-w-7xl px-6 py-8 md:p-10 xl:py-16">
+              <p style={{ color: FG }} className="text-xs font-medium md:text-sm lg:text-lg xl:text-2xl">
+                We believe
+              </p>
+              <div className="text-2xl tracking-tighter md:text-5xl lg:text-7xl xl:text-8xl">
+                <div className="flex flex-wrap gap-1 md:gap-2 lg:gap-3 xl:gap-4">
+                  <h1 className="font-semibold">"Design should be</h1>
+                  <p className="font-thin">easy to</p>
+                </div>
+                <div className="flex flex-wrap gap-1 md:gap-2 lg:gap-3 xl:gap-4">
+                  <p className="font-thin">understand</p>
+                  <h1 className="font-semibold">because</h1>
+                  <p className="font-thin">simple</p>
+                </div>
+                <div className="flex flex-wrap gap-1 md:gap-2 lg:gap-3 xl:gap-4">
+                  <p className="font-thin">ideas</p>
+                  <h1 className="font-semibold">are quicker to</h1>
+                </div>
+                <h1 className="font-semibold">grasp..."</h1>
+              </div>
+            </div>
           </div>
         </section>
 
