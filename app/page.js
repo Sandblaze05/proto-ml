@@ -13,6 +13,8 @@ import LandingFooter from "@/components/LandingFooter"
 import { LogoCloud } from "@/components/ui/logo-cloud"
 import { ShaderAnimation } from "@/components/ShaderAnimation"
 import HowItWorks from "@/components/HowItWorks"
+import Showcase from "@/components/Showcase"
+import gsap from "gsap"
 
 
 const FAQ_ITEMS = [
@@ -125,6 +127,40 @@ function HomeContent() {
     setMobileNavOpen(false)
   }
 
+  // ── GSAP Hero entrance animation triggered when preloader curtain opens ──
+  useEffect(() => {
+    function animateHeroEntrance() {
+      const tl = gsap.timeline({ defaults: { ease: "power3.out" } })
+      tl.fromTo(
+        "#main-header",
+        { y: -60, opacity: 0 },
+        { y: 0, opacity: 1, duration: 0.8 },
+        0
+      )
+      .fromTo(
+        "#hero-headline",
+        { y: 50, opacity: 0 },
+        { y: 0, opacity: 1, duration: 1 },
+        0.15
+      )
+      .fromTo(
+        "#hero-subtitle",
+        { y: 30, opacity: 0 },
+        { y: 0, opacity: 1, duration: 0.8 },
+        0.35
+      )
+      .fromTo(
+        "#hero-ctas",
+        { y: 20, opacity: 0, scale: 0.95 },
+        { y: 0, opacity: 1, scale: 1, duration: 0.6, ease: "back.out(1.5)" },
+        0.5
+      )
+    }
+
+    window.addEventListener("preloader:done", animateHeroEntrance, { once: true })
+    return () => window.removeEventListener("preloader:done", animateHeroEntrance)
+  }, [])
+
   return (
     <div style={{ backgroundColor: BG, color: FG }} className="font-body min-h-screen">
       {formOpen && (
@@ -137,6 +173,7 @@ function HomeContent() {
 
       {/* ── Header ── */}
       <header
+        id="main-header"
         style={{
           backgroundColor: `${BG}cc`,
           borderColor: `${FG}18`,
@@ -283,7 +320,7 @@ function HomeContent() {
           <div className="relative z-10 flex flex-col md:flex-row items-end justify-between w-full max-w-7xl mx-auto gap-12 md:gap-8">
 
             {/* Bottom Left: 3-Line Headline */}
-            <div className="w-full md:w-1/2 drop-shadow-md">
+            <div id="hero-headline" className="w-full md:w-1/2 drop-shadow-md">
               <h1
                 style={{ color: FG }}
                 className="font-headline text-5xl sm:text-6xl md:text-9xl text-nowrap font-extrabold tracking-tighter leading-[0.95]"
@@ -297,13 +334,14 @@ function HomeContent() {
             {/* Bottom Right: Subtitle & CTAs */}
             <div className="w-full md:w-1/2 flex flex-col items-start md:items-end text-left md:text-right drop-shadow-md">
               <p
+                id="hero-subtitle"
                 style={{ color: FG }}
                 className="max-w-md mb-8 text-lg opacity-80"
               >
                 Build, train, and deploy machine learning models effortlessly from anywhere. No complex setup required.
               </p>
 
-              <div className="flex flex-col sm:flex-row gap-4 w-full sm:w-auto justify-end">
+              <div id="hero-ctas" className="flex flex-col sm:flex-row gap-4 w-full sm:w-auto justify-end">
                 <button
                   onClick={handleOpenForm}
                   style={{ backgroundColor: FG, color: BG }}
@@ -414,6 +452,9 @@ function HomeContent() {
           </div>
           <HowItWorks />
         </section>
+
+        {/* ── Showcase ── */}
+        <Showcase />
 
         {/* ── Testimonials ── */}
         <section style={{ backgroundColor: `${FG}05` }} className="py-32 overflow-hidden">
