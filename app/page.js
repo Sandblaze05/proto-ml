@@ -10,6 +10,7 @@ import { Features } from "@/components/Features"
 import { ProjectTimelineDemo } from "@/components/ProjectTimelineDemo"
 import { AnimatedBeamDemo } from "@/components/Animatebeamdemo"
 import LandingFooter from "@/components/LandingFooter"
+import HorizontalWords from "@/components/HorizontalWords"
 import { LogoCloud } from "@/components/ui/logo-cloud"
 import { ShaderAnimation } from "@/components/ShaderAnimation"
 import HowItWorks from "@/components/HowItWorks"
@@ -30,23 +31,6 @@ const FAQ_ITEMS = [
     q: "How is data security handled?",
     a: "Data never leaves your environment if you choose the self-hosted runner. On our cloud version, all data is encrypted at rest and in transit with SOC2 compliance.",
   },
-]
-
-const TESTIMONIALS = [
-  { name: "Tejas", role: "Software Architect", quote: "The spatial engine is a game changer for our workflow." },
-  { name: "Sarang", role: "Data Scientist", quote: "Generating tensor code has never been this intuitive." },
-  { name: "Akshat", role: "ML Engineer", quote: "Finally, a visual tool that doesn't sacrifice power for simplicity." },
-  { name: "Yash", role: "Research Head", quote: "The real-time compiler is absolutely stunning." },
-  { name: "Samyak", role: "Frontend Dev", quote: "Breathtaking design and even better functionality." },
-  { name: "Digvijay", role: "AI Researcher", quote: "Moving from idea to implementation takes minutes now." },
-  { name: "Angad", role: "Product Manager", quote: "This is the future of collaborative ML development." },
-  { name: "Jayant", role: "Backend Architect", quote: "Reliable, scalable, and beautifully designed." },
-  { name: "Modi Ji", role: "Policy Maker", quote: "Innovation at its finest. Proud to see such tools." },
-  { name: "Virat Kohli", role: "Brand Ambassador", quote: "Precision and speed - that's what proto-ML delivers." },
-  { name: "Naina", role: "Creative Director", quote: "The spatial interface is a masterpiece of UI/UX." },
-  { name: "Janvi", role: "Data Analyst", quote: "Interpreting complex datasets is now a visual pleasure." },
-  { name: "Ruqayya", role: "Security Lead", quote: "Secure, fast, and remarkably robust architecture." },
-  { name: "Zoya", role: "Operations Head", quote: "Optimizing our pipelines has never been smoother." },
 ]
 
 // Shared inline style tokens
@@ -428,6 +412,8 @@ function HomeContent() {
           <Features />
         </section>
 
+        <HorizontalWords />
+
         <section className="pt-6 px-8 max-w-7xl mx-auto">
           <div className="text-center mb-10">
             <h2 style={{ color: FG }} className="font-headline text-3xl md:text-4xl font-bold mb-3 tracking-tight">
@@ -456,60 +442,6 @@ function HomeContent() {
         {/* ── Showcase ── */}
         <Showcase />
 
-        {/* ── Testimonials ── */}
-        <section style={{ backgroundColor: `${FG}05` }} className="py-32 overflow-hidden">
-          <div className="max-w-7xl mx-auto px-8 mb-20">
-            <div className="flex flex-col md:flex-row items-end justify-between gap-8">
-              <div className="max-w-2xl">
-                <span style={{ color: `${FG}50` }} className="font-label text-xs tracking-[0.3em] uppercase block mb-4">
-                  Transmission Logs
-                </span>
-                <h2 style={{ color: FG }} className="font-headline text-4xl md:text-6xl font-extrabold tracking-tighter">
-                  Voices from the <br />Intelligence Frontier
-                </h2>
-              </div>
-            </div>
-          </div>
-
-          <div className="flex flex-col gap-8">
-            {/* Single Row: Left scroll */}
-            <div className="overflow-hidden">
-              <div
-                className="hover:pause-animation flex gap-8 items-center py-4"
-                style={{
-                  display: 'flex',
-                  width: 'max-content',
-                  animationName: 'marquee',
-                  animationDuration: '15s',
-                  animationTimingFunction: 'linear',
-                  animationIterationCount: 'infinite'
-                }}
-              >
-                {[...TESTIMONIALS, ...TESTIMONIALS].map((item, idx) => (
-                  <div
-                    key={`${item.name}-${idx}`}
-                    style={{ backgroundColor: `${FG}06`, borderColor: `${FG}15` }}
-                    className="border p-8 rounded-2xl min-w-75 shrink-0 relative group"
-                  >
-                    <span style={{ color: FG, opacity: 0.1 }} className="material-symbols-outlined absolute top-4 right-4 text-3xl">format_quote</span>
-                    <p style={{ color: FG }} className="text-md font-medium leading-relaxed mb-6 italic opacity-90">&ldquo;{item.quote}&rdquo;</p>
-                    <div className="flex items-center gap-3">
-                      <div style={{ backgroundColor: FG, color: BG }} className="w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm">
-                        {item.name[0].toUpperCase()}
-                      </div>
-                      <div>
-                        <p style={{ color: FG }} className="font-bold text-sm">{item.name}</p>
-                        <p style={{ color: `${FG}50` }} className="font-label text-[9px] uppercase tracking-widest">{item.role}</p>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* ── FAQ ── */}
         <section id="faqs" className="py-32 px-8 max-w-4xl mx-auto">
           <h2 style={{ color: FG }} className="font-headline text-3xl md:text-4xl font-bold mb-16 text-center">
             Frequently Queried
