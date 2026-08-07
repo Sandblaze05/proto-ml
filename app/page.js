@@ -111,40 +111,6 @@ function HomeContent() {
     setMobileNavOpen(false)
   }
 
-  // ── GSAP Hero entrance animation triggered when preloader curtain opens ──
-  useEffect(() => {
-    function animateHeroEntrance() {
-      const tl = gsap.timeline({ defaults: { ease: "power3.out" } })
-      tl.fromTo(
-        "#main-header",
-        { y: -60, opacity: 0 },
-        { y: 0, opacity: 1, duration: 0.8 },
-        0
-      )
-      .fromTo(
-        "#hero-headline",
-        { y: 50, opacity: 0 },
-        { y: 0, opacity: 1, duration: 1 },
-        0.15
-      )
-      .fromTo(
-        "#hero-subtitle",
-        { y: 30, opacity: 0 },
-        { y: 0, opacity: 1, duration: 0.8 },
-        0.35
-      )
-      .fromTo(
-        "#hero-ctas",
-        { y: 20, opacity: 0, scale: 0.95 },
-        { y: 0, opacity: 1, scale: 1, duration: 0.6, ease: "back.out(1.5)" },
-        0.5
-      )
-    }
-
-    window.addEventListener("preloader:done", animateHeroEntrance, { once: true })
-    return () => window.removeEventListener("preloader:done", animateHeroEntrance)
-  }, [])
-
   return (
     <div style={{ backgroundColor: BG, color: FG }} className="font-body min-h-screen">
       {formOpen && (

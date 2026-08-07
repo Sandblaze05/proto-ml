@@ -1,7 +1,7 @@
 'use client';
 
-import Preloader from './Preloader';
+import ScribblePreloader from './ScribblePreloader';
 
 export default function PreloaderWrapper({ onComplete }) {
-  return <Preloader onComplete={onComplete} />;
+  return <ScribblePreloader onComplete={onComplete} />;
 }
