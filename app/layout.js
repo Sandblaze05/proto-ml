@@ -18,7 +18,6 @@ export const metadata = {
 };
 
 import ToastContainer from "@/components/ToastContainer";
-import PreloaderWrapper from "@/components/PreloaderWrapper";
 
 export default function RootLayout({ children }) {
   return (
@@ -32,7 +31,6 @@ export default function RootLayout({ children }) {
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
         suppressHydrationWarning
       >
-        <PreloaderWrapper />
         {children}
         <ToastContainer />
       </body>

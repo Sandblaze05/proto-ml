@@ -8,7 +8,6 @@ import Link from "next/link"
 import RegisterForm from "@/components/RegisterForm"
 import { Features } from "@/components/Features"
 import { ProjectTimelineDemo } from "@/components/ProjectTimelineDemo"
-import { AnimatedBeamDemo } from "@/components/Animatebeamdemo"
 import LandingFooter from "@/components/LandingFooter"
 import HorizontalWords from "@/components/HorizontalWords"
 import { LogoCloud } from "@/components/ui/logo-cloud"
@@ -380,17 +379,7 @@ function HomeContent() {
 
         <HorizontalWords />
 
-        <section className="pt-6 px-8 max-w-7xl mx-auto">
-          <div className="text-center mb-10">
-            <h2 style={{ color: FG }} className="font-headline text-3xl md:text-4xl font-bold mb-3 tracking-tight">
-              Data Flow Visualized
-            </h2>
-            <p style={{ color: `${FG}70` }} className="max-w-xl mx-auto">
-              Watch data stream from any source into the central model — then export through APIs and deploy anywhere.
-            </p>
-          </div>
-          <AnimatedBeamDemo />
-        </section>
+
 
         {/* ── How It Works ── */}
         <section id="how-it-works" className="py-32 px-8 max-w-7xl mx-auto">

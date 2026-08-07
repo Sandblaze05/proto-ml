@@ -51,15 +51,15 @@ const Showcase = () => {
                         <h1 className="text-3xl font-bold">Visual Pipeline<br />Builder</h1>
                         <p className="border-[1px] rounded-3xl px-2 py-1 text-center text-[0.7rem]">Drag & Drop</p>
                     </div>
-                    <video
-                        src="/hero.mp4"
-                        alt="Activity 1"
-                        className="image-item w-full h-full object-cover rounded-[2.5rem]"
-                        autoPlay
-                        loop
-                        muted
-                        playsInline
-                    />
+                    <div
+                        className="image-item w-full h-full rounded-[2.5rem] flex items-center justify-center"
+                        style={{ backgroundColor: "#2a2a2a", border: "1px solid rgba(250,235,215,0.1)" }}
+                    >
+                        <div className="flex flex-col items-center gap-3 opacity-30">
+                            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#faebd7" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="2" width="20" height="20" rx="4"/><circle cx="12" cy="12" r="4"/><path d="M12 8v1M12 15v1M8 12h1M15 12h1"/></svg>
+                            <span style={{ color: "#faebd7", fontSize: "0.75rem", letterSpacing: "0.1em" }}>DEMO COMING SOON</span>
+                        </div>
+                    </div>
                     <div className="w-[77vw] absolute bottom-10 left-5 flex justify-between items-start z-10">
                         <p className="text-[0.68rem] font-bold text-[#f4efe7]">Design complex ML workflows visually. Connect nodes, define data flows, and iterate in real-time without writing boilerplate.</p>
                         <div className="flex justify-center items-center">
@@ -75,15 +75,15 @@ const Showcase = () => {
                         <h1 className="text-3xl font-bold">Real-time<br />Compiler</h1>
                         <p className="border-[1px] rounded-3xl px-2 py-1 text-center text-[0.7rem]">Instant</p>
                     </div>
-                    <video
-                        src="/hero.mp4"
-                        alt="Activity 2"
-                        className="image-item w-full h-full object-cover rounded-[2.5rem]"
-                        autoPlay
-                        loop
-                        muted
-                        playsInline
-                    />
+                    <div
+                        className="image-item w-full h-full rounded-[2.5rem] flex items-center justify-center"
+                        style={{ backgroundColor: "#2a2a2a", border: "1px solid rgba(250,235,215,0.1)" }}
+                    >
+                        <div className="flex flex-col items-center gap-3 opacity-30">
+                            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#faebd7" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="2" width="20" height="20" rx="4"/><circle cx="12" cy="12" r="4"/><path d="M12 8v1M12 15v1M8 12h1M15 12h1"/></svg>
+                            <span style={{ color: "#faebd7", fontSize: "0.75rem", letterSpacing: "0.1em" }}>DEMO COMING SOON</span>
+                        </div>
+                    </div>
                     <div className="w-[77vw] absolute bottom-10 left-5 flex justify-between items-start z-10">
                         <p className="text-[0.68rem] font-bold text-[#f4efe7]">Watch your pipeline compile into production-ready PyTorch, TensorFlow, or JAX code instantly as you design.</p>
                         <div className="flex justify-center items-center">
@@ -99,15 +99,15 @@ const Showcase = () => {
                         <h1 className="text-3xl font-bold">One-Click<br />Deploy</h1>
                         <p className="border-[1px] rounded-3xl px-2 py-1 text-center text-[0.7rem]">Scalable</p>
                     </div>
-                    <video
-                        src="/hero.mp4"
-                        alt="Activity 3"
-                        className="image-item w-full h-full object-cover rounded-[2.5rem]"
-                        autoPlay
-                        loop
-                        muted
-                        playsInline
-                    />
+                    <div
+                        className="image-item w-full h-full rounded-[2.5rem] flex items-center justify-center"
+                        style={{ backgroundColor: "#2a2a2a", border: "1px solid rgba(250,235,215,0.1)" }}
+                    >
+                        <div className="flex flex-col items-center gap-3 opacity-30">
+                            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#faebd7" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="2" width="20" height="20" rx="4"/><circle cx="12" cy="12" r="4"/><path d="M12 8v1M12 15v1M8 12h1M15 12h1"/></svg>
+                            <span style={{ color: "#faebd7", fontSize: "0.75rem", letterSpacing: "0.1em" }}>DEMO COMING SOON</span>
+                        </div>
+                    </div>
                     <div className="w-[77vw] absolute bottom-10 left-5 flex justify-between items-start z-10">
                         <p className="text-[0.68rem] font-bold text-[#f4efe7]">Ship your model to any cloud or edge device with a single click. Scale from prototype to production in minutes.</p>
                         <div className="flex justify-center items-center">
