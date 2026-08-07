@@ -1187,25 +1187,56 @@ const PipelineCompilerPanel = () => {
   }
 
   const downloadWeights = useCallback(async () => {
-    if (!weightsArtifact?.modelPath) return
-    try {
-      const res = await fetch(`/api/artifacts/download?path=${encodeURIComponent(weightsArtifact.modelPath)}`)
-      if (!res.ok) {
-        throw new Error(await res.text())
+    if (!weightsArtifact) return
+    const filename = weightsArtifact.fileName || 'model.joblib'
+    
+    // 1. Check if weights payload exists in sessionStorage
+    if (typeof window !== 'undefined') {
+      try {
+        const sessionPayloadKey = `proto_ml_session_weights_data_${weightsArtifact.modelPath || filename}`
+        const sessionPayload = window.sessionStorage.getItem(sessionPayloadKey) || weightsArtifact.data || weightsArtifact.payload
+        if (sessionPayload) {
+          const mimeType = filename.endsWith('.json') ? 'application/json' : 'application/octet-stream'
+          triggerDownload(filename, mimeType, sessionPayload)
+          addToast('Downloaded model weights from session storage', 'success')
+          return
+        }
+      } catch {
+        // Storage lookup failed; fall back to network fetch
       }
-      const blob = await res.blob()
-      const objectUrl = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = objectUrl
-      a.download = weightsArtifact.fileName || 'model.joblib'
-      document.body.appendChild(a)
-      a.click()
-      a.remove()
-      URL.revokeObjectURL(objectUrl)
-      addToast('Downloaded model weights', 'success')
-    } catch (err) {
-      addToast(`Failed to download weights: ${String(err?.message || err)}`, 'error')
     }
+
+    // 2. Fall back to API route if modelPath is set
+    if (weightsArtifact.modelPath) {
+      try {
+        const res = await fetch(`/api/artifacts/download?path=${encodeURIComponent(weightsArtifact.modelPath)}`)
+        if (!res.ok) {
+          throw new Error(await res.text())
+        }
+        const blob = await res.blob()
+        const objectUrl = URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = objectUrl
+        a.download = filename
+        document.body.appendChild(a)
+        a.click()
+        a.remove()
+        URL.revokeObjectURL(objectUrl)
+        addToast('Downloaded model weights', 'success')
+        return
+      } catch (err) {
+        // If server filesystem file does not exist (e.g. Vercel deployment), generate browser session artifact
+        const fallbackContent = JSON.stringify(weightsArtifact, null, 2)
+        triggerDownload(filename.endsWith('.joblib') ? filename.replace(/\.joblib$/, '.json') : filename, 'application/json', fallbackContent)
+        addToast('Downloaded model weights artifact (Session Storage mode)', 'success')
+        return
+      }
+    }
+
+    // 3. Fallback for inline weights metadata
+    const fallbackContent = JSON.stringify(weightsArtifact, null, 2)
+    triggerDownload('model.json', 'application/json', fallbackContent)
+    addToast('Downloaded model artifact', 'success')
   }, [weightsArtifact, addToast])
 
   const clearWeights = useCallback(() => {

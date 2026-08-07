@@ -37,7 +37,9 @@ export async function GET(request) {
       },
     })
   } catch (err) {
-    const message = err?.code === 'ENOENT' ? 'Weights file not found' : String(err?.message || err)
-    return NextResponse.json({ error: message }, { status: 404 })
+    const message = err?.code === 'ENOENT'
+      ? 'Weights file not found on server disk. Weights and artifacts are managed in browser session storage.'
+      : String(err?.message || err)
+    return NextResponse.json({ error: message, sessionOnly: true }, { status: 404 })
   }
 }

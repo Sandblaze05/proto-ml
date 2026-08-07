@@ -1,0 +1,7 @@
+#!/bin/sh
+echo "Running unit tests before commit..."
+npx vitest run
+if [ $? -ne 0 ]; then
+  echo "Unit tests failed. Commit aborted."
+  exit 1
+fi

@@ -262,6 +262,15 @@ export const useExecutionStore = create((set, get) => ({
       outputProvenance: writeBack,
     };
 
+    if (typeof window !== 'undefined' && window.sessionStorage) {
+      try {
+        const key = `proto_ml_session_output_${nodeId}`;
+        window.sessionStorage.setItem(key, JSON.stringify(writeBack));
+      } catch {
+        // Ignore storage quota limits
+      }
+    }
+
     set({
       nodes: {
         ...state.nodes,

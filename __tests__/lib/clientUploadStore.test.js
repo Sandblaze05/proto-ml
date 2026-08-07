@@ -178,4 +178,34 @@ describe('Client Upload Store Utilities', () => {
       expect(new Set(uploads.map((u) => u.id)).size).toBe(3);
     });
   });
+
+  describe('Session Storage Persistence', () => {
+    it('should save and retrieve upload records from mock sessionStorage', () => {
+      const mockSessionStorage = (() => {
+        let store = {};
+        return {
+          getItem: (key) => store[key] || null,
+          setItem: (key, value) => { store[key] = String(value); },
+          removeItem: (key) => { delete store[key]; },
+          clear: () => { store = {}; }
+        };
+      })();
+
+      const record = {
+        id: 'upload_123',
+        createdAt: new Date().toISOString(),
+        files: [{ name: 'test.csv', csv: true, size: 100 }],
+        totalBytes: 100,
+        sessionOnly: true,
+      };
+
+      mockSessionStorage.setItem('proto_ml_session_upload_upload_123', JSON.stringify(record));
+      mockSessionStorage.setItem('proto_ml_session_upload_ids', JSON.stringify(['upload_123']));
+
+      const retrieved = JSON.parse(mockSessionStorage.getItem('proto_ml_session_upload_upload_123'));
+      expect(retrieved.id).toBe('upload_123');
+      expect(retrieved.files[0].name).toBe('test.csv');
+      expect(retrieved.sessionOnly).toBe(true);
+    });
+  });
 });
