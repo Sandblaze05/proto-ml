@@ -575,6 +575,8 @@ function HomeContent() {
 
 export default function Home() {
   return (
-    <HomeContent />
+    <Suspense>
+      <HomeContent />
+    </Suspense>
   )
 }
