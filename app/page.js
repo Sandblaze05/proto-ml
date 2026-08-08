@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { useSearchParams, useRouter } from "next/navigation"
 import { Suspense } from "react"
 import Image from "next/image"
@@ -36,6 +36,11 @@ const FAQ_ITEMS = [
 const BG = "#171717"
 const FG = "#faebd7"
 
+const curtainPaneStyle = {
+  backgroundColor: BG,
+  boxShadow: `1.5px 0 0 0 ${BG}, -1.5px 0 0 0 ${BG}`,
+}
+
 function HomeContent() {
   const searchParams = useSearchParams()
   const router = useRouter()
@@ -46,6 +51,70 @@ function HomeContent() {
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
   const [activeSection, setActiveSection] = useState("features-section")
   const [user, setUser] = useState(null)
+  const [progress, setProgress] = useState(0)
+
+  const panesRef = useRef(null)
+  const progressRef = useRef(null)
+  const heroVideoRef = useRef(null);
+  const curtainRef = useRef(null);
+
+  useEffect(() => {
+    if (!heroVideoRef.current || !curtainRef.current) return
+
+    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    let done = false
+    const progressProxy = { value: 0 }
+    const setPct = () => setProgress(Math.round(progressProxy.value))
+
+    const loadTween = reduceMotion
+      ? null
+      : gsap.to(progressProxy, { value: 92, duration: 2.2, ease: "power2.out", onUpdate: setPct })
+
+    const playCurtainAnimation = () => {
+      if (done) return
+      done = true
+      loadTween?.kill()
+
+      const panes = gsap.utils.toArray(panesRef.current.children)
+
+      if (reduceMotion) {
+        setProgress(100)
+        gsap.to(panes, {
+          opacity: 0,
+          duration: 0.25,
+          onComplete: () => { if (curtainRef.current) curtainRef.current.style.display = "none" },
+        })
+        return
+      }
+
+      gsap
+        .timeline({
+          onComplete: () => { if (curtainRef.current) curtainRef.current.style.display = "none" },
+        })
+        .to(progressProxy, { value: 100, duration: 0.3, ease: "power1.out", onUpdate: setPct })
+        .to(progressRef.current, { opacity: 0, y: -8, duration: 0.25, ease: "power2.in" }, "-=0.05")
+        .fromTo(
+          panes,
+          { scaleY: 1, transformOrigin: "top" },
+          { scaleY: 0, duration: 0.7, ease: "expo.inOut", delay: 0.5, stagger: { each: 0.07, from: "edges" } },
+          "-=0.1"
+        )
+    }
+
+    if (heroVideoRef.current.readyState >= 3) {
+      playCurtainAnimation()
+    } else {
+      heroVideoRef.current.addEventListener("canplay", playCurtainAnimation, { once: true })
+    }
+
+    const fallback = window.setTimeout(playCurtainAnimation, 2500)
+
+    return () => {
+      window.clearTimeout(fallback)
+      loadTween?.kill()
+      heroVideoRef.current?.removeEventListener("canplay", playCurtainAnimation)
+    }
+  }, [])
 
   useEffect(() => {
     if (authError || signupParam) {
@@ -120,6 +189,31 @@ function HomeContent() {
         />
       )}
 
+      <div ref={curtainRef} className="fixed inset-0 z-999 pointer-events-none overflow-hidden">
+        <div ref={panesRef} className="absolute inset-0 flex">
+          <div style={curtainPaneStyle} className="flex flex-1 scale-y-100 origin-top will-change-transform" />
+          <div style={curtainPaneStyle} className="flex flex-1 scale-y-100 origin-top will-change-transform" />
+          <div style={curtainPaneStyle} className="flex flex-1 scale-y-100 origin-top will-change-transform" />
+          <div style={curtainPaneStyle} className="flex flex-1 scale-y-100 origin-top will-change-transform" />
+          <div style={curtainPaneStyle} className="flex flex-1 scale-y-100 origin-top will-change-transform" />
+        </div>
+
+        <div
+          ref={progressRef}
+          className="absolute inset-x-0 bottom-12 md:bottom-16 z-10 flex flex-col items-center gap-3"
+        >
+          <span
+            style={{ color: FG, fontVariantNumeric: "tabular-nums" }}
+            className="font-headline text-sm tracking-[0.2em]"
+          >
+            {progress}%
+          </span>
+          <div style={{ backgroundColor: `${FG}20` }} className="h-px w-32 md:w-40 overflow-hidden">
+            <div style={{ backgroundColor: FG, width: `${progress}%` }} className="h-full" />
+          </div>
+        </div>
+      </div>
+
       {/* ── Header ── */}
       <header
         id="main-header"
@@ -139,7 +233,7 @@ function HomeContent() {
               width={60}
               height={60}
               className="object-contain"
-              unoptimized
+              priority
             />
             <div
               style={{ color: FG }}
@@ -253,6 +347,7 @@ function HomeContent() {
         <section className="relative h-screen flex flex-col justify-end px-8 pb-16 overflow-hidden">
           {/* Video Background */}
           <video
+            ref={heroVideoRef}
             className="absolute inset-0 w-full h-full object-cover z-0 pointer-events-none"
             autoPlay
             loop
@@ -480,8 +575,6 @@ function HomeContent() {
 
 export default function Home() {
   return (
-    <Suspense>
-      <HomeContent />
-    </Suspense>
+    <HomeContent />
   )
 }
