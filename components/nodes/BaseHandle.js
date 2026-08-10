@@ -14,6 +14,7 @@ export default function BaseHandle({
   nodeId, 
   datatype = 'default', 
   label,
+  showBadge = false,
   style,
   ...props 
 }) {
@@ -58,6 +59,14 @@ export default function BaseHandle({
   const scale = isValidTarget ? 1.4 : 1;
   const boxShadow = isValidTarget ? `0 0 12px 2px ${color}` : 'none';
 
+  const directionLabel = type === 'target' ? 'Input' : type === 'source' ? 'Output' : type;
+
+  const badgePositionStyle = position === Position.Left
+    ? { left: 'calc(100% + 8px)', top: '50%', transform: 'translateY(-50%)' }
+    : position === Position.Right
+    ? { right: 'calc(100% + 8px)', top: '50%', transform: 'translateY(-50%)' }
+    : { left: '50%', bottom: 'calc(100% + 8px)', transform: 'translateX(-50%)' };
+
   // Tooltip position adjustment based on handle position
   const tooltipStyle = position === Position.Left 
     ? { left: 'calc(100% + 8px)', top: '50%', transform: 'translateY(-50%)' }
@@ -82,6 +91,20 @@ export default function BaseHandle({
         }}
         {...props}
       />
+
+      {showBadge && (
+        <div
+          className="absolute px-2 py-1 bg-[#111111] border border-white/10 text-white text-[9px] font-mono rounded-md pointer-events-none whitespace-nowrap z-[190] shadow-xl"
+          style={badgePositionStyle}
+        >
+          <div className="text-[8px] uppercase tracking-[0.2em] text-white/45 leading-none">
+            {directionLabel}
+          </div>
+          <div className="font-bold leading-tight">
+            {label || id}
+          </div>
+        </div>
+      )}
       
       {/* Tooltip */}
       <div 

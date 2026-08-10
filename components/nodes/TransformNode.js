@@ -8,6 +8,7 @@ import { useUIStore } from '../../store/useUIStore';
 import BaseHandle from './BaseHandle';
 import { inferPortDatatype, portTw } from '../../lib/portUtils';
 import { generateTransformPythonCode } from '../../lib/pythonTemplates/transformNodeTemplate';
+import { generateLifecyclePythonCode } from '../../lib/pythonTemplates/lifecycleNodeTemplate';
 import { previewGraphClient } from '../../lib/executor/clientPreviewExecutor';
 import { getNodeDef } from '../../nodes/nodeRegistry';
 import MonacoCodeEditor from './MonacoCodeEditor';
@@ -166,6 +167,19 @@ function isConfigFieldVisible(schema = {}, config = {}) {
   return true;
 }
 
+function generateNodePythonCode(nodeType, config = {}, kind = 'transform') {
+  return kind === 'lifecycle'
+    ? generateLifecyclePythonCode(nodeType, config)
+    : generateTransformPythonCode(nodeType, config);
+}
+
+function isStaleGeneratedCode(code, nodeType, kind) {
+  if (typeof code !== 'string') return false;
+  if (kind === 'lifecycle' && code.includes(`# Unknown transform: ${nodeType}`)) return true;
+  if (kind !== 'lifecycle' && code.includes(`# Unknown lifecycle node: ${nodeType}`)) return true;
+  return false;
+}
+
 function PreviewTab({ previewing, onRunPreview, previewResult, disabled = false }) {
   const analysis = useMemo(() => {
     if (!previewResult || previewResult.error) return null;
@@ -292,7 +306,12 @@ export default function TransformNode({ data, id, selected }) {
   const toggleNodeCollapse = useUIStore((s) => s.toggleNodeCollapse);
   const collapsed = !!storeCollapsed;
   const [localConfig, setLocalConfig] = useState(config);
-  const [pythonCode, setPythonCode] = useState(() => initialPythonCode || generateTransformPythonCode(type, config));
+  const [pythonCode, setPythonCode] = useState(() => {
+    if (initialPythonCode && !isStaleGeneratedCode(initialPythonCode, type, kind)) {
+      return initialPythonCode;
+    }
+    return generateNodePythonCode(type, config, kind);
+  });
   const [manualCodeOverride, setManualCodeOverride] = useState(false);
   const [codeViewNodeId, setCodeViewNodeId] = useState(id);
 
@@ -355,13 +374,13 @@ export default function TransformNode({ data, id, selected }) {
 
     const patch = { config: nextConfig, params: nextConfig };
     if (!manualCodeOverride) {
-      const generated = generateTransformPythonCode(type, nextConfig);
+      const generated = generateNodePythonCode(type, nextConfig, kind);
       setPythonCode(generated);
       patch.pythonCode = generated;
     }
 
     applyNodeUpdates(patch);
-  }, [localConfig, manualCodeOverride, type, applyNodeUpdates]);
+  }, [localConfig, manualCodeOverride, type, kind, applyNodeUpdates]);
 
   const handleCodeChange = useCallback((nextCode) => {
     setPythonCode(nextCode);
@@ -370,11 +389,11 @@ export default function TransformNode({ data, id, selected }) {
   }, [applyNodeUpdates]);
 
   const resetCodeFromTemplate = useCallback(() => {
-    const generated = generateTransformPythonCode(type, localConfig);
+    const generated = generateNodePythonCode(type, localConfig, kind);
     setPythonCode(generated);
     setManualCodeOverride(false);
     applyNodeUpdates({ pythonCode: generated });
-  }, [type, localConfig, applyNodeUpdates]);
+  }, [type, localConfig, kind, applyNodeUpdates]);
 
   const runPreview = useCallback(async (count = 5) => {
     setPreviewing(true);
@@ -391,11 +410,12 @@ export default function TransformNode({ data, id, selected }) {
   }, [execNodes, execEdges, id]);
 
   useEffect(() => {
-    if (!initialPythonCode) {
-      const generated = generateTransformPythonCode(type, localConfig);
+    if (!initialPythonCode || isStaleGeneratedCode(initialPythonCode, type, kind)) {
+      const generated = generateNodePythonCode(type, localConfig, kind);
+      setPythonCode(generated);
       applyNodeUpdates({ pythonCode: generated, config: localConfig, params: localConfig });
     }
-  }, [type, initialPythonCode, localConfig, applyNodeUpdates]);
+  }, [type, kind, initialPythonCode, localConfig, applyNodeUpdates]);
 
   const configKeys = useMemo(() => {
     const keys = new Set([...(Object.keys(uiSchema || {})), ...(Object.keys(localConfig || {}))]);

@@ -5,7 +5,6 @@ import ReactFlow, {
   Background,
   useReactFlow,
   ReactFlowProvider,
-  Handle,
   Position,
   useStore,
   useOnSelectionChange
@@ -30,6 +29,7 @@ import TransformNode from './nodes/TransformNode';
 import AnnotationNode from './nodes/AnnotationNode';
 import ShapeNode from './nodes/ShapeNode';
 import GroupNode from './nodes/GroupNode';
+import BaseHandle from './nodes/BaseHandle';
 import { getPaletteCategories } from './NodePalette';
 import { getInputPorts, getOutputPorts, getNodeConfigDefaults, getNodeConfigSchema } from '@/nodes/nodeRegistry';
 import { ANNOTATION_SHAPES, RectIcon } from './AnnotationsPanel';
@@ -203,11 +203,14 @@ function CustomNode({ id, data }) {
       )}
       {/* Input Handles */}
       {inputs.map((inp, idx) => (
-        <Handle
+        <BaseHandle
           key={`in-${inp}`}
           type="target"
           position={Position.Left}
           id={inp}
+          nodeId={id}
+          label={inp}
+          showBadge
           style={{ top: 20 + idx * 15, background: '#faebd7', border: 'none', width: 6, height: 6 }}
         />
       ))}
@@ -233,11 +236,14 @@ function CustomNode({ id, data }) {
 
       {/* Output Handles */}
       {outputs.map((out, idx) => (
-        <Handle
+        <BaseHandle
           key={`out-${out}`}
           type="source"
           position={Position.Right}
           id={out}
+          nodeId={id}
+          label={out}
+          showBadge
           style={{ top: 20 + idx * 15, background: '#faebd7', border: 'none', width: 6, height: 6 }}
         />
       ))}
