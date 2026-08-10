@@ -14,7 +14,7 @@ import { LogoCloud } from "@/components/ui/logo-cloud"
 import { ShaderAnimation } from "@/components/ShaderAnimation"
 import HowItWorks from "@/components/HowItWorks"
 import MorphSlider from "@/components/MorphSlider"
-import YouCanScroll from "@/components/ui/you-can-scroll"
+import TrueFocus from "@/components/ui/true-focus"
 import gsap from "gsap"
 
 
@@ -403,7 +403,6 @@ function HomeContent() {
                 </a>
               </div>
             </div>
-
           </div>
         </section>
 
@@ -438,23 +437,19 @@ function HomeContent() {
 
             <div className="relative z-10 mx-auto max-w-7xl px-6 py-8 md:p-10 xl:py-16">
               <p style={{ color: FG }} className="text-xs font-medium md:text-sm lg:text-lg xl:text-2xl">
-                We believe
+                Your ideas are
               </p>
               <div className="text-2xl tracking-tighter md:text-5xl lg:text-7xl xl:text-8xl">
                 <div className="flex flex-wrap gap-1 md:gap-2 lg:gap-3 xl:gap-4">
-                  <h1 className="font-semibold">"Design should be</h1>
-                  <p className="font-thin">easy to</p>
+                  <h1 className="font-semibold">too powerful</h1>
+                  <p className="font-thin">to be trapped</p>
                 </div>
                 <div className="flex flex-wrap gap-1 md:gap-2 lg:gap-3 xl:gap-4">
-                  <p className="font-thin">understand</p>
-                  <h1 className="font-semibold">because</h1>
-                  <p className="font-thin">simple</p>
+                  <p className="font-thin">in code.</p>
+                  <h1 className="font-semibold">Build them</h1>
+                  <p className="font-thin">visually.</p>
                 </div>
-                <div className="flex flex-wrap gap-1 md:gap-2 lg:gap-3 xl:gap-4">
-                  <p className="font-thin">ideas</p>
-                  <h1 className="font-semibold">are quicker to</h1>
-                </div>
-                <h1 className="font-semibold">grasp..."</h1>
+                <h1 className="font-semibold">Set them free.</h1>
               </div>
             </div>
           </div>
@@ -478,7 +473,7 @@ function HomeContent() {
 
 
         {/* ── How It Works ── */}
-        <section id="how-it-works" className="py-32 px-8 max-w-7xl mx-auto">
+        <section id="how-it-works" className="py-8 px-8 max-w-7xl mx-auto">
           <div className="text-center mb-24">
             <h2 style={{ color: FG }} className="font-headline text-4xl md:text-5xl font-bold mb-4 tracking-tight">
               How It Works
@@ -490,7 +485,16 @@ function HomeContent() {
           <HowItWorks />
         </section>
 
-        <YouCanScroll />
+        <TrueFocus 
+          sentence="design. prototype. solve. build. develop. debug. learn. cook. ship. prompt. create. test. scale. visualize."
+          separator=" "
+          manualMode={false}
+          blurAmount={5}
+          borderColor="#f59e0b"
+          glowColor="rgba(245, 158, 11, 0.6)"
+          animationDuration={0.5}
+          pauseBetweenAnimations={1}
+        />
 
         {/* ── Showcase ── */}
         <section className="py-8 px-6">
@@ -506,6 +510,7 @@ function HomeContent() {
               aberration={0.35}
               drift={0.4}
               autoplay
+              autoplayDelay={3}
               overlayColor="#171717"
               radius={40}
               showControls={false}
