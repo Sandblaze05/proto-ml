@@ -243,7 +243,7 @@ export const LIFECYCLE_NODES = [
       metric: 'accuracy',
     },
     uiSchema: {
-      method: { type: 'enum', options: ['random', 'grid', 'bayesian'] },
+      method: { type: 'enum', options: ['random', 'grid'] },
       max_trials: { type: 'number', min: 1, max: 1000, step: 1 },
       metric: { type: 'string' },
     },
@@ -312,7 +312,7 @@ export const LIFECYCLE_NODES = [
       optimize_weights: false,
     },
     uiSchema: {
-      strategy: { type: 'enum', options: ['average', 'vote', 'stacking'] },
+      strategy: { type: 'enum', options: ['average', 'vote'] },
       weights: { type: 'array:number', label: 'Weights' },
       optimize_weights: { type: 'boolean' },
     },
