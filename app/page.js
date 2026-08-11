@@ -13,8 +13,10 @@ import HorizontalWords from "@/components/HorizontalWords"
 import { LogoCloud } from "@/components/ui/logo-cloud"
 import { ShaderAnimation } from "@/components/ShaderAnimation"
 import HowItWorks from "@/components/HowItWorks"
+import { PointerHighlight } from "@/components/ui/pointer-highlight"
 import MorphSlider from "@/components/MorphSlider"
 import TrueFocus from "@/components/ui/true-focus"
+import { CountUp } from "@/components/ui/count-up"
 import gsap from "gsap"
 
 
@@ -482,6 +484,12 @@ function HomeContent() {
               How It Works
             </h2>
             <HowItWorks />
+            <div className="mx-auto max-w-5xl py-20 text-4xl font-bold tracking-tight md:text-6xl whitespace-nowrap">
+              The best way to grow is to
+              <PointerHighlight>
+                <span>collaborate</span>
+              </PointerHighlight>
+            </div>
           </div>
         </section>
 
@@ -547,9 +555,40 @@ function HomeContent() {
             <h2 style={{ color: FG }} className="font-headline text-5xl md:text-7xl font-extrabold tracking-tighter mb-8 leading-tight">
               Ready to orchestrate <br />the future?
             </h2>
-            <p style={{ color: `${FG}70` }} className="text-lg mb-12">
-              Join 15,000+ developers building the next generation of intelligence.
-            </p>
+            <div className="flex min-h-64 flex-col items-center justify-center gap-12 text-foreground">
+              <div className="flex flex-wrap items-end justify-center gap-12">
+                <div className="flex flex-col items-center gap-1">
+                  <CountUp
+                    to={1000000}
+                    separator=","
+                    digitEffect="slide"
+                    className="text-5xl font-bold tabular-nums tracking-tight"
+                  />
+                  <span className="text-xs text-muted-foreground">users</span>
+                </div>
+
+                <div className="flex flex-col items-center gap-1">
+                  <CountUp
+                    to={99.9}
+                    digitEffect="blur"
+                    className="text-5xl font-bold tabular-nums tracking-tight"
+                  />
+                  <span className="text-xs text-muted-foreground">uptime %</span>
+                </div>
+
+                <div className="flex flex-col items-center gap-1">
+                  <CountUp
+                    to={0}
+                    from={5}
+                    direction="down"
+                    separator=","
+                    digitEffect="slide"
+                    className="text-5xl font-bold tabular-nums tracking-tight"
+                  />
+                  <span className="text-xs text-muted-foreground">issues</span>
+                </div>
+              </div>
+            </div>
             <button
               onClick={handleOpenForm}
               style={{ backgroundColor: FG, color: BG }}
