@@ -3,6 +3,7 @@ import { bootstrapPluginsFromRepo } from '../../../../lib/plugins/pluginBootstra
 import { compileExecutionGraph } from '../../../../lib/executor/pipelineCompiler.js';
 import { buildNodeDiagnostics } from '../../../../lib/executor/nodeDiagnostics.js';
 import { PREVIEW, RUN } from '../../../../lib/executor/executionContract.js';
+import { getNodeDef } from '../../../../nodes/nodeRegistry.js';
 
 // Preview is the synthetic, in-process sampling path (getSample-based
 // runtimes). It is NEVER a "Run pipeline" implementation and its outputs are
@@ -35,6 +36,23 @@ export async function POST(request) {
 
   if (!graph || !targetNodeId) {
     return NextResponse.json({ error: 'Missing graph or targetNodeId in request body' }, { status: 400 });
+  }
+
+  const graphNodes = Array.isArray(graph.nodes)
+    ? Object.fromEntries(graph.nodes.map((node) => [node.id, node]))
+    : (graph.nodes || {});
+  const targetNode = graphNodes[targetNodeId];
+  if (getNodeDef(targetNode?.type)?.kind === 'lifecycle') {
+    return NextResponse.json(
+      {
+        error: 'Lifecycle nodes perform real model work. Use /api/graph/runs, Cell Run, or Run Script instead of synthetic preview.',
+        details: {
+          targetNodeId,
+          nodeType: targetNode?.type,
+        },
+      },
+      { status: 400 },
+    );
   }
 
   const normalizedMode = validationMode === 'relax' ? 'relax' : 'strict';

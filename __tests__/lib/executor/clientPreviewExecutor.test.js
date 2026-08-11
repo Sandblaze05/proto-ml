@@ -115,7 +115,7 @@ describe('previewGraphClient', () => {
     });
   });
 
-  it('supports lifecycle preview chaining from client dataset rows', async () => {
+  it('blocks lifecycle preview even when client dataset rows are available', async () => {
     const graph = {
       nodes: [
         { id: 'csv1', type: 'dataset.csv', config: { client_upload_id: 'mainUpload' } },
@@ -125,8 +125,9 @@ describe('previewGraphClient', () => {
     };
 
     const result = await previewGraphClient(graph, 'split', 10);
-    expect(result.train.length).toBe(2);
-    expect(result.val.length).toBe(1);
-    expect(result.test.length).toBe(1);
+    expect(result).toMatchObject({
+      type: 'RuntimeError',
+      error: expect.stringContaining('Lifecycle nodes perform real model work'),
+    });
   });
 });

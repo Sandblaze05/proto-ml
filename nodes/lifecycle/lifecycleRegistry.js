@@ -266,7 +266,7 @@ export const LIFECYCLE_NODES = [
       include_preprocessing: true,
     },
     uiSchema: {
-      format: { type: 'enum', options: ['onnx', 'torchscript', 'pickle', 'joblib'] },
+      format: { type: 'enum', options: ['joblib', 'pickle'] },
       path: { type: 'string' },
       include_preprocessing: { type: 'boolean' },
     },

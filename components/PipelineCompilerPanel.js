@@ -11,7 +11,7 @@ import gsap from 'gsap'
 import { useUIStore } from '@/store/useUIStore'
 import { useVariableStore } from '@/store/useVariableStore'
 import { compileExecutionGraph } from '@/lib/executor/pipelineCompiler'
-import { compilePipelineCells, compileBootstrapCell } from '@/lib/executor/nodeCellCompiler'
+import { compilePipelineCells, compileBootstrapCell, nodeIdToVar } from '@/lib/executor/nodeCellCompiler'
 import { BrowserJupyterClient, extractStructuredResult } from '@/lib/executor/browserJupyterClient'
 import { airflowExporter } from '@/lib/exporters/AirflowExporter'
 import { buildCompilerGraphFromUI } from '@/lib/exporters/buildCompilerGraphFromUI'
@@ -21,6 +21,12 @@ import { RUN } from '@/lib/executor/executionContract'
 import MonacoCodeEditor from './nodes/MonacoCodeEditor'
 
 const WEIGHTS_SESSION_PREFIX = 'protoMlSessionWeights'
+const SKLEARN_WEIGHT_FORMATS = [
+  { value: 'joblib', label: 'Joblib (.joblib)', enabled: true },
+  { value: 'pickle', label: 'Pickle via Exporter node', enabled: false },
+  { value: 'keras', label: 'Keras unavailable for sklearn', enabled: false },
+  { value: 'h5', label: 'H5 unavailable for sklearn', enabled: false },
+]
 
 function getWeightsSessionKey(pathname) {
   return `${WEIGHTS_SESSION_PREFIX}:${pathname || 'canvas'}`
@@ -43,10 +49,24 @@ function extractWeightsArtifact(executionResult) {
   pushCandidate(executionResult.artifacts, 'artifacts')
   pushCandidate(executionResult.final_output?.artifacts, 'final_output.artifacts')
 
+  if (executionResult.node_outputs && typeof executionResult.node_outputs === 'object') {
+    Object.entries(executionResult.node_outputs).forEach(([nodeId, nodeVal]) => {
+      if (nodeVal && typeof nodeVal === 'object') {
+        pushCandidate(nodeVal, `node:${nodeId}`)
+        pushCandidate(nodeVal.trained_model, `node:${nodeId}.trained_model`)
+        pushCandidate(nodeVal.model, `node:${nodeId}.model`)
+        pushCandidate(nodeVal.artifacts, `node:${nodeId}.artifacts`)
+      }
+    })
+  }
+
   if (executionResult.leaf_outputs && typeof executionResult.leaf_outputs === 'object') {
     Object.entries(executionResult.leaf_outputs).forEach(([nodeId, nodeVal]) => {
       if (nodeVal && typeof nodeVal === 'object') {
         pushCandidate(nodeVal, `leaf:${nodeId}`)
+        pushCandidate(nodeVal.trained_model, `leaf:${nodeId}.trained_model`)
+        pushCandidate(nodeVal.model, `leaf:${nodeId}.model`)
+        pushCandidate(nodeVal.artifacts, `leaf:${nodeId}.artifacts`)
       }
     })
   }
@@ -74,13 +94,97 @@ function extractTrainedModel(executionResult) {
   if (executionResult.final_output?.trained_model) return executionResult.final_output.trained_model
   if (executionResult.model) return executionResult.model
   if (executionResult.final_output?.model) return executionResult.final_output.model
+  if (executionResult.node_outputs) {
+    for (const nodeVal of Object.values(executionResult.node_outputs)) {
+      if (nodeVal?.trained_model) return nodeVal.trained_model
+      if (nodeVal?.model_path) return nodeVal
+      if (nodeVal?.artifacts?.model_path) return nodeVal.artifacts
+      if (nodeVal?.model) return nodeVal.model
+    }
+  }
   if (executionResult.leaf_outputs) {
     for (const nodeVal of Object.values(executionResult.leaf_outputs)) {
       if (nodeVal?.trained_model) return nodeVal.trained_model
+      if (nodeVal?.model_path) return nodeVal
+      if (nodeVal?.artifacts?.model_path) return nodeVal.artifacts
       if (nodeVal?.model) return nodeVal.model
     }
   }
   return null
+}
+
+function buildCellRunResultCollector(graph, order) {
+  const orderedNodeIds = (Array.isArray(order) ? order : []).map(({ nodeId }) => String(nodeId))
+  const outgoing = new Set((Array.isArray(graph?.edges) ? graph.edges : [])
+    .map((edge) => edge.source ?? edge.from)
+    .filter(Boolean)
+    .map(String))
+  const leafNodes = orderedNodeIds.filter((nodeId) => !outgoing.has(nodeId))
+
+  const outputLines = orderedNodeIds.map((nodeId) => {
+    return `    ${JSON.stringify(nodeId)}: globals().get(${JSON.stringify(nodeIdToVar(nodeId))}),`
+  })
+
+  return [
+    'import json',
+    '_pml_node_outputs = {',
+    ...outputLines,
+    '}',
+    `_pml_leaf_nodes = ${JSON.stringify(leafNodes)}`,
+    '_pml_selected_node_id = None',
+    '_pml_selected_output = None',
+    'for _pml_node_id in reversed(_pml_leaf_nodes):',
+    '    _pml_candidate = _pml_node_outputs.get(_pml_node_id)',
+    '    if isinstance(_pml_candidate, dict) and "out" in _pml_candidate:',
+    '        _pml_candidate = _pml_candidate.get("out")',
+    '    if isinstance(_pml_candidate, list):',
+    '        _pml_selected_node_id = _pml_node_id',
+    '        _pml_selected_output = _pml_candidate',
+    '        break',
+    'if _pml_selected_output is None and len(_pml_leaf_nodes) > 0:',
+    '    _pml_fallback_id = _pml_leaf_nodes[-1]',
+    '    _pml_fallback_value = _pml_node_outputs.get(_pml_fallback_id)',
+    '    if isinstance(_pml_fallback_value, dict) and "out" in _pml_fallback_value:',
+    '        _pml_fallback_value = _pml_fallback_value.get("out")',
+    '    _pml_selected_node_id = _pml_fallback_id',
+    '    _pml_selected_output = _pml_fallback_value',
+    '_pml_final_payload = {',
+    '    "graph_spec": {"leafNodes": _pml_leaf_nodes},',
+    '    "final_node_id": _pml_selected_node_id,',
+    '    "final_output": _pml_selected_output,',
+    '    "node_outputs": _pml_node_outputs,',
+    '    "leaf_outputs": {k: _pml_node_outputs.get(k) for k in _pml_leaf_nodes},',
+    '}',
+    'print(json.dumps(_pml_final_payload, indent=2, default=str))',
+  ].join('\n')
+}
+
+function buildJupyterWeightsCollector(modelPath, filename = 'model.joblib') {
+  return [
+    'import base64, json, os',
+    `_pml_weights_path = ${JSON.stringify(modelPath)}`,
+    `_pml_weights_filename = ${JSON.stringify(filename)}`,
+    'if not _pml_weights_path or not os.path.isfile(_pml_weights_path):',
+    '    print(json.dumps({"__pml_weights_payload": False, "error": f"Model file not found: {_pml_weights_path}"}))',
+    'else:',
+    '    with open(_pml_weights_path, "rb") as _pml_fp:',
+    '        _pml_data_b64 = base64.b64encode(_pml_fp.read()).decode("ascii")',
+    '    print(json.dumps({',
+    '        "__pml_weights_payload": True,',
+    '        "model_path": _pml_weights_path,',
+    '        "file_name": _pml_weights_filename,',
+    '        "data_b64": _pml_data_b64,',
+    '    }))',
+  ].join('\n')
+}
+
+function decodeBase64ToBlob(base64, mimeType = 'application/octet-stream') {
+  const binary = window.atob(base64)
+  const bytes = new Uint8Array(binary.length)
+  for (let i = 0; i < binary.length; i += 1) {
+    bytes[i] = binary.charCodeAt(i)
+  }
+  return new Blob([bytes], { type: mimeType })
 }
 
 function NodeStatusIcon({ status, size = 10 }) {
@@ -388,6 +492,9 @@ const ResultPanel = ({
   tableRows,
   weightsArtifact,
   downloadWeights,
+  clearWeights,
+  modelExportFormat,
+  setModelExportFormat,
 }) => {
   const getMetrics = () => {
     if (!executionResult) return null;
@@ -402,15 +509,7 @@ const ResultPanel = ({
   };
 
   const getTrainedModel = () => {
-    if (!executionResult) return null;
-    if (executionResult.trained_model) return executionResult.trained_model;
-    if (executionResult.final_output?.trained_model) return executionResult.final_output.trained_model;
-    if (executionResult.leaf_outputs) {
-      for (const nodeVal of Object.values(executionResult.leaf_outputs)) {
-        if (nodeVal?.trained_model) return nodeVal.trained_model;
-      }
-    }
-    return null;
+    return extractTrainedModel(executionResult);
   };
 
   const getLogsAndArtifacts = () => {
@@ -424,6 +523,7 @@ const ResultPanel = ({
   const metrics = getMetrics();
   const model = getTrainedModel();
   const { logs, artifacts } = getLogsAndArtifacts();
+  const weightFormatOptions = SKLEARN_WEIGHT_FORMATS;
 
   return (
     <div className="flex flex-col h-full">
@@ -434,12 +534,25 @@ const ResultPanel = ({
             <button onClick={downloadResultJson} className="px-2.5 py-1.5 rounded-md bg-cyan-700/40 hover:bg-cyan-700/60 text-xs font-medium border border-cyan-500/30">JSON</button>
             <button onClick={downloadResultCsv} disabled={!hasCsvRows} className="px-2.5 py-1.5 rounded-md bg-emerald-700/40 hover:bg-emerald-700/60 text-xs font-medium border border-emerald-500/30 disabled:opacity-40 disabled:cursor-not-allowed">CSV</button>
             <button
-              onClick={downloadWeights}
+              onClick={() => downloadWeights(modelExportFormat)}
               disabled={!weightsArtifact}
               className="px-2.5 py-1.5 rounded-md bg-amber-700/40 hover:bg-amber-700/60 text-xs font-medium border border-amber-500/30 disabled:opacity-40 disabled:cursor-not-allowed"
             >
               Weights
             </button>
+            <select
+              value={modelExportFormat}
+              onChange={(e) => setModelExportFormat(e.target.value)}
+              disabled={!weightsArtifact}
+              className="px-2 py-1.5 rounded-md bg-background border border-foreground/20 text-xs text-foreground disabled:opacity-40"
+              title="Quick downloads only show real formats for the current backend. Use an Exporter node for pipeline-level exports."
+            >
+              {weightFormatOptions.map((format) => (
+                <option key={format.value} value={format.value} disabled={!format.enabled}>
+                  {format.label}
+                </option>
+              ))}
+            </select>
           </div>
             
              {(!hasCsvRows && (metrics || model || logs || artifacts)) ? (
@@ -487,7 +600,7 @@ const ResultPanel = ({
                        {weightsArtifact.modelPath && <div><span className="text-foreground/40">Path:</span> <span className="text-emerald-300">{weightsArtifact.modelPath}</span></div>}
                        <div className="pt-1">
                          <button
-                           onClick={downloadWeights}
+                           onClick={() => downloadWeights(modelExportFormat)}
                            disabled={!weightsArtifact}
                            className="px-2.5 py-1.5 rounded-md bg-amber-700/40 hover:bg-amber-700/60 text-xs font-medium border border-amber-500/30 disabled:opacity-40 disabled:cursor-not-allowed"
                          >
@@ -590,7 +703,7 @@ const ResultPanel = ({
                        {weightsArtifact.modelPath && <div><span className="text-foreground/40">Path:</span> <span className="text-emerald-300">{weightsArtifact.modelPath}</span></div>}
                        <div className="pt-1">
                          <button
-                           onClick={downloadWeights}
+                           onClick={() => downloadWeights(modelExportFormat)}
                            disabled={!weightsArtifact}
                            className="px-2.5 py-1.5 rounded-md bg-amber-700/40 hover:bg-amber-700/60 text-xs font-medium border border-amber-500/30 disabled:opacity-40 disabled:cursor-not-allowed"
                          >
@@ -779,6 +892,7 @@ const PipelineCompilerPanel = () => {
   const [executionLogs, setExecutionLogs] = useState([])
   const [executionResult, setExecutionResult] = useState(null)
   const [weightsArtifact, setWeightsArtifact] = useState(null)
+  const [modelExportFormat, setModelExportFormat] = useState('joblib')
   const weightsSessionKey = getWeightsSessionKey(pathname)
 
   const jupyterSession = useUIStore(s => s.jupyterSession)
@@ -808,8 +922,7 @@ const PipelineCompilerPanel = () => {
 
   useEffect(() => {
     if (executionResult === null || executionResult === undefined) return
-    const model = extractTrainedModel(executionResult)
-    const weights = model?.model_path ? extractWeightsArtifact({ ...executionResult, trained_model: model }) : null
+    const weights = extractWeightsArtifact(executionResult)
     setWeightsArtifact(weights)
   }, [executionResult])
 
@@ -1139,11 +1252,50 @@ const PipelineCompilerPanel = () => {
       }
     }
 
+    if (overallOk) {
+      try {
+        const collectorCode = buildCellRunResultCollector(graph, order)
+        const summary = await client.executeCode(kernelId, collectorCode, { username: 'proto-ml-result' })
+        const result = extractStructuredResult(summary.logs)
+        if (result) {
+          setExecutionResult(result)
+          setActivePanel('result')
+          addToast('Pipeline result collected', 'success')
+
+          const weights = extractWeightsArtifact(result)
+          if (weights?.modelPath && typeof window !== 'undefined') {
+            try {
+              const payloadCode = buildJupyterWeightsCollector(weights.modelPath, weights.fileName || 'model.joblib')
+              const payload = await client.executeCode(kernelId, payloadCode, { username: 'proto-ml-weights' })
+              const parsedPayload = extractStructuredResult(payload.logs)
+              if (parsedPayload?.__pml_weights_payload && parsedPayload.data_b64) {
+                window.sessionStorage.setItem(
+                  `proto_ml_session_weights_data_${weights.modelPath}`,
+                  JSON.stringify({
+                    encoding: 'base64',
+                    mimeType: 'application/octet-stream',
+                    fileName: weights.fileName || 'model.joblib',
+                    data: parsedPayload.data_b64,
+                  }),
+                )
+              }
+            } catch {
+              // The server download route may still work when Jupyter shares the app filesystem.
+            }
+          }
+        }
+      } catch (err) {
+        addToast(`Pipeline ran, but result collection failed: ${String(err?.message || err)}`, 'error')
+      }
+    } else {
+      setExecutionResult(null)
+    }
+
     setCellRunStatus(overallOk ? 'success' : 'error')
     setIsCellRunning(false)
   }, [
     isCellRunning, getCompilerGraph, clearNodeExecutionStates,
-    setNodeExecutionState, jupyterUrl, jupyterToken, allowInsecure, setJupyterSession,
+    setNodeExecutionState, jupyterUrl, jupyterToken, allowInsecure, setJupyterSession, addToast,
   ])
 
   const triggerDownload = (filename, mimeType, content) => {
@@ -1186,8 +1338,12 @@ const PipelineCompilerPanel = () => {
     if (csv) triggerDownload('pipeline-result.csv', 'text/csv;charset=utf-8', csv)
   }
 
-  const downloadWeights = useCallback(async () => {
+  const downloadWeights = useCallback(async (requestedFormat = 'joblib') => {
     if (!weightsArtifact) return
+    if (requestedFormat !== 'joblib') {
+      addToast('This trained CSV model is sklearn-based. Use the Exporter node for non-joblib exports.', 'error')
+      return
+    }
     const filename = weightsArtifact.fileName || 'model.joblib'
     
     // 1. Check if weights payload exists in sessionStorage
@@ -1197,7 +1353,22 @@ const PipelineCompilerPanel = () => {
         const sessionPayload = window.sessionStorage.getItem(sessionPayloadKey) || weightsArtifact.data || weightsArtifact.payload
         if (sessionPayload) {
           const mimeType = filename.endsWith('.json') ? 'application/json' : 'application/octet-stream'
-          triggerDownload(filename, mimeType, sessionPayload)
+          const parsedPayload = typeof sessionPayload === 'string' && sessionPayload.trim().startsWith('{')
+            ? JSON.parse(sessionPayload)
+            : null
+          if (parsedPayload?.encoding === 'base64' && parsedPayload.data) {
+            const blob = decodeBase64ToBlob(parsedPayload.data, parsedPayload.mimeType || mimeType)
+            const objectUrl = URL.createObjectURL(blob)
+            const a = document.createElement('a')
+            a.href = objectUrl
+            a.download = parsedPayload.fileName || filename
+            document.body.appendChild(a)
+            a.click()
+            a.remove()
+            URL.revokeObjectURL(objectUrl)
+          } else {
+            triggerDownload(filename, mimeType, sessionPayload)
+          }
           addToast('Downloaded model weights from session storage', 'success')
           return
         }
@@ -1441,6 +1612,9 @@ const PipelineCompilerPanel = () => {
               tableRows={tableRows}
               weightsArtifact={weightsArtifact}
               downloadWeights={downloadWeights}
+              clearWeights={clearWeights}
+              modelExportFormat={modelExportFormat}
+              setModelExportFormat={setModelExportFormat}
             />
           )}
         </div>

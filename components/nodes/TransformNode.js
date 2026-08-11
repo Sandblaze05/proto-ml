@@ -320,6 +320,7 @@ export default function TransformNode({ data, id, selected }) {
   const execEdges = useExecutionStore(s => s.edges);
   const [previewing, setPreviewing] = useState(false);
   const [previewResult, setPreviewResult] = useState(null);
+  const visibleTabs = useMemo(() => (kind === 'lifecycle' ? TABS.filter((tab) => tab !== 'Preview') : TABS), [kind]);
 
   const incomingEdgeSignature = useMemo(() => {
     const incoming = (execEdges || [])
@@ -332,6 +333,12 @@ export default function TransformNode({ data, id, selected }) {
   useEffect(() => {
     setPreviewResult(null);
   }, [incomingEdgeSignature]);
+
+  useEffect(() => {
+    if (!visibleTabs.includes(activeTab)) {
+      setActiveTab(visibleTabs[0] || 'Config');
+    }
+  }, [activeTab, visibleTabs]);
 
   useEffect(() => {
     if (codeViewNodeId !== id && !execNodes[codeViewNodeId]) {
@@ -396,6 +403,10 @@ export default function TransformNode({ data, id, selected }) {
   }, [type, localConfig, kind, applyNodeUpdates]);
 
   const runPreview = useCallback(async (count = 5) => {
+    if (kind === 'lifecycle') {
+      setPreviewResult({ error: 'Lifecycle nodes run real training/export work. Use Cell Run or Run Script instead.' });
+      return;
+    }
     setPreviewing(true);
     setPreviewResult(null);
     try {
@@ -407,7 +418,7 @@ export default function TransformNode({ data, id, selected }) {
     } finally {
       setPreviewing(false);
     }
-  }, [execNodes, execEdges, id]);
+  }, [execNodes, execEdges, id, kind]);
 
   useEffect(() => {
     if (!initialPythonCode || isStaleGeneratedCode(initialPythonCode, type, kind)) {
@@ -495,7 +506,7 @@ export default function TransformNode({ data, id, selected }) {
       {!collapsed && (
         <div className="nodrag">
           <div className="flex border-b border-[#faebd7]/6 bg-black/40">
-            {TABS.map((tab) => {
+            {visibleTabs.map((tab) => {
               const Icon = TAB_ICONS[tab];
               const active = activeTab === tab;
               return (
