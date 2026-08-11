@@ -97,7 +97,8 @@ function HomeContent() {
         .fromTo(
           panes,
           { scaleY: 1, transformOrigin: "top" },
-          { scaleY: 0, duration: 0.7, ease: "expo.inOut", delay: 0.5, stagger: { each: 0.07, from: "edges" } },
+          // ADDED force3D: true to force hardware acceleration and eliminate lag
+          { scaleY: 0, force3D: true, duration: 0.7, ease: "expo.inOut", delay: 0.5, stagger: { each: 0.07, from: "edges" } },
           "-=0.1"
         )
     }
@@ -190,13 +191,15 @@ function HomeContent() {
         />
       )}
 
-      <div ref={curtainRef} className="fixed inset-0 z-999 pointer-events-none overflow-hidden">
+      {/* Fixed z-999 to valid tailwind z-[999] */}
+      <div ref={curtainRef} className="fixed inset-0 z-[999] pointer-events-none overflow-hidden">
         <div ref={panesRef} className="absolute inset-0 flex">
-          <div style={curtainPaneStyle} className="flex flex-1 scale-y-100 origin-top will-change-transform" />
-          <div style={curtainPaneStyle} className="flex flex-1 scale-y-100 origin-top will-change-transform" />
-          <div style={curtainPaneStyle} className="flex flex-1 scale-y-100 origin-top will-change-transform" />
-          <div style={curtainPaneStyle} className="flex flex-1 scale-y-100 origin-top will-change-transform" />
-          <div style={curtainPaneStyle} className="flex flex-1 scale-y-100 origin-top will-change-transform" />
+          {/* Removed conflicting tailwind classes: scale-y-100 and origin-top (GSAP handles it now) */}
+          <div style={curtainPaneStyle} className="flex flex-1 will-change-transform" />
+          <div style={curtainPaneStyle} className="flex flex-1 will-change-transform" />
+          <div style={curtainPaneStyle} className="flex flex-1 will-change-transform" />
+          <div style={curtainPaneStyle} className="flex flex-1 will-change-transform" />
+          <div style={curtainPaneStyle} className="flex flex-1 will-change-transform" />
         </div>
 
         <div
@@ -245,35 +248,40 @@ function HomeContent() {
           </Link>
 
           <div className="hidden md:flex gap-8 items-center text-lg font-semibold">
+            {/* UPDATED NAV LINKS: Using hardware-accelerated transform: scaleX() instead of width: 100% */}
             <button
               onClick={() => handleNavScroll("features-section")}
               className={`hover:opacity-80 transition-all relative group ${activeSection === "features-section" ? "opacity-100" : "opacity-60"}`}
               style={{ color: FG }}
             >
               Features
-              <span className={`absolute -bottom-1 left-0 h-0.5 bg-current transition-all duration-300 ${activeSection === "features-section" ? "w-full" : "w-0 group-hover:w-full"}`}></span>
+              <span className={`absolute -bottom-1 left-0 h-0.5 w-full bg-current origin-left transition-transform duration-300 ${activeSection === "features-section" ? "scale-x-100" : "scale-x-0 group-hover:scale-x-100"}`}></span>
             </button>
+
             <button
               onClick={() => handleNavScroll("how-it-works")}
               className={`hover:opacity-80 transition-all relative group ${activeSection === "how-it-works" ? "opacity-100" : "opacity-60"}`}
               style={{ color: FG }}
             >
               How It Works
-              <span className={`absolute -bottom-1 left-0 h-0.5 bg-current transition-all duration-300 ${activeSection === "how-it-works" ? "w-full" : "w-0 group-hover:w-full"}`}></span>
+              <span className={`absolute -bottom-1 left-0 h-0.5 w-full bg-current origin-left transition-transform duration-300 ${activeSection === "how-it-works" ? "scale-x-100" : "scale-x-0 group-hover:scale-x-100"}`}></span>
             </button>
+
             <button
               onClick={() => handleNavScroll("faqs")}
               className={`hover:opacity-80 transition-all relative group ${activeSection === "faqs" ? "opacity-100" : "opacity-60"}`}
               style={{ color: FG }}
             >
               FAQs
-              <span className={`absolute -bottom-1 left-0 h-0.5 bg-current transition-all duration-300 ${activeSection === "faqs" ? "w-full" : "w-0 group-hover:w-full"}`}></span>
+              <span className={`absolute -bottom-1 left-0 h-0.5 w-full bg-current origin-left transition-transform duration-300 ${activeSection === "faqs" ? "scale-x-100" : "scale-x-0 group-hover:scale-x-100"}`}></span>
             </button>
+
             <Link href="/about" className="hover:opacity-80 transition-all relative group opacity-60" style={{ color: FG }}>
               About
-              <span className="absolute -bottom-1 left-0 w-0 h-0.5 bg-current transition-all duration-300 group-hover:w-full"></span>
+              <span className="absolute -bottom-1 left-0 h-0.5 w-full bg-current origin-left transition-transform duration-300 scale-x-0 group-hover:scale-x-100"></span>
             </Link>
           </div>
+
 
           <div className="md:hidden flex items-center">
             <button onClick={() => setMobileNavOpen((v) => !v)} aria-label="Open navigation" className="p-2 rounded-full hover:bg-white/10 transition">
@@ -414,7 +422,7 @@ function HomeContent() {
         </section>
 
         {/* ── Quote ── */}
-        <section id="quote-section" className="px-8 py-10 md:py-14">
+        <section id="quote-section" className="px-8 py-10 md:py-14 max-w-7xl mx-auto">
           <div
             style={{
               borderColor: `${FG}12`,
@@ -455,7 +463,6 @@ function HomeContent() {
           </div>
         </section>
 
-
         <section className="mt-16" id="features-section">
           <div className="text-center mb-2 md:mb-4 max-w-7xl mx-auto px-8">
             <h2 style={{ color: FG }} className="font-headline text-4xl md:text-5xl font-bold mb-4 tracking-tight">
@@ -468,54 +475,13 @@ function HomeContent() {
           <Features />
         </section>
 
-        <HorizontalWords />
-
-
-
         {/* ── How It Works ── */}
-        <section id="how-it-works" className="py-8 px-8 max-w-7xl mx-auto">
-          <div className="text-center mb-24">
-            <h2 style={{ color: FG }} className="font-headline text-4xl md:text-5xl font-bold mb-4 tracking-tight">
+        <section id="how-it-works" className="py-8 px-6 max-w-7xl mx-auto">
+          <div className="flex flex-col items-center">
+            <h2 style={{ color: FG }} className="font-headline text-4xl md:text-5xl font-bold tracking-tight text-center mb-24">
               How It Works
             </h2>
-            <p style={{ color: `${FG}70` }} className="max-w-xl mx-auto">
-              From raw data to deployed model — follow the five-step flow that makes proto-ML the fastest path from idea to production.
-            </p>
-          </div>
-          <HowItWorks />
-        </section>
-
-        <TrueFocus 
-          sentence="design. prototype. solve. build. develop. debug. learn. cook. ship. prompt. create. test. scale. visualize."
-          separator=" "
-          manualMode={false}
-          blurAmount={5}
-          borderColor="#f59e0b"
-          glowColor="rgba(245, 158, 11, 0.6)"
-          animationDuration={0.5}
-          pauseBetweenAnimations={1}
-        />
-
-        {/* ── Showcase ── */}
-        <section className="py-8 px-6">
-          <div style={{ height: '100vh', position: 'relative' }}>
-            <MorphSlider
-              items={[
-                { image: 'https://images.unsplash.com/photo-1782977389500-dd7adad33ebe?q=80&w=1600&auto=format&fit=crop', caption: 'Visual Pipeline Builder' },
-                { image: 'https://images.unsplash.com/photo-1781499455083-6ccc3beb20cd?q=80&w=1600&auto=format&fit=crop', caption: 'Real-time Compiler' },
-                { image: 'https://images.unsplash.com/photo-1776394254711-4a0d7345269a?q=80&w=1600&auto=format&fit=crop', caption: 'One-Click Deploy' }
-              ]}
-              transition="melt"
-              intensity={0.55}
-              aberration={0.35}
-              drift={0.4}
-              autoplay
-              autoplayDelay={3}
-              overlayColor="#171717"
-              radius={40}
-              showControls={false}
-              showIndicators={false}
-            />
+            <HowItWorks />
           </div>
         </section>
 
@@ -559,7 +525,7 @@ function HomeContent() {
                   >
                     <div
                       style={{ color: `${FG}80`, borderColor: `${FG}15` }}
-                      className="p-6 pt-0 leading-relaxed border-t"
+                      className="p-6 pt-4 leading-relaxed border-t"
                     >
                       {a}
                     </div>

@@ -231,6 +231,7 @@ class MorphEngine {
 
     this.canvas = this.gl.canvas;
     this.canvas.className = 'block w-full h-full';
+    this.canvas.style.borderRadius = 'inherit';
     container.appendChild(this.canvas);
 
     this.geometry = new Triangle(this.gl);
@@ -479,7 +480,7 @@ export default function MorphSlider({
   autoplay = false,
   autoplayDelay = 4,
   loop = true,
-  radius = 16,
+  radius = 40,
   overlayColor = '#000000',
   showCaptions = true,
   showControls = true,
@@ -591,6 +592,7 @@ export default function MorphSlider({
       className={`relative w-full h-full overflow-hidden select-none bg-[#0c0c0e] ${className}`.trim()}
       style={{
         borderRadius: `${radius}px`,
+        transform: 'translateZ(0)',
         '--ms-swap': `${(duration * 0.66).toFixed(3)}s`,
         '--ms-dot': `${(duration * 0.45).toFixed(3)}s`,
         touchAction: 'pan-y'
@@ -602,6 +604,7 @@ export default function MorphSlider({
       <div
         ref={containerRef}
         className="absolute inset-0 cursor-grab active:cursor-grabbing outline-none focus-visible:shadow-[inset_0_0_0_2px_rgba(255,255,255,0.7)]"
+        style={{ borderRadius: 'inherit' }}
         role="group"
         aria-roledescription="carousel"
         aria-label="Image morph slider"
