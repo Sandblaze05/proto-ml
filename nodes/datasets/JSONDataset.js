@@ -15,7 +15,10 @@ export const JSONDatasetDef = {
   outputs: [
     { name: 'out',          datatype: 'tabular',   shape: [] },
     { name: 'data',         datatype: 'tensor',     shape: ['B', 'feature_dim'] },
+    { name: 'features',     datatype: 'tensor',     shape: ['B', 'feature_dim'] },
     { name: 'labels',       datatype: 'tensor',     shape: ['B'] },
+    { name: 'targets',      datatype: 'tensor',     shape: ['B'] },
+    { name: 'columns',      datatype: 'list',        shape: ['num_columns'] },
     { name: 'schema',       datatype: 'dict',        shape: [] },
   ],
 
@@ -24,7 +27,10 @@ export const JSONDatasetDef = {
     outputs: [
       { name: 'out', datatype: 'tabular', shape: [], role: 'data' },
       { name: 'data', datatype: 'tensor', shape: ['B', 'feature_dim'], role: 'data' },
+      { name: 'features', datatype: 'tensor', shape: ['B', 'feature_dim'], role: 'data' },
       { name: 'labels', datatype: 'tensor', shape: ['B'], role: 'labels' },
+      { name: 'targets', datatype: 'tensor', shape: ['B'], role: 'labels' },
+      { name: 'columns', datatype: 'list', shape: ['num_columns'], role: 'data' },
       { name: 'schema', datatype: 'dict', shape: [], role: 'data' },
     ],
   },
@@ -35,10 +41,15 @@ export const JSONDatasetDef = {
       file_format: 'json',
       data_key: '',
       label_key: 'label',
+      target_column: '',
       feature_keys: [],
+      feature_columns: [],
+      features: [],
+      required_fields: [],
       flatten: true,
       normalize: 'none',
       handle_missing: 'drop',
+      missing: { strategy: 'drop' },
     },
     schema: {
       dtype: 'float32',

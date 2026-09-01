@@ -214,7 +214,7 @@ function SourceTab({
 }) {
   const fileRef = useRef(null);
   const [uploading, setUploading] = useState(false);
-  const { useDirectoryPicker, acceptCsvFiles } = getUploadInputMode(nodeType, config.source_mode);
+  const { useDirectoryPicker, acceptCsvFiles, acceptJsonFiles } = getUploadInputMode(nodeType, config.source_mode);
 
   const triggerUpload = useCallback(() => {
     if (fileRef.current) fileRef.current.click();
@@ -235,13 +235,15 @@ function SourceTab({
 
       if (acceptCsvFiles) {
         el.setAttribute('accept', '.csv,text/csv');
+      } else if (acceptJsonFiles) {
+        el.setAttribute('accept', '.json,.jsonl,application/json,application/x-ndjson');
       } else {
         el.removeAttribute('accept');
       }
     } catch {
       // ignore
     }
-  }, [useDirectoryPicker, acceptCsvFiles]);
+  }, [useDirectoryPicker, acceptCsvFiles, acceptJsonFiles]);
 
   const handleFiles = useCallback(async (e) => {
     const files = e.target.files;
@@ -261,6 +263,7 @@ function SourceTab({
     if (validation.uploaded) return <div className="text-[10px] text-emerald-400 mt-1">Upload complete.</div>;
     if (validation.deleted) return <div className="text-[10px] text-emerald-400 mt-1">Uploaded folder deleted.</div>;
     if (validation.exists === false) return <div className="text-[10px] text-red-400 mt-1">Path does not exist</div>;
+    if (validation.clientOnly && validation.exists) return <div className="text-[10px] text-emerald-400 mt-1">Upload looks valid.</div>;
     if (mode === 'directory' && validation.exists && validation.isDirectory === false) return <div className="text-[10px] text-red-400 mt-1">Path is not a directory</div>;
     if (mode === 'file' && validation.exists && validation.isDirectory === true) return <div className="text-[10px] text-red-400 mt-1">Path is a directory, expected a file</div>;
     return <div className="text-[10px] text-emerald-400 mt-1">Path looks valid.</div>;
@@ -741,8 +744,8 @@ function PreviewTab({ config, nodeType, previewing, onRunPreview, previewResult 
     return String(previewResult);
   })();
 
-  const csvRunSummary = (() => {
-    if (nodeType !== 'dataset.csv' || !previewResult || previewResult.error) return null;
+  const tabularRunSummary = (() => {
+    if (!['dataset.csv', 'dataset.json'].includes(nodeType) || !previewResult || previewResult.error) return null;
 
     const rows = Array.isArray(previewResult.rows) ? previewResult.rows : [];
     const metadata = previewResult.metadata || {};
@@ -776,18 +779,18 @@ function PreviewTab({ config, nodeType, previewing, onRunPreview, previewResult 
         <div className="text-[10px] text-[#faebd7]/50">{previewSummary}</div>
       </div>
 
-      {csvRunSummary && (
+      {tabularRunSummary && (
         <div className="mt-2 space-y-1">
           <div className="text-[9px] bg-black/40 px-2 py-1 rounded font-mono text-[#faebd7]/75">
-            <span className="text-[#faebd7]/45">Target:</span> {csvRunSummary.target || 'None'}
+            <span className="text-[#faebd7]/45">Target:</span> {tabularRunSummary.target || 'None'}
           </div>
           <div className="text-[9px] bg-black/40 px-2 py-1 rounded font-mono text-[#faebd7]/75 max-h-16 overflow-auto">
             <div className="text-[#faebd7]/45 mb-0.5">Features in run:</div>
-            {csvRunSummary.features.length > 0 ? csvRunSummary.features.join(', ') : 'None'}
+            {tabularRunSummary.features.length > 0 ? tabularRunSummary.features.join(', ') : 'None'}
           </div>
           <div className="text-[9px] bg-black/40 px-2 py-1 rounded font-mono text-[#faebd7]/75 max-h-16 overflow-auto">
             <div className="text-[#faebd7]/45 mb-0.5">Result columns:</div>
-            {csvRunSummary.columns.length > 0 ? csvRunSummary.columns.join(', ') : 'None'}
+            {tabularRunSummary.columns.length > 0 ? tabularRunSummary.columns.join(', ') : 'None'}
           </div>
         </div>
       )}
@@ -1173,6 +1176,22 @@ export default function DatasetNode({ data, id, selected }) {
         return;
       }
 
+      if (type === 'dataset.json' && localConfig.client_upload_id) {
+        const sample = await previewClientUpload(localConfig.client_upload_id, {
+          file_format: localConfig.file_format || 'json',
+          data_key: localConfig.data_key || '',
+          target_column: localConfig.target_column || '',
+          label_key: localConfig.label_key || 'label',
+          features: Array.isArray(localConfig.features)
+            ? localConfig.features
+            : (Array.isArray(localConfig.feature_columns) ? localConfig.feature_columns : (Array.isArray(localConfig.feature_keys) ? localConfig.feature_keys : [])),
+          missing: localConfig.missing || { strategy: localConfig.handle_missing || 'drop' },
+          n: count,
+        });
+        setPreviewResult(sample);
+        return;
+      }
+
       if (type === 'dataset.image' && localConfig.client_upload_id) {
         const sample = await previewClientImageUpload(localConfig.client_upload_id, {
           label_strategy: localConfig.label_strategy || 'folder_name',
@@ -1264,16 +1283,16 @@ export default function DatasetNode({ data, id, selected }) {
   }, []);
 
   const inspectCsvConfig = useCallback(async () => {
-    if (type !== 'dataset.csv') return;
+    if (type !== 'dataset.csv' && type !== 'dataset.json') return;
     const files = Array.isArray(localConfig.files) ? localConfig.files : [];
     const hasPath = !!String(localConfig.path || '').trim();
     const hasClientUpload = !!localConfig.client_upload_id;
     if (STRICT_CLIENT_ONLY_DATASETS && !hasClientUpload) {
-      setValidation({ error: 'Client-only mode: upload CSV files first, then inspect.' });
+      setValidation({ error: `Client-only mode: upload ${type === 'dataset.json' ? 'JSON' : 'CSV'} files first, then inspect.` });
       return;
     }
     if (!hasPath && files.length === 0 && !hasClientUpload) {
-      setValidation({ error: 'Set a CSV path or files before inspect.' });
+      setValidation({ error: `Set a ${type === 'dataset.json' ? 'JSON' : 'CSV'} path or files before inspect.` });
       return;
     }
     setBusyAction(true);
@@ -1284,6 +1303,12 @@ export default function DatasetNode({ data, id, selected }) {
           header: localConfig.header !== false,
           primary: localConfig.primary,
           target_column: localConfig.target_column,
+          file_format: localConfig.file_format || 'json',
+          data_key: localConfig.data_key || '',
+          label_key: localConfig.label_key || 'label',
+          features: Array.isArray(localConfig.features)
+            ? localConfig.features
+            : (Array.isArray(localConfig.feature_columns) ? localConfig.feature_columns : (Array.isArray(localConfig.feature_keys) ? localConfig.feature_keys : [])),
         });
         setInspectResult(res);
         commitDatasetAnalysis(res);
@@ -1303,7 +1328,7 @@ export default function DatasetNode({ data, id, selected }) {
   }, [type, localConfig, handleChange, commitDatasetAnalysis]);
 
   const ensureCsvMetadata = useCallback(async () => {
-    if (type !== 'dataset.csv') return;
+    if (type !== 'dataset.csv' && type !== 'dataset.json') return;
     const files = Array.isArray(localConfig.files) ? localConfig.files : [];
     const hasPath = !!String(localConfig.path || '').trim();
     const hasClientUpload = !!localConfig.client_upload_id;
@@ -1317,6 +1342,12 @@ export default function DatasetNode({ data, id, selected }) {
           header: localConfig.header !== false,
           primary: localConfig.primary,
           target_column: localConfig.target_column,
+          file_format: localConfig.file_format || 'json',
+          data_key: localConfig.data_key || '',
+          label_key: localConfig.label_key || 'label',
+          features: Array.isArray(localConfig.features)
+            ? localConfig.features
+            : (Array.isArray(localConfig.feature_columns) ? localConfig.feature_columns : (Array.isArray(localConfig.feature_keys) ? localConfig.feature_keys : [])),
         });
         if (res?.ok) {
           setInspectResult(res);
@@ -1380,7 +1411,7 @@ export default function DatasetNode({ data, id, selected }) {
     setPreviewing(true);
     setPreviewResult(null);
     try {
-      if (type === 'dataset.csv' || type === 'dataset.image') {
+      if (type === 'dataset.csv' || type === 'dataset.json' || type === 'dataset.image') {
         const created = await createClientUpload(files);
         handleChange('client_upload_id', created.datasetId || created.uploadId);
         handleChange('dataset_id', created.datasetId || created.uploadId);
@@ -1396,14 +1427,20 @@ export default function DatasetNode({ data, id, selected }) {
             sourceType: created.metadata?.sourceType || type,
           });
         }
-        if (type === 'dataset.csv') {
-          handleChange('files', created.csvFiles || []);
+        if (type === 'dataset.csv' || type === 'dataset.json') {
+          handleChange('files', type === 'dataset.json' ? (created.jsonFiles || []) : (created.csvFiles || []));
           try {
             const inspected = await inspectClientUpload(created.uploadId, {
               delimiter: localConfig.delimiter || ',',
               header: localConfig.header !== false,
               primary: localConfig.primary,
               target_column: localConfig.target_column,
+              file_format: localConfig.file_format || 'json',
+              data_key: localConfig.data_key || '',
+              label_key: localConfig.label_key || 'label',
+              features: Array.isArray(localConfig.features)
+                ? localConfig.features
+                : (Array.isArray(localConfig.feature_columns) ? localConfig.feature_columns : (Array.isArray(localConfig.feature_keys) ? localConfig.feature_keys : [])),
             });
             if (inspected?.ok) {
               setInspectResult(inspected);
@@ -1429,7 +1466,7 @@ export default function DatasetNode({ data, id, selected }) {
         setPreviewResult({ uploaded: `client://${created.uploadId}`, clientOnly: true, warning: created.warning || null });
         return;
       }
-      setPreviewResult({ error: 'Client-only mode supports dataset.csv and dataset.image uploads only.' });
+      setPreviewResult({ error: 'Client-only mode supports dataset.csv, dataset.json, and dataset.image uploads only.' });
     } catch (err) {
       setPreviewResult({ error: String(err) });
     } finally {
@@ -1438,12 +1475,12 @@ export default function DatasetNode({ data, id, selected }) {
   }, [handleChange, listUploads, type, localConfig, commitDatasetAnalysis]);
 
   useEffect(() => {
-    if (type !== 'dataset.csv') return;
+    if (type !== 'dataset.csv' && type !== 'dataset.json') return;
     listUploads();
   }, [type, listUploads]);
 
   useEffect(() => {
-    if (type !== 'dataset.csv') return;
+    if (type !== 'dataset.csv' && type !== 'dataset.json') return;
     ensureCsvMetadata();
   }, [
     type,
@@ -1453,6 +1490,9 @@ export default function DatasetNode({ data, id, selected }) {
     localConfig.delimiter,
     localConfig.header,
     localConfig.target_column,
+    localConfig.file_format,
+    localConfig.data_key,
+    localConfig.label_key,
     JSON.stringify(localConfig.files || []),
     ensureCsvMetadata,
   ]);

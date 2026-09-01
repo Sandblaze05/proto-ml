@@ -203,7 +203,7 @@ async function buildClientDatasetVariables(graph) {
   const clientDatasets = {}
 
   for (const node of nodes) {
-    if (node?.type !== 'dataset.csv') continue
+    if (node?.type !== 'dataset.csv' && node?.type !== 'dataset.json') continue
     const config = node.config || {}
     const path = String(config.path || '')
     const uploadId = config.client_upload_id || (path.startsWith('client://') ? path.replace('client://', '') : '')
@@ -221,6 +221,7 @@ async function buildClientDatasetVariables(graph) {
       columns: Array.isArray(metadata.columnsList) ? metadata.columnsList : Object.keys(rows[0] || {}),
       feature_columns: Array.isArray(metadata.features) ? metadata.features : [],
       target_column: config.target_column || metadata.target || '',
+      source_type: node.type === 'dataset.json' ? 'json' : 'csv',
       source: 'client_upload',
     }
     clientDatasets[uploadId] = payload

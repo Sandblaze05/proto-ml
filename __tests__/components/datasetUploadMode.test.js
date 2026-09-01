@@ -7,6 +7,7 @@ describe('getUploadInputMode', () => {
     expect(mode).toEqual({
       useDirectoryPicker: true,
       acceptCsvFiles: false,
+      acceptJsonFiles: false,
     });
   });
 
@@ -15,6 +16,7 @@ describe('getUploadInputMode', () => {
     expect(mode).toEqual({
       useDirectoryPicker: true,
       acceptCsvFiles: false,
+      acceptJsonFiles: false,
     });
   });
 
@@ -23,6 +25,7 @@ describe('getUploadInputMode', () => {
     expect(mode).toEqual({
       useDirectoryPicker: false,
       acceptCsvFiles: true,
+      acceptJsonFiles: false,
     });
   });
 
@@ -31,14 +34,16 @@ describe('getUploadInputMode', () => {
     expect(mode).toEqual({
       useDirectoryPicker: true,
       acceptCsvFiles: false,
+      acceptJsonFiles: false,
     });
   });
 
-  it('keeps non-image non-csv datasets as generic file picker', () => {
+  it('uses file picker with json accept filter for json datasets', () => {
     const mode = getUploadInputMode('dataset.json');
     expect(mode).toEqual({
       useDirectoryPicker: false,
       acceptCsvFiles: false,
+      acceptJsonFiles: true,
     });
   });
 });
