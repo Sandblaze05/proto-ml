@@ -231,6 +231,40 @@ async function buildClientDatasetVariables(graph) {
   return clientDatasets
 }
 
+async function buildRunGraph(graph) {
+  const nodes = Array.isArray(graph?.nodes) ? graph.nodes : Object.values(graph?.nodes || {})
+  const databaseNodes = nodes.filter((node) => node?.type === 'dataset.database')
+  if (databaseNodes.length === 0) return graph
+
+  const enrichedNodes = nodes.map((node) => ({ ...node, config: { ...(node.config || {}) } }))
+  for (const node of enrichedNodes) {
+    if (node.type !== 'dataset.database') continue
+
+    const config = node.config || {}
+    const limit = Math.max(1, Number(config.limit) || 1000)
+    const response = await fetch('/api/datasets/database', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'inspect', config: { ...config, limit } }),
+    })
+    const payload = await response.json()
+    if (!response.ok || !payload.ok) {
+      throw new Error(payload.error || `Database inspection failed for ${node.label || node.id}`)
+    }
+
+    const rows = Array.isArray(payload.data) ? payload.data : []
+    if (rows.length === 0) {
+      throw new Error(`Database query returned no rows for ${config.table || 'the selected table'}`)
+    }
+    node.config = {
+      ...config,
+      dataset_sample: rows,
+    }
+  }
+
+  return { ...graph, nodes: Array.isArray(graph?.nodes) ? enrichedNodes : Object.fromEntries(enrichedNodes.map((node) => [node.id, node])) }
+}
+
 function CellLogGroup({ nodeId, nodeLabel, nodeType, status, logs = [], error = null }) {
   const [expanded, setExpanded] = useState(status === 'error')
   const isExpanded = expanded || status === 'error'
@@ -1026,7 +1060,24 @@ const PipelineCompilerPanel = () => {
     setExecutionResult(null)
 
     const uiGraph = getCompilerGraph()
-    const targetNodeId = uiGraph.nodes?.[uiGraph.nodes.length - 1]?.id || 'target'
+    let runGraph
+    let runCode
+    try {
+      runGraph = await buildRunGraph(uiGraph)
+      const compiledRun = compileExecutionGraph(runGraph, { validationMode })
+      if (!compiledRun.ok) throw new Error(compiledRun.errors?.join('\n') || 'Pipeline compilation failed')
+      runCode = compiledRun.code
+      setCompiledCode(runCode)
+    } catch (err) {
+      setExecutionLogs([{ type: 'stderr', text: `Pipeline data preparation failed: ${String(err?.message || err)}\n` }])
+      setExecutionResult({ metrics: { error: String(err?.message || err) } })
+      setIsExecuting(false)
+      return
+    }
+
+    const targetNodeId = Array.isArray(runGraph.nodes)
+      ? runGraph.nodes[runGraph.nodes.length - 1]?.id || 'target'
+      : Object.keys(runGraph.nodes || {}).at(-1) || 'target'
 
     if (jupyterUrl && jupyterUrl.trim()) {
       try {
@@ -1049,7 +1100,7 @@ const PipelineCompilerPanel = () => {
         logs.push({ type: 'system', text: `Executing compiled pipeline on kernel ${kernelId}...\n${'-'.repeat(40)}\n` })
         setExecutionLogs([...logs])
 
-        const execution = await client.executeCode(kernelId, compiledCode)
+        const execution = await client.executeCode(kernelId, runCode)
         const allLogs = [
           ...logs,
           ...execution.logs,
@@ -1081,7 +1132,7 @@ const PipelineCompilerPanel = () => {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          graph: uiGraph,
+          graph: runGraph,
           targetNodeId,
           mode: RUN,
           validationMode,

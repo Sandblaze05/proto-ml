@@ -3,6 +3,28 @@ import { describe, expect, it } from 'vitest';
 import { getPythonRuntimeCode } from '../../../lib/pythonTemplates/runtimeHelpers.js';
 
 describe('Python CSV training runtime', () => {
+    it('does not train on a synthetic row when database loading fails', () => {
+        const driver = `
+result = _read_database_dataset({
+        'db_type': 'sqlite',
+        'database': '/path/that/does/not/exist.db',
+        'table': 'users',
+})
+assert result['data'] == []
+assert result['error'].startswith('Database execution error:')
+print('database-error-is-not-data')
+`;
+        const result = spawnSync('python', ['-'], {
+            cwd: process.cwd(),
+            encoding: 'utf8',
+            timeout: 30000,
+            input: `${getPythonRuntimeCode()}\n${driver}`,
+        });
+
+        expect(result.status, result.stderr).toBe(0);
+        expect(result.stdout).toContain('database-error-is-not-data');
+    }, 35000);
+
   it('persists a preprocessing pipeline that predicts categorical and missing CSV values', () => {
     const driver = `
 import tempfile

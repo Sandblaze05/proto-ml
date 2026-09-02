@@ -692,14 +692,259 @@ function SourceTab({
     );
   }
 
+  const [dbTables, setDbTables] = useState([]);
+  const [dbConnecting, setDbConnecting] = useState(false);
+  const [dbStatus, setDbStatus] = useState(null);
+
+  const handleTestDbConnection = async () => {
+    setDbConnecting(true);
+    setDbStatus({ tone: 'text-amber-300', text: 'Testing database connection...' });
+    try {
+      const res = await fetch('/api/datasets/database', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'test_connection', config }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        setDbStatus({ tone: 'text-emerald-300', text: data.message || 'Connection successful!' });
+      } else {
+        setDbStatus({ tone: 'text-red-300', text: data.error || 'Connection failed.' });
+      }
+    } catch (err) {
+      setDbStatus({ tone: 'text-red-300', text: String(err) });
+    } finally {
+      setDbConnecting(false);
+    }
+  };
+
+  const handleFetchDbTables = async () => {
+    setDbConnecting(true);
+    setDbStatus({ tone: 'text-amber-300', text: 'Fetching tables / collections...' });
+    try {
+      const res = await fetch('/api/datasets/database', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'list_tables', config }),
+      });
+      const data = await res.json();
+      if (data.ok && Array.isArray(data.tables)) {
+        setDbTables(data.tables);
+        setDbStatus({ tone: 'text-emerald-300', text: `Discovered ${data.tables.length} tables/collections.` });
+        if (!config.table && data.tables.length > 0) {
+          onChange('table', data.tables[0]);
+        }
+      } else {
+        setDbStatus({ tone: 'text-red-300', text: data.error || 'Failed to list tables.' });
+      }
+    } catch (err) {
+      setDbStatus({ tone: 'text-red-300', text: String(err) });
+    } finally {
+      setDbConnecting(false);
+    }
+  };
+
   if (nodeType === 'dataset.database') {
+    const dbType = config.db_type || 'postgresql';
+    const connMode = config.connection_mode || 'params';
+    const queryMode = config.query_mode || 'table';
+    const isRedis = dbType === 'redis';
+    const isMongo = dbType === 'mongodb' || dbType === 'mongo';
+    const isSqlite = dbType === 'sqlite';
+
+    const tableOptions = [
+      { value: '', label: dbTables.length > 0 ? (isRedis ? 'Select key pattern...' : isMongo ? 'Select collection...' : 'Select table...') : 'No tables fetched' },
+      ...dbTables.map((t) => ({ value: t, label: t })),
+    ];
+
     return (
       <>
-        <Field label="DB Type"><NodeSelect value={config.db_type} onChange={(v) => onChange('db_type', v)} options={[{ value: 'postgresql', label: 'PostgreSQL' }, { value: 'mysql', label: 'MySQL' }, { value: 'sqlite', label: 'SQLite' }, { value: 'mongodb', label: 'MongoDB' }]} /></Field>
-        <Field label="Host"><NodeInput value={config.host} onChange={(v) => onChange('host', v)} placeholder="localhost" /></Field>
-        <Field label="Database"><NodeInput value={config.database} onChange={(v) => onChange('database', v)} placeholder="mydb" /></Field>
-        <Field label="Table"><NodeInput value={config.table} onChange={(v) => onChange('table', v)} placeholder="records" /></Field>
-        <Field label="Query"><NodeInput value={config.query} onChange={(v) => onChange('query', v)} placeholder="SELECT * FROM ..." /></Field>
+        <Field label="DB Type">
+          <NodeSelect
+            value={dbType}
+            onChange={(v) => {
+              onChange('db_type', v);
+              setDbTables([]);
+              setDbStatus(null);
+            }}
+            options={[
+              { value: 'postgresql', label: 'PostgreSQL' },
+              { value: 'mysql', label: 'MySQL' },
+              { value: 'sqlite', label: 'SQLite' },
+              { value: 'duckdb', label: 'DuckDB' },
+              { value: 'mongodb', label: 'MongoDB (NoSQL)' },
+              { value: 'redis', label: 'Redis (Key-Value)' },
+            ]}
+          />
+        </Field>
+
+        <Field label="Connection Mode">
+          <NodeSelect
+            value={connMode}
+            onChange={(v) => onChange('connection_mode', v)}
+            options={[
+              { value: 'params', label: 'Credentials / Parameters' },
+              { value: 'uri', label: 'Connection URI' },
+            ]}
+          />
+        </Field>
+
+        {connMode === 'uri' ? (
+          <Field label="Connection URI">
+            <NodeInput
+              value={config.connection_uri}
+              onChange={(v) => onChange('connection_uri', v)}
+              placeholder={
+                isRedis
+                  ? 'redis://:password@localhost:6379/0'
+                  : isMongo
+                  ? 'mongodb://localhost:27017/mydb'
+                  : 'postgresql://user:password@localhost:5432/mydb'
+              }
+            />
+          </Field>
+        ) : (
+          <>
+            {isSqlite ? (
+              <Field label="SQLite Database File">
+                <NodeInput
+                  value={config.database || config.host}
+                  onChange={(v) => {
+                    onChange('database', v);
+                    onChange('host', v);
+                  }}
+                  placeholder="./data/app.db or :memory:"
+                />
+              </Field>
+            ) : (
+              <>
+                <div className="grid grid-cols-3 gap-1">
+                  <div className="col-span-2">
+                    <Field label="Host"><NodeInput value={config.host} onChange={(v) => onChange('host', v)} placeholder="localhost" /></Field>
+                  </div>
+                  <div>
+                    <Field label="Port"><NodeInput type="number" value={config.port} onChange={(v) => onChange('port', Number(v))} placeholder={isRedis ? '6379' : isMongo ? '27017' : dbType === 'mysql' ? '3306' : '5432'} /></Field>
+                  </div>
+                </div>
+
+                {!isRedis && (
+                  <Field label="Database / Catalog">
+                    <NodeInput value={config.database} onChange={(v) => onChange('database', v)} placeholder="mydb" />
+                  </Field>
+                )}
+
+                <div className="grid grid-cols-2 gap-1">
+                  {!isRedis && (
+                    <div>
+                      <Field label="User"><NodeInput value={config.username} onChange={(v) => onChange('username', v)} placeholder="user" /></Field>
+                    </div>
+                  )}
+                  <div className={isRedis ? 'col-span-2' : ''}>
+                    <Field label="Password"><NodeInput type="password" value={config.password} onChange={(v) => onChange('password', v)} placeholder="••••••••" /></Field>
+                  </div>
+                </div>
+
+                {dbType === 'postgresql' && (
+                  <Toggle label="Enable SSL" value={config.ssl} onChange={(v) => onChange('ssl', v)} />
+                )}
+              </>
+            )}
+          </>
+        )}
+
+        <div className="mt-2 flex flex-wrap items-center gap-1.5">
+          <IconHoverAction icon={ShieldCheck} label="Test Conn" onClick={handleTestDbConnection} disabled={dbConnecting} tone="accent" />
+          <IconHoverAction icon={List} label="Fetch Tables" onClick={handleFetchDbTables} disabled={dbConnecting} tone="success" />
+        </div>
+
+        {dbStatus && (
+          <div className={`mt-1 text-[9px] font-mono bg-black/40 px-2 py-1 rounded ${dbStatus.tone}`}>
+            {dbStatus.text}
+          </div>
+        )}
+
+        <div className="mt-2 border-t border-[#faebd7]/10 pt-2">
+          <Field label="Query Mode">
+            <NodeSelect
+              value={queryMode}
+              onChange={(v) => onChange('query_mode', v)}
+              options={[
+                { value: 'table', label: isRedis ? 'Key Pattern Scan' : isMongo ? 'Collection Scan' : 'Table Scan' },
+                { value: 'custom_query', label: isRedis ? 'Command / Custom Pattern' : isMongo ? 'JSON Filter / Aggregation' : 'Custom SQL Query' },
+              ]}
+            />
+          </Field>
+
+          {queryMode === 'table' ? (
+            <Field label={isRedis ? 'Redis Key Pattern' : isMongo ? 'Target Collection' : 'Target Table'}>
+              {dbTables.length > 0 ? (
+                <NodeSelect
+                  value={config.table || config.redis_key_pattern}
+                  onChange={(v) => {
+                    onChange('table', v);
+                    if (isRedis) onChange('redis_key_pattern', v);
+                  }}
+                  options={tableOptions}
+                />
+              ) : (
+                <NodeInput
+                  value={isRedis ? (config.redis_key_pattern || config.table) : config.table}
+                  onChange={(v) => {
+                    onChange('table', v);
+                    if (isRedis) onChange('redis_key_pattern', v);
+                  }}
+                  placeholder={isRedis ? 'user:* or features:*' : isMongo ? 'users' : 'orders'}
+                />
+              )}
+            </Field>
+          ) : (
+            <Field label={isRedis ? 'Redis Key / Command' : isMongo ? 'MongoDB JSON Query' : 'SQL Query'}>
+              <textarea
+                value={config.query || ''}
+                onChange={(e) => onChange('query', e.target.value)}
+                className="w-full h-20 bg-black/60 border border-[#faebd7]/10 rounded text-[#faebd7] text-[10px] font-mono px-1.5 py-1 outline-none focus:border-[#faebd7]/30 placeholder:text-[#faebd7]/20"
+                placeholder={
+                  isRedis
+                    ? 'user:*'
+                    : isMongo
+                    ? '{\n  "status": "active"\n}'
+                    : 'SELECT id, age, income, target\nFROM users\nLIMIT 1000'
+                }
+              />
+            </Field>
+          )}
+
+          {isMongo && (
+            <Toggle label="Flatten Nested Documents" value={config.flatten_nested !== false} onChange={(v) => onChange('flatten_nested', v)} />
+          )}
+
+          <div className="grid grid-cols-2 gap-1 mt-1">
+            <div>
+              <Field label="Target Column">
+                <NodeInput value={config.target_column || ''} onChange={(v) => onChange('target_column', v)} placeholder="e.g. biotype" />
+              </Field>
+            </div>
+            <div>
+              <Field label="Row Limit">
+                <NodeInput type="number" value={config.limit ?? 1000} onChange={(v) => onChange('limit', Number(v) || 1000)} placeholder="1000" />
+              </Field>
+            </div>
+          </div>
+
+          <div className="mt-1">
+            <Field label="Missing Strategy">
+              <NodeSelect
+                value={config.handle_missing || 'drop'}
+                onChange={(v) => onChange('handle_missing', v)}
+                options={[
+                  { value: 'drop', label: 'Drop Rows' },
+                  { value: 'mean', label: 'Impute Mean' },
+                  { value: 'none', label: 'Keep as-is' },
+                ]}
+              />
+            </Field>
+          </div>
+        </div>
       </>
     );
   }
@@ -745,7 +990,7 @@ function PreviewTab({ config, nodeType, previewing, onRunPreview, previewResult 
   })();
 
   const tabularRunSummary = (() => {
-    if (!['dataset.csv', 'dataset.json'].includes(nodeType) || !previewResult || previewResult.error) return null;
+    if (!['dataset.csv', 'dataset.json', 'dataset.database'].includes(nodeType) || !previewResult || previewResult.error) return null;
 
     const rows = Array.isArray(previewResult.rows) ? previewResult.rows : [];
     const metadata = previewResult.metadata || {};
@@ -1012,7 +1257,9 @@ export default function DatasetNode({ data, id, selected }) {
       : (Array.isArray(previewResult?.rows) ? previewResult.rows.length : null);
     const columns = Number.isFinite(stats?.columns)
       ? stats.columns
-      : (Array.isArray(schema?.columns) ? schema.columns.length : null);
+      : (Array.isArray(schema?.columns)
+        ? schema.columns.length
+        : (Array.isArray(previewResult?.columns) ? previewResult.columns.length : null));
     const missingCells = Number.isFinite(stats?.missingCells) ? stats.missingCells : null;
     const taskSuggestion = metadata?.taskSuggestion || null;
 
@@ -1204,12 +1451,15 @@ export default function DatasetNode({ data, id, selected }) {
       const graph = { nodes: execNodes, edges: execEdges };
       const res = await previewGraphClient(graph, id, count);
       setPreviewResult(res);
+      if (type === 'dataset.database' && Array.isArray(res?.rows) && res.rows.length > 0) {
+        applyConfigPatch({ dataset_sample: res.rows });
+      }
     } catch (err) {
       setPreviewResult({ error: String(err) });
     } finally {
       setPreviewing(false);
     }
-  }, [execNodes, execEdges, id, type, localConfig]);
+  }, [execNodes, execEdges, id, type, localConfig, applyConfigPatch]);
 
   const validateCurrentPath = useCallback(async () => {
     const p = localConfig.path;

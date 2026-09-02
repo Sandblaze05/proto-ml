@@ -12,15 +12,17 @@ describe('external dataset runtimes', () => {
     });
 
     const sample = await runtime.getSample(2);
-    expect(sample).toEqual([{ id: 1 }, { id: 2 }]);
+    const rows = Array.isArray(sample.rows) ? sample.rows : sample;
+    expect(rows).toEqual([{ id: 1 }, { id: 2 }]);
   });
 
   it('database runtime provides preview-safe synthetic row without connector', async () => {
     const runtime = new DatabaseDatasetRuntime({ db_type: 'postgresql', table: 'users' });
     const sample = await runtime.getSample(1);
+    const rows = Array.isArray(sample.rows) ? sample.rows : sample;
 
-    expect(sample[0]._preview).toBe(true);
-    expect(sample[0].table).toBe('users');
+    expect(rows[0]._preview).toBe(true);
+    expect(rows[0].table).toBe('users');
   });
 
   it('api runtime returns mock data when configured', async () => {

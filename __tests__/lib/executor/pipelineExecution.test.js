@@ -601,6 +601,28 @@ describe('E2E Python Execution Validation', () => {
       expect(compiled.code).toContain('node_outputs');
     });
 
+    it('escapes multiline database queries in generated Python', () => {
+      const compiled = compileExecutionGraph({
+        nodes: {
+          db1: {
+            id: 'db1',
+            type: 'dataset.database',
+            config: {
+              db_type: 'mysql',
+              host: 'ensembldb.ensembl.org',
+              port: 3306,
+              query: 'SELECT source,\nseq_region_start\nFROM dna',
+            },
+          },
+        },
+        edges: [],
+      });
+
+      expect(compiled.ok).toBe(true);
+      expect(compiled.code).toContain('SELECT source,\\nseq_region_start\\nFROM dna');
+      expect(compiled.code).not.toContain('SELECT source,\nseq_region_start\nFROM dna');
+    });
+
     it('generates valid Python with imports', () => {
       const compiled = compileExecutionGraph({
         nodes: { d1: { id: 'd1', type: 'dataset.csv', config: {} } },
