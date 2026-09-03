@@ -22,11 +22,25 @@ export default function HistoryPanel() {
     exitCompareMode
   } = useVersionStore();
 
-  const { nodes, edges, drawings, addToast } = useUIStore();
+  const { nodes, edges, drawings, addToast, activeSidePanel, setActiveSidePanel } = useUIStore();
   const panelRef = useRef(null);
   const [panelHover, setPanelHover] = useState(false);
 
   // Smooth slide-in transition using GSAP
+  useEffect(() => {
+    if (historyPanelOpen && !activeSidePanel) {
+      setActiveSidePanel('history');
+    } else if (!historyPanelOpen && activeSidePanel === 'history') {
+      setActiveSidePanel(null);
+    }
+  }, [historyPanelOpen, activeSidePanel, setActiveSidePanel]);
+
+  useEffect(() => {
+    if (activeSidePanel !== 'history' && historyPanelOpen) {
+      useVersionStore.getState().setHistoryPanelOpen(false);
+    }
+  }, [activeSidePanel, historyPanelOpen]);
+
   useEffect(() => {
     if (!panelRef.current) return;
     if (historyPanelOpen) {
@@ -99,9 +113,12 @@ export default function HistoryPanel() {
 
   return (
     <>
-      {!historyPanelOpen && (
+      {!historyPanelOpen && !activeSidePanel && (
         <button
-          onClick={toggleHistoryPanel}
+          onClick={() => {
+            setActiveSidePanel('history');
+            useVersionStore.getState().setHistoryPanelOpen(true);
+          }}
           className="group z-[150] fixed top-[128px] right-0 flex items-center h-10 bg-background/90 backdrop-blur-md border border-r-0 border-foreground rounded-l-lg shadow-lg cursor-pointer hover:bg-foreground/10 transition-all duration-300 overflow-hidden w-10 hover:w-28"
           aria-label="Open History"
         >
@@ -128,7 +145,10 @@ export default function HistoryPanel() {
             <h1 className="text-base font-bold text-foreground">History</h1>
           </div>
           <button
-            onClick={toggleHistoryPanel}
+            onClick={() => {
+              setActiveSidePanel(null);
+              useVersionStore.getState().setHistoryPanelOpen(false);
+            }}
             className="p-1.5 hover:bg-foreground/10 rounded-md transition-colors"
           >
             <X size={18} className="text-foreground/60" />

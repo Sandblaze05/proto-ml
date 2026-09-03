@@ -1,14 +1,28 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { X, Plus, Trash2, Hash, Type, Settings2 } from 'lucide-react';
 import { useVariableStore } from '@/store/useVariableStore';
 import { useUIStore } from '@/store/useUIStore';
 
 export default function VariablePanel() {
-  const { variables, panelOpen, togglePanel, addVariable, updateVariable, removeVariable } = useVariableStore();
-  const { addToast } = useUIStore();
+  const { variables, panelOpen, setPanelOpen, addVariable, updateVariable, removeVariable } = useVariableStore();
+  const { addToast, activeSidePanel, setActiveSidePanel } = useUIStore();
   const [newName, setNewName] = useState('');
+
+  useEffect(() => {
+    if (activeSidePanel !== 'variables' && panelOpen) setPanelOpen(false);
+  }, [activeSidePanel, panelOpen, setPanelOpen]);
+
+  const handleTogglePanel = () => {
+    if (panelOpen) {
+      setActiveSidePanel(null);
+      setPanelOpen(false);
+    } else {
+      setActiveSidePanel('variables');
+      setPanelOpen(true);
+    }
+  };
 
   const handleAdd = () => {
     if (!newName.trim()) return;
@@ -22,9 +36,9 @@ export default function VariablePanel() {
 
   return (
     <>
-      {!panelOpen && (
+      {!panelOpen && !activeSidePanel && (
         <button
-          onClick={togglePanel}
+          onClick={handleTogglePanel}
           className="group z-[150] fixed top-[176px] right-0 flex items-center h-10 bg-background/90 backdrop-blur-md border border-r-0 border-foreground rounded-l-lg shadow-lg cursor-pointer hover:bg-foreground/10 transition-all duration-300 overflow-hidden w-10 hover:w-32"
         >
           <div className="flex items-center pl-3 w-32 whitespace-nowrap">
@@ -45,7 +59,7 @@ export default function VariablePanel() {
               <h1 className="text-base font-bold text-foreground">Global Variables</h1>
             </div>
             <button
-              onClick={togglePanel}
+              onClick={handleTogglePanel}
               className="p-1.5 hover:bg-foreground/10 rounded-md transition-colors"
             >
               <X size={18} className="text-foreground/60" />

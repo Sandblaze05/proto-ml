@@ -12,6 +12,9 @@ export const useUIStore = create((set, get) => ({
   edges: [],
   drawings: [],
   readOnly: false,
+  activeSidePanel: null,
+
+  setActiveSidePanel: (panel) => set({ activeSidePanel: panel }),
 
   // ── Jupyter cell-mode execution state ────────────────────────────────────
   // { [nodeId]: { status: 'idle'|'running'|'success'|'error'|'skipped', logs: [], error: null, startedAt, completedAt } }
