@@ -107,7 +107,7 @@ export const LIFECYCLE_NODES = [
       max_iter: 10000,
     },
     uiSchema: {
-      family: { type: 'enum', options: ['linear_regression', 'ridge_regression', 'lasso_regression', 'elastic_net', 'logistic_regression', 'random_forest_regressor', 'random_forest_classifier', 'gradient_boosting_regressor', 'gradient_boosting_classifier', 'decision_tree_regressor', 'decision_tree_classifier', 'knn_regressor', 'knn_classifier', 'svr', 'svc', 'naive_bayes'] },
+      family: { type: 'enum', options: ['linear_regression', 'ridge_regression', 'lasso_regression', 'elastic_net', 'logistic_regression', 'random_forest_regressor', 'random_forest_classifier', 'gradient_boosting_regressor', 'gradient_boosting_classifier', 'decision_tree_regressor', 'decision_tree_classifier', 'knn_regressor', 'knn_classifier', 'svr', 'svc', 'naive_bayes', 'multinomial_nb', 'complement_nb', 'sgd_classifier'] },
       pretrained: { type: 'boolean', showWhen: { field: 'family', in: [] } },
       num_outputs: { type: 'number', min: 1, max: 100000, step: 1, showWhen: { field: 'family', in: [] } },
       alpha: { type: 'number', min: 0, max: 1000, step: 0.01, showWhen: { field: 'family', in: ['ridge_regression', 'lasso_regression', 'elastic_net'] } },

@@ -67,6 +67,10 @@ describe('transformRegistry', () => {
       'transform.text.tokenize',
       'transform.text.stopword_removal',
       'transform.text.truncation',
+      'transform.text.tfidf',
+      'transform.text.count_vectorizer',
+      'transform.text.embedding',
+      'transform.text.stem_lemmatize',
     ]));
   });
 });

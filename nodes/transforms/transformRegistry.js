@@ -410,4 +410,87 @@ export const TRANSFORM_NODES = [
       max_length: { type: 'number', min: 1, max: 32768, step: 1 },
     },
   }),
+
+  // --- NLP Vectorization Transforms ---
+  createTransformDef({
+    type: 'transform.text.tfidf',
+    label: 'TF-IDF Vectorizer',
+    category: 'text',
+    datatype: 'tabular',
+    inputs: [{ name: 'in', datatype: 'sequence', shape: [], optional: false, role: 'data' }],
+    outputs: [{ name: 'out', datatype: 'tabular', shape: [], role: 'data' }],
+    defaultConfig: {
+      text_column: 'text',
+      max_features: 5000,
+      ngram_min: 1,
+      ngram_max: 2,
+      sublinear_tf: true,
+      use_idf: true,
+      norm: 'l2',
+    },
+    uiSchema: {
+      text_column: { type: 'string', label: 'Text Column' },
+      max_features: { type: 'number', min: 100, max: 100000, step: 100, label: 'Max Features' },
+      ngram_min: { type: 'number', min: 1, max: 5, step: 1, label: 'N-gram Min' },
+      ngram_max: { type: 'number', min: 1, max: 5, step: 1, label: 'N-gram Max' },
+      sublinear_tf: { type: 'boolean', label: 'Sublinear TF' },
+      use_idf: { type: 'boolean', label: 'Use IDF' },
+      norm: { type: 'enum', options: ['l1', 'l2', 'none'], label: 'Normalization' },
+    },
+  }),
+  createTransformDef({
+    type: 'transform.text.count_vectorizer',
+    label: 'Count Vectorizer',
+    category: 'text',
+    datatype: 'tabular',
+    inputs: [{ name: 'in', datatype: 'sequence', shape: [], optional: false, role: 'data' }],
+    outputs: [{ name: 'out', datatype: 'tabular', shape: [], role: 'data' }],
+    defaultConfig: {
+      text_column: 'text',
+      max_features: 5000,
+      ngram_min: 1,
+      ngram_max: 1,
+      binary: false,
+    },
+    uiSchema: {
+      text_column: { type: 'string', label: 'Text Column' },
+      max_features: { type: 'number', min: 100, max: 100000, step: 100, label: 'Max Features' },
+      ngram_min: { type: 'number', min: 1, max: 5, step: 1, label: 'N-gram Min' },
+      ngram_max: { type: 'number', min: 1, max: 5, step: 1, label: 'N-gram Max' },
+      binary: { type: 'boolean', label: 'Binary Counts' },
+    },
+  }),
+  createTransformDef({
+    type: 'transform.text.embedding',
+    label: 'Text Embedding',
+    category: 'text',
+    datatype: 'tensor',
+    inputs: [{ name: 'in', datatype: 'sequence', shape: [], optional: false, role: 'data' }],
+    outputs: [{ name: 'out', datatype: 'tensor', shape: ['B', 'embedding_dim'], role: 'data' }],
+    defaultConfig: {
+      text_column: 'text',
+      model_name: 'all-MiniLM-L6-v2',
+      pooling: 'mean',
+      batch_size: 32,
+    },
+    uiSchema: {
+      text_column: { type: 'string', label: 'Text Column' },
+      model_name: { type: 'enum', options: ['all-MiniLM-L6-v2', 'all-mpnet-base-v2', 'paraphrase-MiniLM-L6-v2'], label: 'Model' },
+      pooling: { type: 'enum', options: ['mean', 'cls', 'max'], label: 'Pooling' },
+      batch_size: { type: 'number', min: 1, max: 512, step: 1, label: 'Batch Size' },
+    },
+  }),
+  createTransformDef({
+    type: 'transform.text.stem_lemmatize',
+    label: 'Stem / Lemmatize',
+    category: 'text',
+    datatype: 'sequence',
+    defaultConfig: {
+      method: 'porter',
+    },
+    uiSchema: {
+      method: { type: 'enum', options: ['porter', 'snowball', 'wordnet'], label: 'Method' },
+    },
+  }),
 ];
+

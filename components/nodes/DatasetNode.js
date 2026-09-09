@@ -15,6 +15,7 @@ import {
   listClientUploads,
   previewClientUpload,
   previewClientImageUpload,
+  previewClientTextUpload,
   validateClientUpload,
   validateClientUploadJoins,
 } from '../../lib/clientUploadStore';
@@ -214,7 +215,7 @@ function SourceTab({
 }) {
   const fileRef = useRef(null);
   const [uploading, setUploading] = useState(false);
-  const { useDirectoryPicker, acceptCsvFiles, acceptJsonFiles } = getUploadInputMode(nodeType, config.source_mode);
+  const { useDirectoryPicker, acceptCsvFiles, acceptJsonFiles, acceptTextFiles } = getUploadInputMode(nodeType, config.source_mode);
 
   const triggerUpload = useCallback(() => {
     if (fileRef.current) fileRef.current.click();
@@ -237,13 +238,15 @@ function SourceTab({
         el.setAttribute('accept', '.csv,text/csv');
       } else if (acceptJsonFiles) {
         el.setAttribute('accept', '.json,.jsonl,application/json,application/x-ndjson');
+      } else if (acceptTextFiles) {
+        el.setAttribute('accept', '.txt,.text,.md,.csv,.jsonl,text/plain,text/markdown');
       } else {
         el.removeAttribute('accept');
       }
     } catch {
       // ignore
     }
-  }, [useDirectoryPicker, acceptCsvFiles, acceptJsonFiles]);
+  }, [useDirectoryPicker, acceptCsvFiles, acceptJsonFiles, acceptTextFiles]);
 
   const handleFiles = useCallback(async (e) => {
     const files = e.target.files;
@@ -633,32 +636,169 @@ function SourceTab({
   }
 
   if (nodeType === 'dataset.text') {
+    const textMode = config.source_mode || 'file';
+    const textFiles = Array.isArray(config.files) ? config.files : [];
+
+    // Derive columns from inspect result (for CSV/JSONL with headers)
+    const textInspectColumns = Array.isArray(inspectResult?.columns) ? inspectResult.columns : [];
+    const textPreviewCols = Array.isArray(inspectResult?.preview) && inspectResult.preview.length > 0
+      ? Object.keys(inspectResult.preview[0] || {})
+      : [];
+    const textProfileCols = inspectResult?.profile ? Object.keys(inspectResult.profile) : [];
+    const detectedTextColumns = Array.from(new Set([
+      ...textInspectColumns,
+      ...textPreviewCols,
+      ...textProfileCols,
+    ].filter(Boolean)));
+
+    const textColumnOptions = [
+      { value: '', label: detectedTextColumns.length > 0 ? 'Auto-detect' : 'text (default)' },
+      ...detectedTextColumns.map((c) => ({ value: c, label: c })),
+    ];
+    const labelColumnOptions = [
+      { value: '', label: detectedTextColumns.length > 0 ? 'None' : 'label (default)' },
+      ...detectedTextColumns.map((c) => ({ value: c, label: c })),
+    ];
+
+    const effectiveTextPath = config.client_upload_id
+      ? `client://${config.client_upload_id}`
+      : (config.path || '');
+
+    const vocabStats = inspectResult?.vocab || inspectResult?.metadata?.vocab;
+    const textQuickResult = (() => {
+      if (validation?.error) return { tone: 'text-red-300', text: validation.error };
+      if (inspectResult?.metadata?.rows != null) return { tone: 'text-emerald-300', text: `${inspectResult.metadata.rows} rows · ${inspectResult.metadata?.columns ?? '?'} cols` };
+      if (filesList?.length > 0) return { tone: 'text-emerald-300', text: `Detected ${filesList.length} files.` };
+      if (validation?.exists) return { tone: 'text-emerald-300', text: 'Path exists and is readable.' };
+      return { tone: 'text-[#faebd7]/60', text: 'Upload or set a path to get started.' };
+    })();
+
     return (
       <>
-        <Field label="File Path">
-          <NodeInput value={config.path} onChange={(v) => onChange('path', v)} placeholder="/data/corpus.txt or client://upload_..." />
+        <Field label="Source Mode">
+          <NodeSelect
+            value={textMode}
+            onChange={(v) => onChange('source_mode', v)}
+            options={[{ value: 'file', label: 'Single File' }, { value: 'folder', label: 'Folder (scan all)' }]}
+          />
+        </Field>
+
+        <Field label="Dataset Path">
+          <NodeInput
+            value={effectiveTextPath}
+            onChange={(v) => {
+              if (config.client_upload_id) onChange('client_upload_id', '');
+              onChange('path', v);
+            }}
+            placeholder={textMode === 'folder' ? './data/corpus/ or client://upload_...' : './data/reviews.csv or client://upload_...'}
+          />
           <div className="mt-2 flex flex-wrap items-center gap-1.5">
-            <IconHoverAction icon={Upload} label="Upload" onClick={triggerUpload} disabled={uploading || busy} tone="success" />
+            <IconHoverAction icon={Upload} label={uploading ? 'Uploading...' : 'Upload'} onClick={triggerUpload} disabled={uploading || busy} tone="success" />
             <IconHoverAction icon={ShieldCheck} label="Validate" onClick={onValidate} disabled={busy} tone="accent" />
             <IconHoverAction icon={Search} label="Inspect" onClick={onInspect} disabled={busy} tone="accent" />
-            <IconHoverAction icon={List} label="List Files" onClick={() => onList && onList()} disabled={busy} />
+            <IconHoverAction icon={List} label="List" onClick={() => onList && onList()} disabled={busy} />
             <IconHoverAction icon={Trash2} label="Delete" onClick={onDelete} disabled={busy} tone="danger" />
-            {uploading && <span className="text-[10px] text-[#faebd7]/50">Uploading...</span>}
-            {busy && !uploading && <span className="text-[10px] text-[#faebd7]/50">Working...</span>}
+            {busy && <span className="text-[10px] text-[#faebd7]/50">Working...</span>}
           </div>
           <input ref={fileRef} type="file" multiple onChange={handleFiles} className="hidden" />
-          {renderPathStatus('file')}
-          {filesList && filesList.length > 0 && (
-            <div className="mt-2 bg-black/40 px-2 py-1 rounded text-[9px] font-mono max-h-40 overflow-auto">
-              {filesList.map((f, i) => <div key={i}>{f}</div>)}
+          {renderPathStatus(textMode === 'folder' ? 'directory' : 'either')}
+        </Field>
+
+        <Field label="Latest Result">
+          <div className={`text-[10px] font-mono bg-black/40 px-2 py-1 rounded ${textQuickResult.tone}`}>{textQuickResult.text}</div>
+        </Field>
+
+        {textMode === 'folder' && (
+          <Field label="Files (one per line)">
+            <textarea
+              value={textFiles.join('\n')}
+              onChange={(e) => onChange('files', e.target.value.split(/\r?\n/).map((s) => s.trim()).filter(Boolean))}
+              className="w-full h-16 bg-black/60 border border-[#faebd7]/10 rounded text-[#faebd7] text-[10px] font-mono px-1.5 py-1 outline-none focus:border-[#faebd7]/30 placeholder:text-[#faebd7]/20"
+              placeholder="reviews.txt&#10;corpus.md&#10;data.csv"
+            />
+          </Field>
+        )}
+
+        {(inspectResult?.metadata || inspectResult?.columns?.length > 0 || (filesList && filesList.length > 0)) && (
+          <Field label="Analysis Results">
+            <div className="space-y-1.5">
+              {inspectResult?.metadata && (
+                <div className="text-[9px] bg-black/40 px-2 py-1 rounded font-mono text-[#faebd7]/70 max-h-28 overflow-auto space-y-0.5">
+                  <div>Rows: {inspectResult.metadata.rows ?? '—'} | Columns: {inspectResult.metadata.columns ?? '—'}</div>
+                  <div>Source: {inspectResult.metadata.sourceType || 'text'}</div>
+                  {inspectResult.metadata.taskSuggestion && <div>Task: {inspectResult.metadata.taskSuggestion}</div>}
+                </div>
+              )}
+              {vocabStats && (
+                <div className="text-[9px] bg-black/40 px-2 py-1 rounded font-mono text-[#faebd7]/70">
+                  <div>Vocab: {Array.isArray(vocabStats) ? `${vocabStats.length} terms` : (vocabStats.size ?? vocabStats.count ?? '—')} unique tokens</div>
+                  {vocabStats.top && <div>Top: {vocabStats.top.slice(0, 8).join(', ')}</div>}
+                </div>
+              )}
+              {inspectResult?.columns?.length > 0 && (
+                <div className="text-[9px] bg-black/40 px-2 py-1 rounded font-mono text-[#faebd7]/70 max-h-20 overflow-auto">
+                  Columns: {inspectResult.columns.join(', ')}
+                </div>
+              )}
+              {filesList && filesList.length > 0 && (
+                <div className="text-[9px] bg-black/40 px-2 py-1 rounded font-mono text-[#faebd7]/70 max-h-20 overflow-auto">
+                  {filesList.map((f, i) => <div key={i}>{f}</div>)}
+                </div>
+              )}
             </div>
+          </Field>
+        )}
+
+        <Field label="File Format">
+          <NodeSelect
+            value={config.file_format || 'txt'}
+            onChange={(v) => onChange('file_format', v)}
+            options={[
+              { value: 'txt', label: 'Plain Text (.txt / .md)' },
+              { value: 'csv', label: 'CSV with text column' },
+              { value: 'jsonl', label: 'JSON Lines' },
+            ]}
+          />
+        </Field>
+        {config.file_format === 'csv' && (
+          <label className="flex items-center gap-2 text-[10px] text-[#faebd7]/70">
+            <input type="checkbox" checked={config.header === true} onChange={(e) => onChange('header', e.target.checked)} />
+            First row contains column headers
+          </label>
+        )}
+
+        <Field label="Text Column">
+          {detectedTextColumns.length > 0 ? (
+            <NodeSelect value={config.text_column || ''} onChange={(v) => onChange('text_column', v)} options={textColumnOptions} />
+          ) : (
+            <NodeInput value={config.text_column || ''} onChange={(v) => onChange('text_column', v)} placeholder="text" />
           )}
         </Field>
-        <Field label="Format"><NodeSelect value={config.file_format} onChange={(v) => onChange('file_format', v)} options={[{ value: 'txt', label: 'TXT' }, { value: 'csv', label: 'CSV' }, { value: 'jsonl', label: 'JSONL' }]} /></Field>
-        <Field label="Text Column"><NodeInput value={config.text_column} onChange={(v) => onChange('text_column', v)} placeholder="text" /></Field>
-        <Field label="Label Column"><NodeInput value={config.label_column} onChange={(v) => onChange('label_column', v)} placeholder="label" /></Field>
-        <Field label="Tokenizer"><NodeSelect value={config.tokenizer} onChange={(v) => onChange('tokenizer', v)} options={[{ value: 'whitespace', label: 'Whitespace' }, { value: 'bpe', label: 'BPE' }, { value: 'wordpiece', label: 'WordPiece' }, { value: 'custom', label: 'Custom' }]} /></Field>
-        <Field label="Max Length"><NodeInput type="number" value={config.max_length} onChange={(v) => onChange('max_length', Number(v))} /></Field>
+        <Field label="Label Column">
+          {detectedTextColumns.length > 0 ? (
+            <NodeSelect value={config.label_column || config.target_column || ''} onChange={(v) => { onChange('label_column', v); onChange('target_column', v); }} options={labelColumnOptions} />
+          ) : (
+            <NodeInput value={config.label_column || config.target_column || ''} onChange={(v) => { onChange('label_column', v); onChange('target_column', v); }} placeholder="label (optional)" />
+          )}
+        </Field>
+
+
+
+        <Field label="Tokenizer">
+          <NodeSelect
+            value={config.tokenizer || 'whitespace'}
+            onChange={(v) => onChange('tokenizer', v)}
+            options={[
+              { value: 'whitespace', label: 'Whitespace' },
+              { value: 'bpe', label: 'BPE' },
+              { value: 'wordpiece', label: 'WordPiece' },
+              { value: 'custom', label: 'Custom' },
+            ]}
+          />
+        </Field>
+        <Field label="Max Length">
+          <NodeInput type="number" value={config.max_length || 512} onChange={(v) => onChange('max_length', Number(v))} />
+        </Field>
       </>
     );
   }
@@ -990,7 +1130,7 @@ function PreviewTab({ config, nodeType, previewing, onRunPreview, previewResult 
   })();
 
   const tabularRunSummary = (() => {
-    if (!['dataset.csv', 'dataset.json', 'dataset.database'].includes(nodeType) || !previewResult || previewResult.error) return null;
+    if (!['dataset.csv', 'dataset.json', 'dataset.database', 'dataset.text'].includes(nodeType) || !previewResult || previewResult.error) return null;
 
     const rows = Array.isArray(previewResult.rows) ? previewResult.rows : [];
     const metadata = previewResult.metadata || {};
@@ -1423,6 +1563,22 @@ export default function DatasetNode({ data, id, selected }) {
         return;
       }
 
+      if (type === 'dataset.text' && localConfig.client_upload_id) {
+        const sample = await previewClientTextUpload(localConfig.client_upload_id, {
+          file_format: localConfig.file_format || 'txt',
+          header: localConfig.header !== false,
+          delimiter: localConfig.delimiter || ',',
+          text_column: localConfig.text_column || 'text',
+          label_column: localConfig.label_column || localConfig.target_column || '',
+          vectorizer: localConfig.vectorizer || 'none',
+          max_features: localConfig.max_features || 10000,
+          ngram_range: localConfig.ngram_range || [1, 1],
+          n: count,
+        });
+        setPreviewResult(sample);
+        return;
+      }
+
       if (type === 'dataset.json' && localConfig.client_upload_id) {
         const sample = await previewClientUpload(localConfig.client_upload_id, {
           file_format: localConfig.file_format || 'json',
@@ -1533,7 +1689,7 @@ export default function DatasetNode({ data, id, selected }) {
   }, []);
 
   const inspectCsvConfig = useCallback(async () => {
-    if (type !== 'dataset.csv' && type !== 'dataset.json') return;
+    if (type !== 'dataset.csv' && type !== 'dataset.json' && type !== 'dataset.text') return;
     const files = Array.isArray(localConfig.files) ? localConfig.files : [];
     const hasPath = !!String(localConfig.path || '').trim();
     const hasClientUpload = !!localConfig.client_upload_id;
@@ -1578,7 +1734,7 @@ export default function DatasetNode({ data, id, selected }) {
   }, [type, localConfig, handleChange, commitDatasetAnalysis]);
 
   const ensureCsvMetadata = useCallback(async () => {
-    if (type !== 'dataset.csv' && type !== 'dataset.json') return;
+    if (type !== 'dataset.csv' && type !== 'dataset.json' && type !== 'dataset.text') return;
     const files = Array.isArray(localConfig.files) ? localConfig.files : [];
     const hasPath = !!String(localConfig.path || '').trim();
     const hasClientUpload = !!localConfig.client_upload_id;
@@ -1661,7 +1817,7 @@ export default function DatasetNode({ data, id, selected }) {
     setPreviewing(true);
     setPreviewResult(null);
     try {
-      if (type === 'dataset.csv' || type === 'dataset.json' || type === 'dataset.image') {
+      if (type === 'dataset.csv' || type === 'dataset.json' || type === 'dataset.image' || type === 'dataset.text') {
         const created = await createClientUpload(files);
         handleChange('client_upload_id', created.datasetId || created.uploadId);
         handleChange('dataset_id', created.datasetId || created.uploadId);
@@ -1677,15 +1833,15 @@ export default function DatasetNode({ data, id, selected }) {
             sourceType: created.metadata?.sourceType || type,
           });
         }
-        if (type === 'dataset.csv' || type === 'dataset.json') {
-          handleChange('files', type === 'dataset.json' ? (created.jsonFiles || []) : (created.csvFiles || []));
+        if (type === 'dataset.csv' || type === 'dataset.json' || type === 'dataset.text') {
+          handleChange('files', type === 'dataset.json' ? (created.jsonFiles || []) : type === 'dataset.text' ? (created.textFiles || created.files || []) : (created.csvFiles || []));
           try {
             const inspected = await inspectClientUpload(created.uploadId, {
               delimiter: localConfig.delimiter || ',',
               header: localConfig.header !== false,
               primary: localConfig.primary,
               target_column: localConfig.target_column,
-              file_format: localConfig.file_format || 'json',
+              file_format: localConfig.file_format || (type === 'dataset.text' ? (created.files?.[0]?.toLowerCase?.()?.endsWith('.csv') ? 'csv' : 'txt') : (type === 'dataset.csv' ? 'csv' : 'json')),
               data_key: localConfig.data_key || '',
               label_key: localConfig.label_key || 'label',
               features: Array.isArray(localConfig.features)
@@ -1716,7 +1872,7 @@ export default function DatasetNode({ data, id, selected }) {
         setPreviewResult({ uploaded: `client://${created.uploadId}`, clientOnly: true, warning: created.warning || null });
         return;
       }
-      setPreviewResult({ error: 'Client-only mode supports dataset.csv, dataset.json, and dataset.image uploads only.' });
+      setPreviewResult({ error: 'Client-only mode supports dataset.csv, dataset.json, dataset.text, and dataset.image uploads only.' });
     } catch (err) {
       setPreviewResult({ error: String(err) });
     } finally {
@@ -1725,12 +1881,12 @@ export default function DatasetNode({ data, id, selected }) {
   }, [handleChange, listUploads, type, localConfig, commitDatasetAnalysis]);
 
   useEffect(() => {
-    if (type !== 'dataset.csv' && type !== 'dataset.json') return;
+    if (type !== 'dataset.csv' && type !== 'dataset.json' && type !== 'dataset.text') return;
     listUploads();
   }, [type, listUploads]);
 
   useEffect(() => {
-    if (type !== 'dataset.csv' && type !== 'dataset.json') return;
+    if (type !== 'dataset.csv' && type !== 'dataset.json' && type !== 'dataset.text') return;
     ensureCsvMetadata();
   }, [
     type,

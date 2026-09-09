@@ -16,7 +16,7 @@ import { BrowserJupyterClient, extractStructuredResult } from '@/lib/executor/br
 import { airflowExporter } from '@/lib/exporters/AirflowExporter'
 import { buildCompilerGraphFromUI } from '@/lib/exporters/buildCompilerGraphFromUI'
 import { sanitizeDagName } from '@/lib/executor/graphUtils'
-import { previewClientUpload } from '@/lib/clientUploadStore'
+import { previewClientUpload, previewClientTextUpload } from '@/lib/clientUploadStore'
 import { RUN } from '@/lib/executor/executionContract'
 import MonacoCodeEditor from './nodes/MonacoCodeEditor'
 import FileCard from './ui/FileCard'
@@ -445,25 +445,30 @@ async function buildClientDatasetVariables(graph) {
   const clientDatasets = {}
 
   for (const node of nodes) {
-    if (node?.type !== 'dataset.csv' && node?.type !== 'dataset.json') continue
+    if (node?.type !== 'dataset.csv' && node?.type !== 'dataset.json' && node?.type !== 'dataset.text') continue
     const config = node.config || {}
     const path = String(config.path || '')
     const uploadId = config.client_upload_id || (path.startsWith('client://') ? path.replace('client://', '') : '')
     if (!uploadId) continue
 
-    const preview = await previewClientUpload(uploadId, {
-      ...config,
-      n: Number(config.max_train_rows || config.sample_rows || 100000),
-    })
-    const rows = Array.isArray(preview?.rows) ? preview.rows : []
+    const preview = node.type === 'dataset.text'
+      ? await previewClientTextUpload(uploadId, {
+          ...config,
+          n: Number(config.max_train_rows || config.sample_rows || 100000),
+        })
+      : await previewClientUpload(uploadId, {
+          ...config,
+          n: Number(config.max_train_rows || config.sample_rows || 100000),
+        })
+    const rows = Array.isArray(preview?.rows) ? preview.rows : (Array.isArray(preview?.records) ? preview.records : (Array.isArray(preview?.sampleRows) ? preview.sampleRows : []))
     const metadata = preview?.metadata || {}
     const payload = {
       rows,
       data: rows,
-      columns: Array.isArray(metadata.columnsList) ? metadata.columnsList : Object.keys(rows[0] || {}),
-      feature_columns: Array.isArray(metadata.features) ? metadata.features : [],
-      target_column: config.target_column || metadata.target || '',
-      source_type: node.type === 'dataset.json' ? 'json' : 'csv',
+      columns: Array.isArray(preview?.columns) ? preview.columns : (Array.isArray(metadata.columnsList) ? metadata.columnsList : Object.keys(rows[0] || {})),
+      feature_columns: Array.isArray(metadata.features) ? metadata.features : [config.text_column || 'text'],
+      target_column: config.target_column || config.label_column || metadata.target || '',
+      source_type: node.type === 'dataset.text' ? 'text' : (node.type === 'dataset.json' ? 'json' : 'csv'),
       source: 'client_upload',
     }
     clientDatasets[uploadId] = payload
@@ -475,32 +480,51 @@ async function buildClientDatasetVariables(graph) {
 
 async function buildRunGraph(graph) {
   const nodes = Array.isArray(graph?.nodes) ? graph.nodes : Object.values(graph?.nodes || {})
-  const databaseNodes = nodes.filter((node) => node?.type === 'dataset.database')
-  if (databaseNodes.length === 0) return graph
-
   const enrichedNodes = nodes.map((node) => ({ ...node, config: { ...(node.config || {}) } }))
+
   for (const node of enrichedNodes) {
-    if (node.type !== 'dataset.database') continue
+    if (node.type === 'dataset.database') {
+      const config = node.config || {}
+      const limit = Math.max(1, Number(config.limit) || 1000)
+      const response = await fetch('/api/datasets/database', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'inspect', config: { ...config, limit } }),
+      })
+      const payload = await response.json()
+      if (!response.ok || !payload.ok) {
+        throw new Error(payload.error || `Database inspection failed for ${node.label || node.id}`)
+      }
 
-    const config = node.config || {}
-    const limit = Math.max(1, Number(config.limit) || 1000)
-    const response = await fetch('/api/datasets/database', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'inspect', config: { ...config, limit } }),
-    })
-    const payload = await response.json()
-    if (!response.ok || !payload.ok) {
-      throw new Error(payload.error || `Database inspection failed for ${node.label || node.id}`)
-    }
-
-    const rows = Array.isArray(payload.data) ? payload.data : []
-    if (rows.length === 0) {
-      throw new Error(`Database query returned no rows for ${config.table || 'the selected table'}`)
-    }
-    node.config = {
-      ...config,
-      dataset_sample: rows,
+      const rows = Array.isArray(payload.data) ? payload.data : []
+      if (rows.length === 0) {
+        throw new Error(`Database query returned no rows for ${config.table || 'the selected table'}`)
+      }
+      node.config = {
+        ...config,
+        dataset_sample: rows,
+      }
+    } else if (node.type === 'dataset.text' || node.type === 'dataset.csv' || node.type === 'dataset.json') {
+      const config = node.config || {}
+      const path = String(config.path || '')
+      const uploadId = config.client_upload_id || (path.startsWith('client://') ? path.replace('client://', '') : '')
+      if (uploadId) {
+        try {
+          const preview = node.type === 'dataset.text'
+            ? await previewClientTextUpload(uploadId, { ...config, n: 100000 })
+            : await previewClientUpload(uploadId, { ...config, n: 100000 })
+          const allRows = Array.isArray(preview?.rows) ? preview.rows : (Array.isArray(preview?.records) ? preview.records : [])
+          if (allRows.length > 0) {
+            node.config = {
+              ...config,
+              sampleRows: allRows,
+              dataset_sample: allRows,
+            }
+          }
+        } catch {
+          // Keep existing config if preview fetch fails
+        }
+      }
     }
   }
 
@@ -1352,11 +1376,12 @@ const PipelineCompilerPanel = () => {
         const kernelId = await client.startKernel({ fresh: false })
         setJupyterSession({ kernelId })
         
-        const variables = useVariableStore.getState().getVariablesAsObject()
-        const varCode = Object.entries(variables)
-          .map(([name, value]) => `${name} = ${typeof value === 'number' || !isNaN(value) ? value : `'${value}'`}`)
-          .join('\n')
-        if (varCode) await client.executeCode(kernelId, varCode)
+        const variables = {
+          ...useVariableStore.getState().getVariablesAsObject(),
+          __pml_client_datasets: await buildClientDatasetVariables(runGraph),
+        }
+        const bootstrapCode = compileBootstrapCell(variables)
+        await client.executeCode(kernelId, bootstrapCode, { username: 'proto-ml-bootstrap' })
 
         logs.push({ type: 'system', text: `Executing compiled pipeline on kernel ${kernelId}...\n${'-'.repeat(40)}\n` })
         setExecutionLogs([...logs])

@@ -1,13 +1,15 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
+import { toPng } from 'html-to-image'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, Camera, Check, User, Github, Twitter, Save, X, Linkedin, Instagram, Eye, Users } from 'lucide-react'
+import { ArrowLeft, Camera, Check, User, Github, Twitter, Save, X, Linkedin, Instagram, Eye, Users, Sparkles, Share2 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import PrivateProfileSkeleton from '@/components/profile/PrivateProfileSkeleton'
 import ImageCropModal from '@/components/profile/ImageCropModal'
+import AdmitOneTicket, { TICKET_STYLE, remixTicketStyle, playShutterSound } from '@/components/profile/AdmitOneTicket'
 
 const GRADIENTS = [
 	'from-amber-400 to-orange-500',
@@ -35,6 +37,80 @@ export default function ProfilePage() {
 	const [imageToCrop, setImageToCrop] = useState(null)
 	const [showCropModal, setShowCropModal] = useState(false)
 
+	const [ticketStyle, setTicketStyle] = useState(TICKET_STYLE)
+	const [ticketWidth, setTicketWidth] = useState(440)
+	const [isDesktop, setIsDesktop] = useState(false)
+	const ticketContainerRef = useRef(null)
+	const ticketStyleStorageKey = user?.id ? `proto-ml-ticket-style:${user.id}` : null
+
+	useEffect(() => {
+		if (!ticketContainerRef.current) return
+		const ro = new ResizeObserver(([entry]) => {
+			if (entry?.contentRect?.width) {
+				setTicketWidth(Math.floor(entry.contentRect.width))
+			}
+		})
+		ro.observe(ticketContainerRef.current)
+		return () => ro.disconnect()
+	}, [])
+
+	useEffect(() => {
+		const mediaQuery = window.matchMedia('(min-width: 1024px)')
+		const updateDesktopState = () => setIsDesktop(mediaQuery.matches)
+		updateDesktopState()
+		mediaQuery.addEventListener('change', updateDesktopState)
+		return () => mediaQuery.removeEventListener('change', updateDesktopState)
+	}, [])
+
+	const handleRemixTicket = () => {
+		playShutterSound()
+		setTicketStyle(prev => {
+			const nextStyle = remixTicketStyle(prev)
+			if (ticketStyleStorageKey) {
+				localStorage.setItem(ticketStyleStorageKey, JSON.stringify(nextStyle))
+			}
+			return nextStyle
+		})
+	}
+
+	const handleShareProfile = async () => {
+		if (!handle) {
+			setMessage({ text: 'Add a handle before sharing your profile.', type: 'error' })
+			return
+		}
+
+		const profileUrl = `${window.location.origin}/u/${handle}`
+		try {
+			await new Promise(requestAnimationFrame)
+			const cardDataUrl = await toPng(ticketContainerRef.current, {
+				cacheBust: true,
+				pixelRatio: 2,
+				skipFonts: true
+			})
+			const response = await fetch(cardDataUrl)
+			const cardBlob = await response.blob()
+			const cardFile = new File([cardBlob], `${handle}-admit-card.png`, { type: 'image/png' })
+
+			if (navigator.share && (!navigator.canShare || navigator.canShare({ files: [cardFile] }))) {
+				await navigator.share({
+					title: `${username || 'Profile'} | PROTO-ML`,
+					text: `View ${username || 'my'} PROTO-ML profile`,
+					files: [cardFile]
+				})
+			} else {
+				const downloadLink = document.createElement('a')
+				downloadLink.href = cardDataUrl
+				downloadLink.download = cardFile.name
+				downloadLink.click()
+				setMessage({ text: 'Admit card PNG downloaded.', type: 'success' })
+			}
+		} catch (error) {
+			if (error?.name !== 'AbortError') {
+				setMessage({ text: 'Unable to share profile link.', type: 'error' })
+			}
+		}
+	}
+
 	const router = useRouter()
 	const supabase = createClient()
 
@@ -60,6 +136,16 @@ export default function ProfilePage() {
 		}
 		fetchProfile()
 	}, [supabase, router])
+
+	useEffect(() => {
+		if (!ticketStyleStorageKey) return
+		try {
+			const storedStyle = localStorage.getItem(ticketStyleStorageKey)
+			if (storedStyle) setTicketStyle(JSON.parse(storedStyle))
+		} catch (error) {
+			console.warn('Unable to restore ticket design:', error)
+		}
+	}, [ticketStyleStorageKey])
 
 	useEffect(() => {
 		if (!handle || !user) {
@@ -222,110 +308,51 @@ export default function ProfilePage() {
 			</nav>
 
 			<main className="min-h-screen">
-				<div className="max-w-5xl mx-auto px-6 py-12">
-					<div className="grid grid-cols-1 lg:grid-cols-2 gap-10 lg:gap-16">
+				<div className="w-full px-6 lg:px-10 xl:px-14 py-12">
+					<div className="grid grid-cols-1 lg:grid-cols-[1.1fr_0.9fr] gap-10 lg:gap-14 xl:gap-20">
 
-						<div className="lg:sticky lg:top-24 lg:self-start order-2 lg:order-1">
-							<p className="text-[9px] font-black uppercase tracking-[0.2em] text-foreground/20 mb-3">Preview</p>
+						<div className="lg:sticky lg:top-24 lg:self-start order-1 lg:order-1 space-y-4">
+							<div className="flex items-center justify-between">
+								<div />
+								<button
+									type="button"
+									onClick={handleRemixTicket}
+									title="Shuffle pattern, colors and sound"
+									className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-400/10 border border-amber-400/25 text-amber-500 dark:text-amber-400 text-xs font-bold hover:bg-amber-400/20 active:scale-95 transition-all shadow-sm cursor-pointer"
+								>
+									<Sparkles size={12} />
+									<span>Remix Pass</span>
+								</button>
+								<button
+									type="button"
+									onClick={handleShareProfile}
+									title="Share profile"
+									className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-foreground/5 border border-foreground/10 text-foreground/60 text-xs font-bold hover:bg-foreground/10 active:scale-95 transition-all cursor-pointer"
+								>
+									<Share2 size={12} />
+									<span>Share</span>
+								</button>
+							</div>
 
-							<div className="rounded-2xl overflow-hidden border border-foreground/[0.08] shadow-lg">
-								{/* Banner — clean gradient only */}
-								<div className={`h-28 w-full bg-gradient-to-br ${bannerGradient} transition-all duration-500`} />
-
-								<div className="bg-foreground/[0.02] px-6 pb-5">
-									{/* Avatar */}
-									<div className="relative -mt-8 mb-4 inline-block group">
-										<div className="w-16 h-16 rounded-xl border-[3px] border-background bg-foreground/[0.08] overflow-hidden shadow-md relative">
-											{avatarUrl ? (
-												<img src={avatarUrl} alt="Avatar" className="w-full h-full object-cover" />
-											) : (
-												<div className="w-full h-full flex items-center justify-center">
-													<User size={26} strokeWidth={1.5} className="text-foreground/30" />
-												</div>
-											)}
-											<label className="absolute inset-0 bg-black/70 flex flex-col items-center justify-center cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity rounded-xl">
-												<Camera size={13} className="text-white mb-0.5" />
-												<span className="text-[8px] font-bold text-white uppercase tracking-widest">Change</span>
-												<input type="file" accept="image/*" onChange={handleImageUpload} className="hidden" />
-											</label>
-										</div>
-										{avatarUrl && (
-											<button
-												onClick={() => { setAvatarUrl(''); setAvatarBlob(null); }}
-												title="Remove photo"
-												className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-background border border-foreground/20 flex items-center justify-center hover:border-red-400/60 hover:text-red-400 text-foreground/40 transition-colors shadow-sm"
-											>
-												<X size={10} />
-											</button>
-										)}
-									</div>
-
-									<h1 className="text-lg font-black tracking-tight leading-none mb-0.5">
-										{username || <span className="text-foreground/20">Anonymous</span>}
-									</h1>
-									{handle && <p className="text-xs text-amber-400 font-bold mb-3 tracking-tight">@{handle.toLowerCase()}</p>}
-
-									{about ? (
-										<p className="text-sm text-foreground/60 leading-relaxed border-l-2 border-amber-400/50 pl-3 mb-4">
-											{about}
-										</p>
-									) : (
-										<p className="text-xs text-foreground/20 italic mb-4">Your bio will appear here...</p>
-									)}
-
-									<div className="flex flex-col gap-2">
-										{socials.github && (
-											<div className="flex items-center gap-1.5 text-xs text-foreground/40">
-												<Github size={11} /><span className="font-mono">{socials.github}</span>
-											</div>
-										)}
-										{socials.twitter && (
-											<div className="flex items-center gap-1.5 text-xs text-foreground/40">
-												<Twitter size={11} /><span className="font-mono">{socials.twitter}</span>
-											</div>
-										)}
-										{socials.linkedin && (
-											<div className="flex items-center gap-1.5 text-xs text-foreground/40">
-												<Linkedin size={11} /><span className="font-mono">{socials.linkedin}</span>
-											</div>
-										)}
-										{socials.instagram && (
-											<div className="flex items-center gap-1.5 text-xs text-foreground/40">
-												<Instagram size={11} /><span className="font-mono">{socials.instagram}</span>
-											</div>
-										)}
-									</div>
-								</div>
-
-								{/* Banner color picker — below profile content */}
-								<div className="px-6 py-4 border-t border-foreground/[0.06] bg-foreground/[0.01]">
-									<p className="text-[9px] font-black uppercase tracking-[0.2em] text-foreground/25 mb-3">Banner gradient</p>
-									<div className="flex gap-2 flex-wrap">
-										{GRADIENTS.map((grad, idx) => (
-											<button
-												key={idx}
-												onClick={() => setBannerGradient(grad)}
-												title={`Color ${idx + 1}`}
-												className={`w-8 h-8 rounded-lg bg-gradient-to-br ${grad} relative transition-all duration-150 hover:scale-110 active:scale-95 shrink-0 ${
-													bannerGradient === grad
-														? 'ring-2 ring-amber-400 ring-offset-2 ring-offset-background scale-110'
-														: 'opacity-50 hover:opacity-90'
-												}`}
-											>
-												{bannerGradient === grad && (
-													<div className="absolute inset-0 flex items-center justify-center">
-														<Check size={11} className="text-white drop-shadow" />
-													</div>
-												)}
-											</button>
-										))}
-									</div>
-								</div>
+							<div ref={ticketContainerRef} className="w-full flex justify-center py-2 overflow-visible">
+								<AdmitOneTicket
+									width={isDesktop ? 700 : ticketWidth}
+									name={username || 'ANONYMOUS'}
+									presenter={handle ? `@${handle.toUpperCase()}` : 'PROTO-ML'}
+									event={about || 'MEMBER PASS'}
+									venue="PROTO-ML"
+									dates="MEMBER 2026"
+									stubText="ADMIT ONE"
+									qrValue={handle && typeof window !== 'undefined' ? `${window.location.origin}/u/${handle}` : ''}
+									watermark={user?.id ? `NO ${user.id.slice(0, 4).toUpperCase()}` : 'NO 0741'}
+									texture={ticketStyle.texture}
+									gradient={ticketStyle.gradient}
+								/>
 							</div>
 						</div>
 
-						{/* RIGHT — Editor */}
-						<div className="space-y-10 order-1 lg:order-2">
+						{/* RIGHT - Editor */}
+						<div className="space-y-10 order-2 lg:order-2">
 
 							{/* 01 Identity */}
 							<section>
@@ -335,6 +362,24 @@ export default function ProfilePage() {
 									<div className="flex-1 h-px bg-foreground/[0.07]" />
 								</div>
 								<div className="space-y-4">
+									<div className="flex items-center gap-4 p-3 rounded-2xl bg-foreground/3 border border-foreground/8">
+										<div className="w-12 h-12 rounded-xl bg-foreground/8 overflow-hidden border border-foreground/10 flex items-center justify-center shrink-0 relative">
+											{avatarUrl ? (
+												<img src={avatarUrl} alt="Avatar" className="w-full h-full object-cover" />
+											) : (
+												<User size={20} className="text-foreground/30" />
+											)}
+										</div>
+										<div className="flex-1 min-w-0">
+											<p className="text-xs font-bold truncate">{username || 'Anonymous'}</p>
+											<p className="text-[10px] text-foreground/40">Profile Avatar</p>
+										</div>
+										<label className="flex items-center gap-1.5 px-3 py-1.5 bg-foreground/6 hover:bg-foreground/10 text-foreground text-xs font-semibold rounded-xl cursor-pointer transition-all active:scale-95">
+											<Camera size={12} />
+											<span>Change photo</span>
+											<input type="file" accept="image/*" onChange={handleImageUpload} className="hidden" />
+										</label>
+									</div>
 									<div>
 										<label className="block text-[10px] font-bold text-foreground/35 mb-2 uppercase tracking-widest">Display Name</label>
 										<input
@@ -342,7 +387,7 @@ export default function ProfilePage() {
 											value={username}
 											onChange={(e) => setUsername(e.target.value)}
 											className="w-full bg-foreground/4 border border-foreground/8 rounded-xl px-4 py-3 text-sm font-semibold outline-none focus:border-amber-400/50 focus:bg-foreground/6 transition-all placeholder:text-foreground/20"
-											placeholder="Derek Cheung"
+											placeholder="Virat Kohli"
 										/>
 										<p className="text-[10px] text-foreground/25 mt-1.5">Your full name or a nickname.</p>
 									</div>

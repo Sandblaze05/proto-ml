@@ -8,6 +8,7 @@ describe('getUploadInputMode', () => {
       useDirectoryPicker: true,
       acceptCsvFiles: false,
       acceptJsonFiles: false,
+      acceptTextFiles: false,
     });
   });
 
@@ -17,6 +18,7 @@ describe('getUploadInputMode', () => {
       useDirectoryPicker: true,
       acceptCsvFiles: false,
       acceptJsonFiles: false,
+      acceptTextFiles: false,
     });
   });
 
@@ -26,6 +28,7 @@ describe('getUploadInputMode', () => {
       useDirectoryPicker: false,
       acceptCsvFiles: true,
       acceptJsonFiles: false,
+      acceptTextFiles: false,
     });
   });
 
@@ -35,6 +38,7 @@ describe('getUploadInputMode', () => {
       useDirectoryPicker: true,
       acceptCsvFiles: false,
       acceptJsonFiles: false,
+      acceptTextFiles: false,
     });
   });
 
@@ -44,6 +48,27 @@ describe('getUploadInputMode', () => {
       useDirectoryPicker: false,
       acceptCsvFiles: false,
       acceptJsonFiles: true,
+      acceptTextFiles: false,
+    });
+  });
+
+  it('defaults text dataset to file mode with acceptTextFiles', () => {
+    const mode = getUploadInputMode('dataset.text');
+    expect(mode).toEqual({
+      useDirectoryPicker: false,
+      acceptCsvFiles: false,
+      acceptJsonFiles: false,
+      acceptTextFiles: true,
+    });
+  });
+
+  it('uses directory picker for text dataset folder mode', () => {
+    const mode = getUploadInputMode('dataset.text', 'folder');
+    expect(mode).toEqual({
+      useDirectoryPicker: true,
+      acceptCsvFiles: false,
+      acceptJsonFiles: false,
+      acceptTextFiles: false,
     });
   });
 });

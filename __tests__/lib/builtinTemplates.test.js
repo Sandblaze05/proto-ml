@@ -23,4 +23,30 @@ describe('builtinTemplates', () => {
     const datasetNode = instance.graph.nodes.find((node) => node.id === 'dataset');
     expect(datasetNode?.config.path).toBe('/tmp/train.csv');
   });
+
+  it('resolves and instantiates the NLP text classifier template', () => {
+    const template = getBuiltinTemplateById('builtin.nlp-text-classifier');
+    expect(template).toBeDefined();
+
+    const instance = instantiatePipelineTemplate(template, {
+      parameters: {
+        datasetPath: './data/reviews.csv',
+        textColumn: 'review_text',
+        labelColumn: 'sentiment',
+        maxFeatures: 2500,
+      },
+    });
+
+    expect(instance.ok).toBe(true);
+    const datasetNode = instance.graph.nodes.find((node) => node.id === 'dataset');
+    expect(datasetNode?.config.path).toBe('./data/reviews.csv');
+    expect(datasetNode?.config.text_column).toBe('review_text');
+    expect(datasetNode?.config.label_column).toBe('sentiment');
+
+    const tfidfNode = instance.graph.nodes.find((node) => node.id === 'tfidf');
+    expect(tfidfNode?.config.max_features).toBe(2500);
+
+    const modelNode = instance.graph.nodes.find((node) => node.id === 'model');
+    expect(modelNode?.config.family).toBe('multinomial_nb');
+  });
 });
