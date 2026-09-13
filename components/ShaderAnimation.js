@@ -86,7 +86,9 @@ export function ShaderAnimation() {
     // Animation loop
     const animate = () => {
       const animationId = requestAnimationFrame(animate)
-      uniforms.time.value += 0.05
+      // Keep the background motion subtle and independent from the shader's
+      // visual pattern speed.
+      uniforms.time.value += 0.015
       renderer.render(scene, camera)
 
       if (sceneRef.current) {

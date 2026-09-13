@@ -1,0 +1,14 @@
+import Link from 'next/link'
+import DocsLayout from '@/components/docs/DocsLayout'
+import { CodeBlock, DocsArticle, DocsAside, Note } from '@/components/docs/DocsArticle'
+
+const toc = [{ id: 'create-project', label: 'Create a project' }, { id: 'add-dataset', label: 'Add a dataset' }, { id: 'connect-transform', label: 'Connect a transform' }, { id: 'run-pipeline', label: 'Run the pipeline' }]
+
+export default function GettingStartedPage() {
+  return <DocsLayout currentPath="/docs/getting-started"><div className="docs-content-grid"><DocsArticle current="Quickstart" eyebrow="Getting started" title="Your first pipeline" description="Build a small, reproducible text-processing pipeline and see how the proto-ML canvas fits together." toc={toc}>
+    <section id="create-project"><h2>1. Create a project</h2><p>From the workspace, choose <strong>New pipeline</strong>. Give the project a name that describes the outcome, not the implementation — for example <em>Support ticket sentiment</em>.</p><Note tone="warm">Projects are saved as a graph. You can rename them, duplicate them, and return to any saved version from the workspace.</Note></section>
+    <section id="add-dataset"><h2>2. Add a dataset</h2><p>Open the node palette and drag a <strong>Text Dataset</strong> node onto the canvas. For this first run, use a CSV with a text column and an optional label column.</p><CodeBlock label="sample.csv">{`text,label\n"The onboarding was quick and clear",positive\n"I could not find the export button",negative\n"The preview is useful for debugging",positive`}</CodeBlock><p>Choose the <code>text</code> column as the input. proto-ML keeps the source configuration with the node so another person can reproduce the same setup.</p></section>
+    <section id="connect-transform"><h2>3. Connect a transform</h2><p>Drag a <strong>Text Transform</strong> node beside the dataset and connect the output handle to its input. Add a <strong>Split</strong> node after it to create training and validation sets.</p><div className="docs-steps"><div><b>01</b><span>Text Dataset</span></div><i>→</i><div><b>02</b><span>Text Transform</span></div><i>→</i><div><b>03</b><span>Split</span></div></div></section>
+    <section id="run-pipeline"><h2>4. Run the pipeline</h2><p>Click <strong>Run preview</strong> to execute the selected portion of the graph. Select any node afterward to inspect its input, output, and runtime details.</p><p>When the result looks right, run the full graph and save the version. That gives you a stable checkpoint to compare against future experiments.</p><div className="docs-next-card"><div><span>Next guide</span><strong>Working with datasets</strong></div><Link href="/docs/nodes-and-data">Read guide →</Link></div></section>
+  </DocsArticle><DocsAside toc={toc} /></div></DocsLayout>
+}

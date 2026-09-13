@@ -405,7 +405,7 @@ function HomeContent() {
                   Get Started
                 </button>
                 <a
-                  href="#"
+                  href="/docs"
                   style={{ color: FG, borderColor: `${FG}40` }}
                   className="px-8 py-4 border font-medium rounded-full hover:bg-white/10 backdrop-blur-sm transition-all duration-300 text-center"
                 >
@@ -456,7 +456,9 @@ function HomeContent() {
                 </div>
                 <div className="flex flex-wrap gap-1 md:gap-2 lg:gap-3 xl:gap-4">
                   <p className="font-thin">in code.</p>
-                  <h1 className="font-semibold">Build them</h1>
+                  <PointerHighlight>
+                    <h1 className="font-semibold">Build them</h1>
+                  </PointerHighlight>
                   <p className="font-thin">visually.</p>
                 </div>
                 <h1 className="font-semibold">Set them free.</h1>
@@ -484,12 +486,6 @@ function HomeContent() {
               How It Works
             </h2>
             <HowItWorks />
-            <div className="mx-auto max-w-5xl py-20 text-4xl font-bold tracking-tight md:text-6xl whitespace-nowrap">
-              The best way to grow is to
-              <PointerHighlight>
-                <span>collaborate</span>
-              </PointerHighlight>
-            </div>
           </div>
         </section>
 
@@ -555,40 +551,6 @@ function HomeContent() {
             <h2 style={{ color: FG }} className="font-headline text-5xl md:text-7xl font-extrabold tracking-tighter mb-8 leading-tight">
               Ready to orchestrate <br />the future?
             </h2>
-            <div className="flex min-h-64 flex-col items-center justify-center gap-12 text-foreground">
-              <div className="flex flex-wrap items-end justify-center gap-12">
-                <div className="flex flex-col items-center gap-1">
-                  <CountUp
-                    to={1000000}
-                    separator=","
-                    digitEffect="slide"
-                    className="text-5xl font-bold tabular-nums tracking-tight"
-                  />
-                  <span className="text-xs text-muted-foreground">users</span>
-                </div>
-
-                <div className="flex flex-col items-center gap-1">
-                  <CountUp
-                    to={99.9}
-                    digitEffect="blur"
-                    className="text-5xl font-bold tabular-nums tracking-tight"
-                  />
-                  <span className="text-xs text-muted-foreground">uptime %</span>
-                </div>
-
-                <div className="flex flex-col items-center gap-1">
-                  <CountUp
-                    to={0}
-                    from={5}
-                    direction="down"
-                    separator=","
-                    digitEffect="slide"
-                    className="text-5xl font-bold tabular-nums tracking-tight"
-                  />
-                  <span className="text-xs text-muted-foreground">issues</span>
-                </div>
-              </div>
-            </div>
             <button
               onClick={handleOpenForm}
               style={{ backgroundColor: FG, color: BG }}

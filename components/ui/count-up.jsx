@@ -149,8 +149,12 @@ function CountUp({
 
   const damping = 20 + 40 * (1 / duration);
   const stiffness = 100 * (1 / duration);
+  const springConfig = React.useMemo(
+    () => ({ damping, stiffness }),
+    [damping, stiffness]
+  );
 
-  const springValue = useSpring(motionValue, { damping, stiffness });
+  const springValue = useSpring(motionValue, springConfig);
   const isInView = useInView(ref, { once: true, margin: "0px" });
 
   const getDecimalPlaces = (num) => {
@@ -181,15 +185,46 @@ function CountUp({
 
   const initialStr = formatValue(direction === "down" ? to : from);
   const [chars, setChars] = React.useState(initialStr.split(""));
+  const displayedValueRef = React.useRef(initialStr);
+  const queuedValueRef = React.useRef(null);
+  const updateFrameRef = React.useRef(null);
+
+  const updateDisplayedValue = React.useCallback(
+    (value) => {
+      queuedValueRef.current = value;
+      if (updateFrameRef.current !== null) return;
+
+      updateFrameRef.current = requestAnimationFrame(() => {
+        updateFrameRef.current = null;
+        const nextValue = queuedValueRef.current;
+        queuedValueRef.current = null;
+
+        if (!nextValue || nextValue === displayedValueRef.current) return;
+
+        displayedValueRef.current = nextValue;
+        setChars(nextValue.split(""));
+      });
+    },
+    []
+  );
+
+  React.useEffect(
+    () => () => {
+      if (updateFrameRef.current !== null) {
+        cancelAnimationFrame(updateFrameRef.current);
+      }
+    },
+    []
+  );
 
   React.useEffect(() => {
     const initial = formatValue(direction === "down" ? to : from);
     if (digitEffect === "none") {
       if (ref.current) ref.current.textContent = initial;
     } else if (digitEffect !== "slide") {
-      setChars(initial.split(""));
+      updateDisplayedValue(initial);
     }
-  }, [from, to, direction, formatValue, digitEffect]);
+  }, [from, to, direction, formatValue, digitEffect, updateDisplayedValue]);
 
   React.useEffect(() => {
     if (isInView && startWhen) {
@@ -221,11 +256,11 @@ function CountUp({
       if (digitEffect === "none") {
         if (ref.current) ref.current.textContent = formatValue(latest);
       } else if (digitEffect !== "slide") {
-        setChars(formatValue(latest).split(""));
+        updateDisplayedValue(formatValue(latest));
       }
     });
     return () => unsubscribe();
-  }, [springValue, formatValue, digitEffect]);
+  }, [springValue, formatValue, digitEffect, updateDisplayedValue]);
 
   const countingUp = direction === "up";
 

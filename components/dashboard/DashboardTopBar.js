@@ -1,7 +1,8 @@
 'use client'
 
 import React from 'react'
-import { Search, Settings, HelpCircle, Bell, SortAsc, SortDesc, Clock, Layout, Menu, X } from 'lucide-react'
+import { Search, Settings, HelpCircle, Bell, SortAsc, SortDesc, Clock, Layout, Menu, X, Book } from 'lucide-react'
+import Link from 'next/link'
 import CustomDropdown from '@/components/ui/CustomDropdown'
 
 const DashboardTopBar = ({ user, profile, searchQuery, setSearchQuery, sortBy, setSortBy, sortOrder, setSortOrder, toggleSidebar }) => {
@@ -64,13 +65,17 @@ const DashboardTopBar = ({ user, profile, searchQuery, setSearchQuery, sortBy, s
         <button className="hidden sm:block p-2 text-foreground/50 hover:bg-foreground/5 hover:text-foreground rounded-full transition-all" title="Settings">
           <Settings size={18} />
         </button>
-        
+
         <div className="hidden sm:block w-px h-6 bg-foreground/10 mx-1" />
-        
+
         <button className="p-2 text-foreground/50 hover:bg-foreground/5 hover:text-foreground rounded-full transition-all relative" title="Notifications">
           <Bell size={18} />
           <div className="absolute top-2 right-2 w-1.5 h-1.5 bg-[#FAEBD7] rounded-full border border-background" />
         </button>
+
+        <Link href="/docs" className="hidden sm:flex items-center gap-1.5 ml-1 px-3 py-1.5 bg-[#FAEBD7]/15 text-[#FAEBD7] hover:bg-[#FAEBD7]/25 rounded-full transition-all text-xs font-bold uppercase tracking-wider">
+          <Book size={14} /> Docs
+        </Link>
       </div>
     </header>
   )

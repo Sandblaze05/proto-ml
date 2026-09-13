@@ -1,0 +1,15 @@
+import Link from 'next/link'
+import { Braces, Database, GitBranch, LayoutTemplate, Play, Sparkles } from 'lucide-react'
+import DocsLayout from '@/components/docs/DocsLayout'
+import { DocsArticle, DocsAside, DocsCardGrid, Note } from '@/components/docs/DocsArticle'
+
+const toc = [{ id: 'what-is-proto-ml', label: 'What is proto-ML?' }, { id: 'how-it-works', label: 'How it works' }, { id: 'core-concepts', label: 'Core concepts' }, { id: 'next-steps', label: 'Next steps' }]
+
+export default function DocsHome() {
+  return <DocsLayout currentPath="/docs"><div className="docs-content-grid"><DocsArticle current="Overview" title="Build machine learning pipelines, visually." description="proto-ML is a visual workspace for designing, running, and sharing reproducible machine learning workflows." toc={toc}>
+    <section id="what-is-proto-ml"><h2>What is proto-ML?</h2><p>proto-ML turns the messy middle of machine learning into a canvas you can reason about. Connect datasets, transforms, and lifecycle steps as nodes, then run the same graph locally or with a remote execution backend.</p><p>It is designed for the point where notebooks start to feel too loose and production orchestration feels too heavy. Your pipeline stays inspectable, exportable, and easy to share with the team.</p></section>
+    <section id="how-it-works"><h2>How it works</h2><DocsCardGrid cards={[{ title: 'Compose', description: 'Place nodes on the canvas and connect compatible inputs.', href: '/docs/canvas-basics', icon: <LayoutTemplate size={17} /> }, { title: 'Connect data', description: 'Bring in CSV, JSON, API, image, or database sources.', href: '/docs/nodes-and-data', icon: <Database size={17} /> }, { title: 'Run and inspect', description: 'Preview, execute, and trace each step of your graph.', href: '/docs/run-and-inspect', icon: <Play size={17} /> }]} /></section>
+    <section id="core-concepts"><h2>Core concepts</h2><p>Every proto-ML project is made up of a few simple building blocks:</p><ul className="docs-list"><li><strong>Nodes</strong> represent datasets, transforms, and lifecycle actions.</li><li><strong>Edges</strong> define how data flows from one step to the next.</li><li><strong>Runs</strong> capture an execution of your graph and its resulting artifacts.</li><li><strong>Versions</strong> make meaningful changes easy to compare and restore.</li></ul><Note>Start with the <Link href="/docs/getting-started">Quickstart guide</Link> to build a working text classification pipeline in under five minutes.</Note></section>
+    <section id="next-steps"><h2>Next steps</h2><p>Once your first graph is running, learn how to add real data, inspect node output, and export the pipeline as standard Python.</p><div className="docs-next-links"><Link href="/docs/getting-started"><Sparkles size={16} /> Build your first pipeline <span>→</span></Link><Link href="/docs/version-control"><GitBranch size={16} /> Version your experiments <span>→</span></Link><Link href="/docs/exporting"><Braces size={16} /> Export to Python <span>→</span></Link></div></section>
+  </DocsArticle><DocsAside toc={toc} /></div></DocsLayout>
+}

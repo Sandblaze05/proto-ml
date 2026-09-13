@@ -51,10 +51,10 @@ const DashboardSidebar = ({ onNew, activeTab, onTabChange, user, profile, groupe
       `}>
         {/* Mobile Header with Close */}
         <div className="lg:hidden flex items-center justify-between p-4 border-b border-foreground/5">
-          <div className="flex items-center gap-2">
+          <Link href="/" className="flex items-center gap-2">
             <img src="/logo.png" alt="Logo" className="w-8 h-8" />
             <span className="font-bold uppercase tracking-tighter text-sm">Proto-ML</span>
-          </div>
+          </Link>
           <button onClick={() => setIsOpen(false)} className="p-2 text-foreground/40">
             <X size={20} />
           </button>
@@ -63,10 +63,10 @@ const DashboardSidebar = ({ onNew, activeTab, onTabChange, user, profile, groupe
         {/* Scrollable Content */}
         <div className="flex-1 overflow-y-auto no-scrollbar p-4">
           {/* Brand Header (Desktop) */}
-          <div className="hidden lg:flex items-center gap-3 px-4 mb-10 mt-2">
+          <Link href="/" className="hidden lg:flex items-center gap-3 px-4 mb-10 mt-2">
             <img src="/logo.png" alt="Proto-ML Logo" className="w-12 h-12 object-contain" />
             <h1 className="text-xl font-bold tracking-tighter uppercase font-mono text-foreground">Proto-ML</h1>
-          </div>
+          </Link>
 
           {/* New Canvas Button */}
           <div className="mb-8 px-2">

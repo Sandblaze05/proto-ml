@@ -1,0 +1,12 @@
+import DocsLayout from '@/components/docs/DocsLayout'
+import { CodeBlock, DocsArticle, DocsAside, Note } from '@/components/docs/DocsArticle'
+
+const toc = [{ id: 'dataset-nodes', label: 'Dataset nodes' }, { id: 'transform-nodes', label: 'Transform nodes' }, { id: 'runtime-contract', label: 'Runtime contract' }]
+
+export default function NodesAndDataPage() {
+  return <DocsLayout currentPath="/docs/nodes-and-data"><div className="docs-content-grid"><DocsArticle current="Datasets" eyebrow="Build pipelines" title="Nodes and data" description="Connect the data you already have to a graph that is easy to inspect, test, and evolve." toc={toc}>
+    <section id="dataset-nodes"><h2>Dataset nodes</h2><p>Dataset nodes are the entry points to a pipeline. proto-ML includes built-in runtimes for common local and external sources:</p><div className="docs-table"><div><strong>Source</strong><strong>Best for</strong></div><div><span>CSV / JSON</span><span>Fast experiments and tabular data</span></div><div><span>Text</span><span>Prompts, documents, and classification</span></div><div><span>Image folder</span><span>Computer vision datasets</span></div><div><span>API / Database</span><span>Connected production sources</span></div></div><Note>Keep credentials out of pipeline exports. Configure secrets through your environment or the connected runtime.</Note></section>
+    <section id="transform-nodes"><h2>Transform nodes</h2><p>Transforms are pure steps that receive a dataset and return a new artifact. This makes them predictable to preview and straightforward to compose.</p><CodeBlock label="transform.py">{`def transform(rows):\n    return [\n        {\n            **row,\n            "text_clean": row["text"].strip().lower(),\n        }\n        for row in rows\n    ]`}</CodeBlock><p>Custom Python logic can live inside a code node when the built-in transforms are not enough. The node output is still visible in the run inspector.</p></section>
+    <section id="runtime-contract"><h2>Runtime contract</h2><p>Each node describes its inputs, outputs, configuration, and runtime. Connections are validated before execution, so incompatible data types fail early at the canvas.</p><div className="docs-api-card"><div><span>Input</span><code>Dataset[Row]</code></div><div><span>Output</span><code>Dataset[Row]</code></div><div><span>Runtime</span><code>local · remote</code></div></div><p>For a deeper look at execution, continue to <a href="/docs/run-and-inspect">Run and inspect</a>.</p></section>
+  </DocsArticle><DocsAside toc={toc} /></div></DocsLayout>
+}

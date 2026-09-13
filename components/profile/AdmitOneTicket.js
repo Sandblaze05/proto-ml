@@ -2094,13 +2094,15 @@ function TicketCard({
 
         {qrCode && (
           <div
-            className="absolute rounded-sm overflow-hidden p-[2%]"
+            className="absolute rounded-lg overflow-hidden p-[2%] shadow-md"
             style={{
-              left: 0.58 * width,
-              top: 0.57 * width,
-              width: 0.16 * width,
-              height: 0.16 * width,
-              background: "#ffc691"
+              left: 0.52 * width,
+              top: 0.11 * height,
+              width: 0.18 * width,
+              height: 0.18 * width,
+              background: texture.colorFront,
+              border: `2px solid ${texture.colorBack}`,
+              boxShadow: `0 4px 0 ${texture.colorBack}55`
             }}
           >
             <div
@@ -2114,7 +2116,7 @@ function TicketCard({
               {Array.from(qrCode.modules.data, (cell, index) => (
                 <span
                   key={index}
-                  style={{ background: cell ? layout.inkColor : "#ffc691" }}
+                  style={{ background: cell ? texture.colorBack : texture.colorFront }}
                 />
               ))}
             </div>

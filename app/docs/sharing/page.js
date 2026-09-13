@@ -1,0 +1,14 @@
+import Link from 'next/link'
+import DocsLayout from '@/components/docs/DocsLayout'
+import { DocsArticle, DocsAside, Note } from '@/components/docs/DocsArticle'
+
+const toc = [{ id: 'share-a-clear-project', label: 'Share a clear project' }, { id: 'what-collaborators-need', label: 'What collaborators need' }, { id: 'protect-sensitive-data', label: 'Protect sensitive data' }, { id: 'handoff-checklist', label: 'Handoff checklist' }]
+
+export default function SharingPage() {
+  return <DocsLayout currentPath="/docs/sharing"><div className="docs-content-grid"><DocsArticle current="Sharing projects" eyebrow="Ship with confidence" title="Make a pipeline easy to pick up." description="A good shared project explains its purpose, its inputs, and the decisions behind each important step." toc={toc}>
+    <section id="share-a-clear-project"><h2>Share a clear project</h2><p>Before sharing, tidy the canvas and save a version that represents the result you want others to review. Give the project a specific name and add a short description of the question the pipeline answers.</p><p>Keep the main path left to right and move exploratory or unused nodes away from the primary flow. A collaborator should be able to understand the first run without a guided tour.</p></section>
+    <section id="what-collaborators-need"><h2>What collaborators need</h2><div className="docs-table"><div><strong>Include</strong><strong>Example</strong></div><div><span>Purpose</span><span>Classify support tickets by routing team.</span></div><div><span>Input contract</span><span>CSV with text and optional label columns.</span></div><div><span>Expected output</span><span>Predicted team, confidence, and evaluation metrics.</span></div><div><span>Known limits</span><span>Language coverage, missing values, or stale labels.</span></div></div><Note>Sharing the limitations of a pipeline is part of making it reproducible. It tells the next person what not to infer from a successful run.</Note></section>
+    <section id="protect-sensitive-data"><h2>Protect sensitive data</h2><p>Do not put API keys, database passwords, or private tokens into node labels, notes, or exported files. Configure those values through the connected runtime or environment settings instead.</p><p>When the data itself is sensitive, share a representative sample or schema so collaborators can understand the pipeline without receiving production records.</p></section>
+    <section id="handoff-checklist"><h2>Handoff checklist</h2><ul className="docs-list"><li>Save a named version and confirm the latest run is complete.</li><li>Explain the input columns and the expected output artifact.</li><li>Call out any external runtime, credentials, or required environment variables.</li><li>Link the next useful guide: <Link href="/docs/run-and-inspect">Run and inspect</Link> or <Link href="/docs/exporting">Exporting pipelines</Link>.</li></ul></section>
+  </DocsArticle><DocsAside toc={toc} /></div></DocsLayout>
+}

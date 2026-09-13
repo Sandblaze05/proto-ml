@@ -1,0 +1,14 @@
+import Link from 'next/link'
+import DocsLayout from '@/components/docs/DocsLayout'
+import { DocsArticle, DocsAside, Note } from '@/components/docs/DocsArticle'
+
+const toc = [{ id: 'preview-first', label: 'Preview first' }, { id: 'read-the-inspector', label: 'Read the inspector' }, { id: 'diagnose-failures', label: 'Diagnose failures' }, { id: 'run-with-confidence', label: 'Run with confidence' }]
+
+export default function RunAndInspectPage() {
+  return <DocsLayout currentPath="/docs/run-and-inspect"><div className="docs-content-grid"><DocsArticle current="Run and inspect" eyebrow="Build pipelines" title="See what every step produces." description="Use previews and run diagnostics to understand a graph before you trust its final output." toc={toc}>
+    <section id="preview-first"><h2>Preview first</h2><p>A preview runs the selected part of the graph with a small, inspectable sample. Use it after adding a dataset, changing a transform, or reconnecting a branch.</p><div className="docs-steps"><div><b>01</b><span>Select a node</span></div><i>→</i><div><b>02</b><span>Run preview</span></div><i>→</i><div><b>03</b><span>Inspect output</span></div></div><p>Previewing early catches schema mismatches and empty results before they become expensive full runs.</p></section>
+    <section id="read-the-inspector"><h2>Read the inspector</h2><p>Select any completed node to open its run details. The inspector gives you the inputs that were used, the output shape, runtime information, and any warnings produced by that step.</p><div className="docs-table"><div><strong>Panel</strong><strong>What to check</strong></div><div><span>Input</span><span>Columns, sample rows, and row count entering the node.</span></div><div><span>Output</span><span>New fields, filtered rows, and the resulting data contract.</span></div><div><span>Diagnostics</span><span>Warnings, errors, duration, and runtime details.</span></div></div></section>
+    <section id="diagnose-failures"><h2>Diagnose failures</h2><p>When a run fails, start at the first failed node rather than the last visible symptom. Compare its input and output contracts, then work upstream until the unexpected value or missing field is explained.</p><Note tone="warm">A useful diagnostic question is: “What changed between the last working version and this run?” Check the dataset, node configuration, and connections in that order.</Note></section>
+    <section id="run-with-confidence"><h2>Run with confidence</h2><p>After previews look correct, run the full graph and save the result as a version. Keep the run output with the project so future changes can be compared against a known checkpoint.</p><p>For a complete first workflow, start with the <Link href="/docs/getting-started">Quickstart</Link>.</p></section>
+  </DocsArticle><DocsAside toc={toc} /></div></DocsLayout>
+}

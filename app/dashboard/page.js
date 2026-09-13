@@ -7,7 +7,6 @@ import DashboardTopBar from '@/components/dashboard/DashboardTopBar'
 import PipelineThumbnail from '@/components/PipelineThumbnail'
 import { Share2, Trash2, Layout, Clock, User, ExternalLink, Edit2, Check, X, Copy, Search, Grid, List, SortAsc, SortDesc, Folder, FolderPlus, ChevronRight, ChevronDown, Star, StarOff, GripVertical, Users, Eye, MoreVertical, Globe, Zap, Bot, Activity } from 'lucide-react'
 import Link from 'next/link'
-import Image from 'next/image'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useUIStore } from '@/store/useUIStore'
 import { publishToCommunity } from '@/lib/community'
@@ -18,6 +17,26 @@ const ACTIVE_PIPELINE_ID_KEY = 'protoMlActivePipelineId'
 const DRAFT_PIPELINE_NAME_KEY = 'protoMlDraftPipelineName'
 const STARRED_FOLDER_NAME = 'Starred'
 const UNCATEGORIZED_FOLDER_NAME = 'Uncategorized'
+
+const PipelineListVisual = ({ pipeline, shared = false }) => {
+	const nodeCount = Array.isArray(pipeline?.nodes) ? pipeline.nodes.length : 0
+	const accent = shared ? '#9ab4c4' : '#c7b9a4'
+	const nodeOpacity = nodeCount > 4 ? 0.9 : 0.72
+
+	return (
+		<div className="relative w-[68px] h-[52px] rounded-xl overflow-hidden shrink-0 border border-white/10 bg-[#191919] shadow-inner transition-all group-hover:border-white/20" aria-label={`Pipeline graph with ${nodeCount} nodes`}>
+			<svg viewBox="0 0 68 52" className="absolute inset-0 w-full h-full" aria-hidden="true">
+				<path d="M12 26h16M36 26h18M28 26l7-12M28 26l7 12" fill="none" stroke="#69645c" strokeWidth="1.25" strokeLinecap="round" />
+				<rect x="6" y="20" width="9" height="12" rx="3" fill="#292824" stroke={accent} strokeOpacity=".8" />
+				<rect x="27" y="20" width="10" height="12" rx="3" fill="#292824" stroke={accent} strokeOpacity={nodeOpacity} />
+				<rect x="52" y="20" width="10" height="12" rx="3" fill="#292824" stroke={accent} strokeOpacity=".8" />
+				<rect x="32" y="8" width="9" height="8" rx="2.5" fill="#292824" stroke={accent} strokeOpacity=".55" />
+				<rect x="32" y="36" width="9" height="8" rx="2.5" fill="#292824" stroke={accent} strokeOpacity=".55" />
+			</svg>
+			<span className="absolute right-2 top-1.5 text-[8px] font-semibold tracking-wider text-white/30">{String(nodeCount).padStart(2, '0')}</span>
+		</div>
+	)
+}
 
 const DashboardPageContent = () => {
 	const [myPipelines, setMyPipelines] = useState([])
@@ -802,9 +821,8 @@ const DashboardPageContent = () => {
 					>
 						<div className={viewMode === 'list' ? "flex items-center gap-3 sm:gap-6 flex-1 min-w-0" : "flex flex-col"}>
 							{viewMode === 'list' ? (
-								<div className="w-14 h-14 rounded-2xl bg-foreground/10 flex items-center justify-center shrink-0 border border-foreground/10 group-hover:border-foreground/20 transition-all pointer-events-none relative overflow-hidden">
-									<div className="absolute inset-0 bg-[#FAEBD7]/5 animate-pulse" />
-									<Image src="/pipeline.png" alt="" width={36} height={36} className="relative z-10 object-contain opacity-90" />
+								<div className="flex items-center justify-center shrink-0 pointer-events-none">
+									<PipelineListVisual pipeline={p} />
 								</div>
 							) : (
 								<PipelineThumbnail nodes={p.nodes} edges={p.edges} />
@@ -893,9 +911,8 @@ const DashboardPageContent = () => {
 					>
 						<div className={viewMode === 'list' ? "flex items-center gap-3 sm:gap-6 flex-1 min-w-0" : "flex flex-col"}>
 							{viewMode === 'list' ? (
-								<div className="w-14 h-14 rounded-2xl bg-linear-to-br from-blue-500/20 to-indigo-500/20 flex items-center justify-center shrink-0 border border-blue-500/20 group-hover:border-blue-500/40 transition-all pointer-events-none relative overflow-hidden">
-									<div className="absolute inset-0 bg-blue-400/5 animate-pulse" />
-									<Image src="/pipeline.png" alt="" width={36} height={36} className="relative z-10 object-contain opacity-90" />
+								<div className="flex items-center justify-center shrink-0 pointer-events-none">
+									<PipelineListVisual pipeline={p} shared />
 								</div>
 							) : (
 								<PipelineThumbnail nodes={p.nodes} edges={p.edges} />
@@ -1047,9 +1064,8 @@ const DashboardPageContent = () => {
 											>
 												<div className={viewMode === 'list' ? "flex items-center gap-3 sm:gap-6 flex-1 min-w-0" : "flex flex-col"}>
 													{viewMode === 'list' ? (
-														<div className="w-14 h-14 rounded-2xl bg-foreground/10 flex items-center justify-center shrink-0 border border-foreground/10 group-hover:border-foreground/20 transition-all pointer-events-none relative overflow-hidden">
-															<div className="absolute inset-0 bg-[#FAEBD7]/5 animate-pulse" />
-															<Image src="/pipeline.png" alt="" width={36} height={36} className="relative z-10 object-contain opacity-90" />
+														<div className="flex items-center justify-center shrink-0 pointer-events-none">
+															<PipelineListVisual pipeline={p} />
 														</div>
 													) : (
 														<PipelineThumbnail nodes={p.nodes} edges={p.edges} />
