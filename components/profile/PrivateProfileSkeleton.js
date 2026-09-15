@@ -32,56 +32,35 @@ const PrivateProfileSkeleton = () => {
 			</nav>
 
 			<main className="pt-14 min-h-screen">
-				<div className="max-w-5xl mx-auto px-6 py-12">
-					<div className="grid grid-cols-1 lg:grid-cols-2 gap-10 lg:gap-16">
-						
-						{/* Left Column: Preview Skeleton */}
-						<div className="lg:sticky lg:top-24 lg:self-start space-y-3">
-							<div className="h-3 w-20 bg-foreground/5 rounded relative overflow-hidden mb-3">
-								<Shimmer />
-							</div>
-							<div className="rounded-2xl overflow-hidden border border-foreground/8 shadow-lg bg-foreground/2">
-								<div className="h-28 w-full bg-foreground/10 relative overflow-hidden">
+				<div className="w-full px-6 lg:px-10 xl:px-14 py-12">
+					<div className="grid grid-cols-1 lg:grid-cols-[1.1fr_0.9fr] gap-10 lg:gap-14 xl:gap-20">
+
+						<div className="lg:sticky lg:top-24 lg:self-start order-1 lg:order-1 space-y-4">
+							<div className="flex items-center justify-between">
+								<div />
+								<div className="h-8 w-28 bg-foreground/5 rounded-xl relative overflow-hidden">
 									<Shimmer />
 								</div>
-								<div className="px-6 pb-5">
-									<div className="relative -mt-8 mb-4">
-										<div className="w-16 h-16 rounded-xl border-[3px] border-background bg-foreground/10 relative overflow-hidden">
+								<div className="h-8 w-24 bg-foreground/5 rounded-xl relative overflow-hidden">
+									<Shimmer />
+								</div>
+							</div>
+
+							<div className="w-full flex justify-center py-2 overflow-visible">
+								<div className="w-full max-w-[700px] aspect-[741/425] rounded-2xl bg-foreground/2 border border-foreground/8 relative overflow-hidden">
+									<div className="absolute inset-0 bg-linear-to-br from-amber-400/10 to-orange-500/10" />
+									<div className="absolute left-0 top-0 bottom-0 w-[42%] border-r border-dashed border-foreground/10" />
+									<div className="absolute inset-0 flex items-center justify-center">
+										<div className="h-10 w-32 bg-foreground/10 rounded relative overflow-hidden">
 											<Shimmer />
 										</div>
 									</div>
-									<div className="h-6 w-32 bg-foreground/10 rounded relative overflow-hidden mb-2"><Shimmer /></div>
-									<div className="h-4 w-24 bg-amber-400/20 rounded relative overflow-hidden mb-4"><Shimmer /></div>
-									
-									<div className="space-y-2 mb-6">
-										<div className="h-4 w-full bg-foreground/5 rounded relative overflow-hidden"><Shimmer /></div>
-										<div className="h-4 w-5/6 bg-foreground/5 rounded relative overflow-hidden"><Shimmer /></div>
-									</div>
-
-									<div className="space-y-2">
-										<div className="h-4 w-40 bg-foreground/5 rounded relative overflow-hidden"><Shimmer /></div>
-										<div className="h-4 w-40 bg-foreground/5 rounded relative overflow-hidden"><Shimmer /></div>
-										<div className="h-4 w-40 bg-foreground/5 rounded relative overflow-hidden"><Shimmer /></div>
-										<div className="h-4 w-40 bg-foreground/5 rounded relative overflow-hidden"><Shimmer /></div>
-									</div>
-								</div>
-								
-								<div className="px-6 py-4 border-t border-foreground/6 bg-foreground/1">
-									<p className="text-[10px] font-black uppercase tracking-[0.2em] text-foreground/20 mb-3">Banner colors</p>
-									<div className="flex gap-2 flex-wrap">
-										{[1, 2, 3, 4, 5, 6].map(i => (
-											<div key={i} className="w-8 h-8 rounded-lg bg-foreground/5 relative overflow-hidden">
-												<Shimmer />
-											</div>
-										))}
-									</div>
+									<Shimmer />
 								</div>
 							</div>
 						</div>
 
-						{/* Right Column: Editor Skeleton */}
-						<div className="space-y-10">
-							{/* Section 01 */}
+						<div className="space-y-10 order-2 lg:order-2">
 							<section>
 								<div className="flex items-center gap-3 mb-5">
 									<div className="h-3 w-4 bg-foreground/10 rounded relative overflow-hidden"><Shimmer /></div>
@@ -89,14 +68,18 @@ const PrivateProfileSkeleton = () => {
 									<div className="flex-1 h-px bg-foreground/[0.07]" />
 								</div>
 								<div className="space-y-6">
-									{[1, 2].map(i => (
-										<div key={i} className="space-y-2">
-											<div className="h-3 w-24 bg-foreground/5 rounded relative overflow-hidden"><Shimmer /></div>
-									<div className="h-12 w-full bg-foreground/4 border border-foreground/8 rounded-xl relative overflow-hidden">
-												<Shimmer />
-											</div>
+									<div className="space-y-2">
+										<div className="h-3 w-24 bg-foreground/5 rounded relative overflow-hidden"><Shimmer /></div>
+										<div className="h-12 w-full bg-foreground/4 border border-foreground/8 rounded-xl relative overflow-hidden">
+											<Shimmer />
 										</div>
-									))}
+									</div>
+									<div className="space-y-2">
+										<div className="h-3 w-24 bg-foreground/5 rounded relative overflow-hidden"><Shimmer /></div>
+										<div className="h-12 w-full bg-foreground/4 border border-foreground/8 rounded-xl relative overflow-hidden">
+											<Shimmer />
+										</div>
+									</div>
 									<div className="space-y-2">
 										<div className="h-3 w-24 bg-foreground/5 rounded relative overflow-hidden"><Shimmer /></div>
 										<div className="h-24 w-full bg-foreground/4 border border-foreground/8 rounded-xl relative overflow-hidden">
@@ -106,7 +89,6 @@ const PrivateProfileSkeleton = () => {
 								</div>
 							</section>
 
-							{/* Section 02 */}
 							<section>
 								<div className="flex items-center gap-3 mb-5">
 									<div className="h-3 w-4 bg-foreground/10 rounded relative overflow-hidden"><Shimmer /></div>

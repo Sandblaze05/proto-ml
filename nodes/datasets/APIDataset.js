@@ -14,7 +14,8 @@ export const APIDatasetDef = {
 
   outputs: [
     { name: 'out',          datatype: 'tabular',   shape: [] },
-    { name: 'data',         datatype: 'tensor',     shape: ['B', 'feature_dim'] },
+    { name: 'data',         datatype: 'tabular',   shape: [] },
+    { name: 'features',     datatype: 'tabular',   shape: [] },
     { name: 'labels',       datatype: 'tensor',     shape: ['B'] },
     { name: 'raw',          datatype: 'dict',        shape: [] },
   ],
@@ -23,7 +24,8 @@ export const APIDatasetDef = {
     inputs: [],
     outputs: [
       { name: 'out', datatype: 'tabular', shape: [], role: 'data' },
-      { name: 'data', datatype: 'tensor', shape: ['B', 'feature_dim'], role: 'data' },
+      { name: 'data', datatype: 'tabular', shape: [], role: 'data' },
+      { name: 'features', datatype: 'tabular', shape: [], role: 'data' },
       { name: 'labels', datatype: 'tensor', shape: ['B'], role: 'labels' },
       { name: 'raw', datatype: 'dict', shape: [], role: 'data' },
     ],
@@ -46,6 +48,14 @@ export const APIDatasetDef = {
       max_pages: 10,
       retry_attempts: 3,
       timeout_seconds: 30,
+      target_column: '',
+      feature_keys: [],
+      feature_columns: [],
+      features: [],
+      flatten: true,
+      handle_missing: 'drop',
+      missing: { strategy: 'drop' },
+      request_body: {},
     },
     schema: {
       dtype: 'float32',

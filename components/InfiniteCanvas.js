@@ -1480,12 +1480,21 @@ function InteractiveCanvas({ onCanvasChange, onPointerMove, onEditingNodeChange,
     (nodes || []).forEach((node) => {
       if (node.data?.nodeModel) {
         const model = node.data.nodeModel;
+        const registeredInputs = getInputPorts(model.type);
+        const registeredOutputs = getOutputPorts(model.type);
+        const effectiveInputs = registeredInputs.length > 0 ? registeredInputs : model.inputs;
+        const effectiveOutputs = registeredOutputs.length > 0 ? registeredOutputs : model.outputs;
         nextExecutionNodes[node.id] = {
           ...model,
           id: node.id,
           // Ensure inputs/outputs are simple name arrays for the executor
-          inputs: Array.isArray(model.inputs) ? model.inputs.map((p) => (typeof p === 'string' ? p : p.name)) : [],
-          outputs: Array.isArray(model.outputs) ? model.outputs.map((p) => (typeof p === 'string' ? p : p.name)) : [],
+          inputs: Array.isArray(effectiveInputs) ? effectiveInputs.map((p) => (typeof p === 'string' ? p : p.name)) : [],
+          outputs: Array.isArray(effectiveOutputs) ? effectiveOutputs.map((p) => (typeof p === 'string' ? p : p.name)) : [],
+          portMap: {
+            ...(model.portMap || {}),
+            inputs: Object.fromEntries((Array.isArray(effectiveInputs) ? effectiveInputs : []).map((p) => [typeof p === 'string' ? p : p.name, p])),
+            outputs: Object.fromEntries((Array.isArray(effectiveOutputs) ? effectiveOutputs : []).map((p) => [typeof p === 'string' ? p : p.name, p])),
+          },
         };
       }
     });

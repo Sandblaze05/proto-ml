@@ -14,7 +14,7 @@ function IconHoverButton({ icon: Icon, label, onClick, className = '', onMouseDo
       title={label}
     >
       <Icon size={12} />
-      <span className="pointer-events-none absolute left-0 top-full mt-1 whitespace-nowrap rounded-md border border-[#faebd7]/15 bg-[#101014] px-2 py-1 text-[10px] text-[#faebd7] opacity-0 shadow-lg transition-opacity duration-150 group-hover:opacity-100">
+      <span className="pointer-events-none absolute left-0 top-full z-[100] mt-1 whitespace-nowrap rounded-md border border-[#faebd7]/15 bg-[#101014] px-2 py-1 text-[10px] text-[#faebd7] opacity-0 shadow-lg transition-opacity duration-150 group-hover:opacity-100">
         {label}
       </span>
     </button>
@@ -201,7 +201,7 @@ export default function MonacoCodeEditor({
       )}
 
       <div className={expanded ? 'flex flex-col gap-2 h-full p-3' : headerClass}>
-        <div className={expanded ? 'flex items-center justify-between gap-2' : ''}>
+        <div className={`relative z-40 ${expanded ? 'flex items-center justify-between gap-2' : ''}`}>
           <div className="text-[9px] text-[#faebd7]/45 uppercase tracking-wider leading-tight">{title}</div>
           <div className={controlsClass}>
             {!expanded && (

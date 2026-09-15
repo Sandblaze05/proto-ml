@@ -22,6 +22,7 @@ import {
 import { generateDatasetPythonCode } from '../../lib/pythonTemplates/datasetNodeTemplate';
 import MonacoCodeEditor from './MonacoCodeEditor';
 import { getUploadInputMode } from './datasetUploadMode';
+import { getOutputPorts } from '../../nodes/nodeRegistry';
 
 const STRICT_CLIENT_ONLY_DATASETS = false;
 
@@ -1097,6 +1098,10 @@ function SourceTab({
         <Field label="Auth Type"><NodeSelect value={config.auth_type} onChange={(v) => onChange('auth_type', v)} options={[{ value: 'none', label: 'None' }, { value: 'bearer', label: 'Bearer Token' }, { value: 'api_key', label: 'API Key' }, { value: 'basic', label: 'Basic Auth' }]} /></Field>
         {config.auth_type !== 'none' && <Field label="Auth Token"><NodeInput value={config.auth_token} onChange={(v) => onChange('auth_token', v)} placeholder="..." /></Field>}
         <Field label="Data Path"><NodeInput value={config.data_path} onChange={(v) => onChange('data_path', v)} placeholder="data" /></Field>
+        <Field label="Target Column"><NodeInput value={config.target_column || ''} onChange={(v) => onChange('target_column', v)} placeholder="e.g. completed" /></Field>
+        <Field label="Feature Keys"><NodeInput value={(config.feature_keys || config.features || []).join(', ')} onChange={(v) => onChange('feature_keys', v.split(',').map((key) => key.trim()).filter(Boolean))} placeholder="id, userId" /></Field>
+        <Toggle label="Paginate requests" value={config.pagination !== false} onChange={(v) => onChange('pagination', v)} />
+        {config.pagination !== false && <div className="grid grid-cols-2 gap-1"><Field label="Page Param"><NodeInput value={config.page_param || 'page'} onChange={(v) => onChange('page_param', v)} /></Field><Field label="Max Pages"><NodeInput type="number" value={config.max_pages || 10} onChange={(v) => onChange('max_pages', Number(v) || 1)} /></Field></div>}
       </>
     );
   }
@@ -1120,9 +1125,9 @@ function PreviewTab({ config, nodeType, previewing, onRunPreview, previewResult 
     if (!previewResult) return '';
     if (previewResult.error) return `Error: ${previewResult.error}`;
     if (previewResult.uploaded) return `Uploaded: ${previewResult.uploaded}`;
-    if (previewResult.type === 'image') return `📷 ${previewResult.count} images`;
-    if (previewResult.type === 'text') return `📄 ${previewResult.count} text records`;
-    if (previewResult.type === 'json') return `📋 ${previewResult.count} records ${previewResult.is_tabular ? `• ${previewResult.columns?.length || 0} cols` : ''}`;
+    if (previewResult.type === 'image') return `${previewResult.count} images`;
+    if (previewResult.type === 'text') return `${previewResult.count} text records`;
+    if (previewResult.type === 'json') return `${previewResult.count} records ${previewResult.is_tabular ? `• ${previewResult.columns?.length || 0} cols` : ''}`;
     if (Array.isArray(previewResult)) return `Items: ${previewResult.length}`;
     if (Array.isArray(previewResult.rows)) return `Rows: ${previewResult.rows.length}`;
     if (typeof previewResult === 'object') return 'Preview ready';
@@ -1244,7 +1249,7 @@ function PreviewTab({ config, nodeType, previewing, onRunPreview, previewResult 
             <div className="bg-black/40 border border-[#faebd7]/10 rounded overflow-hidden">
               <div className="grid grid-cols-1 gap-px">
                 <div className="px-2 py-1 text-[8px] font-mono text-[#faebd7]/70 bg-[#faebd7]/5">
-                  📷 {previewResult.count} images found
+                  {previewResult.count} images found
                 </div>
                 {previewResult.files.slice(0, 8).map((img, idx) => (
                   <div key={idx} className="px-2 py-1 text-[8px] font-mono text-[#faebd7]/70 bg-black/20 border-t border-[#faebd7]/10 whitespace-nowrap overflow-hidden text-ellipsis" title={img.path}>
@@ -1263,7 +1268,7 @@ function PreviewTab({ config, nodeType, previewing, onRunPreview, previewResult 
             <div className="bg-black/40 border border-[#faebd7]/10 rounded overflow-hidden">
               <div className="grid grid-cols-1 gap-px">
                 <div className="px-2 py-1 text-[8px] font-mono text-[#faebd7]/70 bg-[#faebd7]/5">
-                  📄 {previewResult.count} text records from {previewResult.file_count} file(s)
+                  {previewResult.count} text records from {previewResult.file_count} file(s)
                 </div>
                 {previewResult.records.slice(0, 5).map((record, idx) => (
                   <div key={idx} className="px-2 py-1 text-[8px] font-mono text-[#faebd7]/70 bg-black/20 border-t border-[#faebd7]/10">
@@ -1281,7 +1286,7 @@ function PreviewTab({ config, nodeType, previewing, onRunPreview, previewResult 
             <div className="bg-black/40 border border-[#faebd7]/10 rounded overflow-hidden">
               <div className="grid grid-cols-1 gap-px">
                 <div className="px-2 py-1 text-[8px] font-mono text-[#faebd7]/70 bg-[#faebd7]/5">
-                  {previewResult.is_tabular ? '📊' : '📋'} {previewResult.count} records {previewResult.is_tabular && `• ${previewResult.columns.length} columns`}
+                  {previewResult.count} records {previewResult.is_tabular && `• ${previewResult.columns.length} columns`}
                 </div>
                 {previewResult.is_tabular && previewResult.columns.length > 0 && (
                   <div className="px-2 py-0.5 text-[7px] font-mono text-[#faebd7]/50 bg-black/20 border-t border-[#faebd7]/10 max-h-10 overflow-auto">
@@ -1349,8 +1354,12 @@ export default function DatasetNode({ data, id, selected }) {
     [inputs],
   );
   const normalizedOutputs = useMemo(
-    () => (Array.isArray(outputs) ? outputs.map((port, idx) => normalizePort(port, idx, 'out')) : []),
-    [outputs],
+    () => {
+      const registered = getOutputPorts(type);
+      const sourcePorts = registered.length > 0 ? registered : outputs;
+      return Array.isArray(sourcePorts) ? sourcePorts.map((port, idx) => normalizePort(port, idx, 'out')) : [];
+    },
+    [outputs, type],
   );
 
   const [activeTab, setActiveTab] = useState('Source');
