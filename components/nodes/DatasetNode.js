@@ -1842,7 +1842,7 @@ export default function DatasetNode({ data, id, selected }) {
             sourceType: created.metadata?.sourceType || type,
           });
         }
-        if (type === 'dataset.csv' || type === 'dataset.json' || type === 'dataset.text') {
+        if ((type === 'dataset.csv' || type === 'dataset.json' || type === 'dataset.text') && !(created.recommendations || []).length) {
           handleChange('files', type === 'dataset.json' ? (created.jsonFiles || []) : type === 'dataset.text' ? (created.textFiles || created.files || []) : (created.csvFiles || []));
           try {
             const inspected = await inspectClientUpload(created.uploadId, {
@@ -1876,9 +1876,15 @@ export default function DatasetNode({ data, id, selected }) {
           uploaded: true,
           clientOnly: true,
           warning: created.warning || null,
+          recommendations: created.recommendations || [],
         });
         listUploads();
-        setPreviewResult({ uploaded: `client://${created.uploadId}`, clientOnly: true, warning: created.warning || null });
+        setPreviewResult({
+          uploaded: `client://${created.uploadId}`,
+          clientOnly: true,
+          warning: created.warning || null,
+          recommendations: created.recommendations || [],
+        });
         return;
       }
       setPreviewResult({ error: 'Client-only mode supports dataset.csv, dataset.json, dataset.text, and dataset.image uploads only.' });

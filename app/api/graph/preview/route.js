@@ -4,6 +4,7 @@ import { compileExecutionGraph } from '../../../../lib/executor/pipelineCompiler
 import { buildNodeDiagnostics } from '../../../../lib/executor/nodeDiagnostics.js';
 import { PREVIEW, RUN } from '../../../../lib/executor/executionContract.js';
 import { getNodeDef } from '../../../../nodes/nodeRegistry.js';
+import { resolveBrowserPreviewCapability } from '../../../../lib/executor/browserExecutionCapabilities.js';
 
 // Preview is the synthetic, in-process sampling path (getSample-based
 // runtimes). It is NEVER a "Run pipeline" implementation and its outputs are
@@ -42,6 +43,7 @@ export async function POST(request) {
     ? Object.fromEntries(graph.nodes.map((node) => [node.id, node]))
     : (graph.nodes || {});
   const targetNode = graphNodes[targetNodeId];
+  const browserCapability = resolveBrowserPreviewCapability(graph, targetNodeId);
   if (getNodeDef(targetNode?.type)?.kind === 'lifecycle') {
     return NextResponse.json(
       {
@@ -89,6 +91,7 @@ export async function POST(request) {
         sample,
         warnings: validation.warnings || [],
         metadata: validation.metadata,
+        browserCapability,
         nodeDiagnostics,
         execution: {
           mode: PREVIEW,
@@ -117,6 +120,7 @@ export async function POST(request) {
         generatedCode: compiled.code,
         warnings: [...(validation.warnings || []), ...(compiled.warnings || [])],
         nodeDiagnostics,
+        browserCapability,
         execution: {
           mode: PREVIEW,
         },

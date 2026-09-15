@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { buildDatasetMetadata, inferType, profileColumns } from '../../lib/clientUploadStore.js';
+import {
+  buildDatasetMetadata,
+  getUploadPerformanceAdvice,
+  inferType,
+  profileColumns,
+  previewClientUpload,
+} from '../../lib/clientUploadStore.js';
 
 describe('clientUploadStore analysis helpers', () => {
   it('infers common column types', () => {
@@ -60,5 +66,26 @@ describe('clientUploadStore analysis helpers', () => {
     expect(metadata.stats.sampled).toBe(true);
     expect(metadata.taskSuggestion).toBe('regression');
     expect(metadata.recommendations.length).toBeGreaterThan(0);
+  });
+
+  it('recommends remote execution for very large uploads', () => {
+    const recommendations = getUploadPerformanceAdvice(300 * 1024 * 1024);
+
+    expect(recommendations).toEqual(expect.arrayContaining([
+      expect.stringContaining('object storage'),
+      expect.stringContaining('Jupyter or another remote runtime'),
+    ]));
+  });
+
+  it('accepts the preview row limit without throwing a ReferenceError', async () => {
+    const file = new File([
+      'id,name\n1,A\n2,B\n3,C',
+    ], 'preview.csv', { type: 'text/csv' });
+
+    const { createClientUpload } = await import('../../lib/clientUploadStore.js');
+    const upload = await createClientUpload([file]);
+    const preview = await previewClientUpload(upload.uploadId, { n: 2 });
+
+    expect(preview.rows).toHaveLength(2);
   });
 });

@@ -35,7 +35,7 @@ export const useUIStore = create((set, get) => ({
   clearNodeExecutionStates: () => set({ nodeExecutionState: {} }),
 
   // ── Jupyter session config (kernelId persists across cell runs) ──────────
-  jupyterSession: { url: 'http://localhost:8888', token: '', kernelId: null, allowInsecure: false },
+  jupyterSession: { url: '', token: '', kernelId: null, allowInsecure: false },
 
   setJupyterSession: (patch) => {
     set((state) => {

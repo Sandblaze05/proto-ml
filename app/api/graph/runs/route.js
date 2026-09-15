@@ -45,6 +45,20 @@ export async function POST(request) {
   const normalizedFailurePolicy = failurePolicy === 'fail-fast' ? 'fail-fast' : 'fail-fast';
 
   try {
+    const isVercelRuntime = process.env.VERCEL === '1'
+      || Boolean(process.env.VERCEL_ENV)
+      || process.cwd() === '/var/task';
+    if (isVercelRuntime) {
+      return NextResponse.json({
+        ok: false,
+        error: 'Local Python execution is unavailable on Vercel because the runtime filesystem is read-only.',
+        details: {
+          provider: 'local_python',
+          suggestion: 'Configure a reachable Jupyter server or use a browser-eligible pipeline with Pyodide.',
+        },
+      }, { status: 503 });
+    }
+
     await bootstrapPluginsFromRepo();
     const nodeDiagnostics = buildNodeDiagnostics(graph);
 

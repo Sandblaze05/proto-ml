@@ -27,10 +27,15 @@ Open `http://localhost:3000`, then go to the dashboard or canvas.
 Proto-ML now uses a strict split between preview and run:
 
 - `Preview` is synthetic and in-process. It samples node behavior for the node-level preview tabs and the `/api/graph/preview` endpoint.
-- `Run pipeline` uses the `one_off_compile` contract. It compiles the graph to Python and executes it through the local subprocess / Jupyter-backed runner exposed by `/api/graph/runs`.
+- Eligible client preview graphs can execute locally in the browser using the capability resolver and existing JavaScript runtimes. Graphs requiring database access, Python/Jupyter, model work, or unsupported node runtimes remain backend-bound.
+- `Run pipeline` uses the `one_off_compile` contract. It prefers the user-provided Jupyter server, uses browser Pyodide for small eligible graphs, and otherwise uses the backend Python route. The selected method is shown in the Logs panel.
 - Preview output is ephemeral UI state. It is not persisted as a durable run result.
 
 That split is intentional and is the current execution contract for the repo.
+
+Browser execution is enabled for small eligible pipelines. Pyodide is loaded lazily in a Web Worker and reused while the page is open. Large or unsupported pipelines fall back to Jupyter or the backend path. Pure Python export remains unchanged.
+
+Uploaded files are client-only. The server upload/list/delete routes do not write dataset files to the local filesystem. For remote Python execution, the browser sends only the selected parsed dataset payload needed by the pipeline. Large uploads are sampled for responsiveness and include recommendations to use object storage or a Jupyter/Kaggle environment instead of loading the full dataset into the browser.
 
 ## Current Architecture
 

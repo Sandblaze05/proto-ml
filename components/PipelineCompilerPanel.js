@@ -13,6 +13,8 @@ import { useVariableStore } from '@/store/useVariableStore'
 import { compileExecutionGraph } from '@/lib/executor/pipelineCompiler'
 import { compilePipelineCells, compileBootstrapCell, nodeIdToVar } from '@/lib/executor/nodeCellCompiler'
 import { BrowserJupyterClient, extractStructuredResult } from '@/lib/executor/browserJupyterClient'
+import { resolveBrowserPreviewCapability } from '@/lib/executor/browserExecutionCapabilities'
+import { runPythonInPyodide } from '@/lib/executor/pyodideRunner'
 import { airflowExporter } from '@/lib/exporters/AirflowExporter'
 import { buildCompilerGraphFromUI } from '@/lib/exporters/buildCompilerGraphFromUI'
 import { sanitizeDagName } from '@/lib/executor/graphUtils'
@@ -578,10 +580,17 @@ const CellRunPanel = ({
   return (
     <div className="flex flex-col h-full">
       <div className="flex items-center gap-2 p-3 bg-violet-950/10 border-b border-violet-500/10">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] uppercase tracking-wide text-violet-300/80">Jupyter cells</span>
+            <span className="text-[9px] uppercase tracking-wide text-foreground/40 border border-foreground/15 rounded px-1.5 py-0.5">Jupyter only</span>
+          </div>
+          <div className="text-[10px] text-foreground/45 mt-0.5 truncate">Runs each node in a remote kernel</div>
+        </div>
         <button
           onClick={handleCellRun}
           disabled={isCellRunning}
-          className="flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-violet-600 hover:bg-violet-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium text-sm transition-colors"
+          className="shrink-0 flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-violet-600 hover:bg-violet-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium text-sm transition-colors"
         >
           {isCellRunning ? (
             <>
@@ -591,7 +600,7 @@ const CellRunPanel = ({
           ) : (
             <>
               <Zap size={14} fill="currentColor" />
-              <span>Run Pipeline</span>
+              <span>Run in Jupyter</span>
             </>
           )}
         </button>
@@ -739,7 +748,7 @@ const PythonCodePanel = ({ compiledCode, handleCompile, compileErrors, compileWa
   )
 }
 
-const LogsPanel = ({ isExecuting, executionLogs, handleExecute, compiledCode, compileErrors }) => {
+const LogsPanel = ({ isExecuting, executionLogs, executionMethod, handleExecute, compiledCode, compileErrors }) => {
   const logsEndRef = useRef(null)
 
   useEffect(() => {
@@ -751,6 +760,13 @@ const LogsPanel = ({ isExecuting, executionLogs, handleExecute, compiledCode, co
   return (
     <div className="flex flex-col h-full">
       <div className="flex items-center gap-2 p-3 bg-emerald-950/10 border-b border-emerald-500/10">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2">
+            <div className="text-[10px] uppercase tracking-wide text-emerald-300/80">Run script</div>
+            <span className="text-[9px] uppercase tracking-wide text-foreground/40 border border-foreground/15 rounded px-1.5 py-0.5">Auto-selects runtime</span>
+          </div>
+          <div className="text-xs text-foreground/80 truncate">{executionMethod || 'Not started'}</div>
+        </div>
         <button
           onClick={handleExecute}
           disabled={isExecuting || !compiledCode || compileErrors.length > 0}
@@ -1173,6 +1189,7 @@ const PipelineCompilerPanel = () => {
   const [activePanel, setActivePanel] = useState('cell')
   const [isExecuting, setIsExecuting] = useState(false)
   const [executionLogs, setExecutionLogs] = useState([])
+  const [executionMethod, setExecutionMethod] = useState('Not started')
   const [executionResult, setExecutionResult] = useState(null)
   const [weightsArtifact, setWeightsArtifact] = useState(null)
   const [modelExportFormat, setModelExportFormat] = useState('joblib')
@@ -1343,6 +1360,7 @@ const PipelineCompilerPanel = () => {
     setIsExecuting(true)
     setExecutionLogs([])
     setExecutionResult(null)
+    setExecutionMethod('Preparing execution')
 
     const uiGraph = getCompilerGraph()
     let runGraph
@@ -1364,8 +1382,11 @@ const PipelineCompilerPanel = () => {
       ? runGraph.nodes[runGraph.nodes.length - 1]?.id || 'target'
       : Object.keys(runGraph.nodes || {}).at(-1) || 'target'
 
+    const browserCapability = resolveBrowserPreviewCapability(runGraph, targetNodeId)
+
     if (jupyterUrl && jupyterUrl.trim()) {
       try {
+        setExecutionMethod('User Jupyter server')
         const client = new BrowserJupyterClient(jupyterUrl, jupyterToken, { allowInsecure })
         const logs = [
           { type: 'system', text: `Connecting to Jupyter at ${jupyterUrl}...\n` },
@@ -1408,9 +1429,57 @@ const PipelineCompilerPanel = () => {
       }
     }
 
+    if (browserCapability.location === 'browser') {
+      try {
+        setExecutionMethod('Browser Pyodide')
+        const variables = {
+          ...useVariableStore.getState().getVariablesAsObject(),
+          __pml_client_datasets: await buildClientDatasetVariables(runGraph),
+        }
+        const payloadBytes = new Blob([JSON.stringify(variables.__pml_client_datasets)]).size
+        if (payloadBytes > 8 * 1024 * 1024) {
+          throw new Error('Browser execution skipped because the dataset payload exceeds 8 MB. Use a Jupyter server for this pipeline.')
+        }
+        const execution = await runPythonInPyodide({
+          code: `${compileBootstrapCell(variables)}\n${runCode}`,
+          datasets: variables.__pml_client_datasets,
+        })
+        const result = extractStructuredResult(execution.logs)
+        setExecutionLogs([
+          { type: 'system', text: 'Executing eligible pipeline in browser Pyodide...\n' },
+          ...execution.logs,
+          { type: 'system', text: '\nBrowser Pyodide execution finished.\n' },
+        ])
+        setExecutionResult(result)
+        setIsExecuting(false)
+        return
+      } catch (err) {
+        const message = String(err?.message || err)
+        setExecutionLogs(prev => [...prev, { type: 'stderr', text: `[Browser Pyodide failed]: ${message}\n` }])
+
+        // A browser-only graph must never fall through to the backend runner.
+        // Its source is held in IndexedDB/session storage and there is no
+        // server filesystem path for /api/graph/runs to read, especially on
+        // Vercel where the function filesystem is ephemeral/read-only.
+        setExecutionResult({ metrics: { error: message } })
+        setExecutionMethod('Browser Pyodide failed')
+        setIsExecuting(false)
+        return
+      }
+    } else {
+      const blockers = (browserCapability.blockers || [])
+        .map((blocker) => `${blocker.nodeType || blocker.nodeId}: ${blocker.reason}`)
+        .join(', ')
+      setExecutionLogs([{
+        type: 'system',
+        text: `Browser Pyodide skipped: ${blockers || browserCapability.reason}.\n`,
+      }])
+    }
+
     try {
+      setExecutionMethod('Server Python fallback')
       const logs = [
-        { type: 'system', text: 'Executing compiled pipeline via Local Python Process...\n' },
+        { type: 'system', text: 'Browser execution is not available for this graph. Trying server Python fallback...\n' },
       ]
       setExecutionLogs(logs)
 
@@ -1434,9 +1503,12 @@ const PipelineCompilerPanel = () => {
         logs.push({ type: 'stderr', text: data.execution.stderr })
       }
 
+      const serverUnavailable = !res.ok && (res.status === 503 || data.details?.provider === 'local_python')
       logs.push({
         type: data.ok ? 'system' : 'stderr',
-        text: `\n${'-'.repeat(40)}\nLocal Python execution finished. Status: ${data.ok ? 'succeeded' : 'failed'}`,
+        text: serverUnavailable
+          ? `\n${'-'.repeat(40)}\nServer Python is unavailable in this deployment. Use Browser Pyodide or configure a reachable Jupyter server.`
+          : `\n${'-'.repeat(40)}\nServer Python fallback finished. Status: ${data.ok ? 'succeeded' : 'failed'}`,
       })
 
       setExecutionLogs([...logs])
@@ -1444,6 +1516,8 @@ const PipelineCompilerPanel = () => {
         setExecutionResult(data.execution.output)
       } else if (data.execution?.error) {
         setExecutionResult({ metrics: { error: data.execution.error } })
+      } else if (data.error) {
+        setExecutionResult({ metrics: { error: data.error } })
       }
     } catch (err) {
       setExecutionLogs(prev => [...prev, { type: 'stderr', text: `\n[Fatal Error]: ${String(err?.message || err)}` }])
@@ -1454,6 +1528,18 @@ const PipelineCompilerPanel = () => {
 
   const handleCellRun = useCallback(async () => {
     if (isCellRunning) return
+    if (!jupyterUrl || !jupyterUrl.trim()) {
+      setCellRunLog([{
+        nodeId: '__jupyter_config',
+        nodeLabel: 'Jupyter URL required',
+        nodeType: 'configuration',
+        status: 'error',
+        logs: [],
+        error: 'Cell Run requires a Jupyter server URL. Add it in Settings, or use Run Script for browser/backend execution.',
+      }])
+      setCellRunStatus('error')
+      return
+    }
     setIsCellRunning(true)
     setCellRunStatus('running')
     clearNodeExecutionStates()
@@ -1949,7 +2035,7 @@ const PipelineCompilerPanel = () => {
   }, [executionResult, weightsArtifact, hasCsvRows, sessionArtifacts])
 
   const panels = [
-    { id: 'cell', label: 'Cell Run', icon: Zap, color: 'violet' },
+    { id: 'cell', label: 'Jupyter Cells', icon: Zap, color: 'violet' },
     { id: 'code', label: 'Python', icon: Code2, color: 'cyan' },
     { id: 'logs', label: 'Logs', icon: Terminal, color: 'emerald' },
     { id: 'result', label: 'Result', icon: FlaskConical, color: 'amber' },
@@ -2002,7 +2088,7 @@ const PipelineCompilerPanel = () => {
         {showSettings && (
           <div className="p-3 bg-foreground/[0.02] border-b border-foreground/5 flex flex-col gap-2">
             <label className="flex flex-col gap-1">
-              <span className="text-[10px] font-medium text-foreground/50 uppercase tracking-wide">Jupyter URL</span>
+              <span className="text-[10px] font-medium text-foreground/50 uppercase tracking-wide">Jupyter URL <span className="normal-case text-foreground/35">(Cell Run / fallback)</span></span>
               <input
                 type="text"
                 value={jupyterUrl}
@@ -2030,6 +2116,9 @@ const PipelineCompilerPanel = () => {
               />
               <span className="text-[10px] font-medium text-foreground/70 uppercase tracking-wide">Allow Insecure (Self-signed SSL)</span>
             </label>
+            <div className="text-[10px] leading-relaxed text-foreground/40 bg-foreground/[0.03] border border-foreground/10 rounded-md px-2 py-1.5">
+              Run Script uses browser Pyodide when the graph is eligible. Jupyter Cells always requires this server.
+            </div>
             {jupyterSession.kernelId && (
               <div className="text-[10px] text-foreground/40">
                 Active kernel: <span className="text-violet-400">{jupyterSession.kernelId}</span>
@@ -2093,6 +2182,7 @@ const PipelineCompilerPanel = () => {
             <LogsPanel
               isExecuting={isExecuting}
               executionLogs={executionLogs}
+              executionMethod={executionMethod}
               handleExecute={handleExecute}
               compiledCode={compiledCode}
               compileErrors={compileErrors}
